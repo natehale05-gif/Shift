@@ -9,6 +9,9 @@ class Conversation {
   final List<ChatMessage> messages;
   final bool starred;
 
+  /// Project this conversation belongs to (null = unfiled).
+  final String? projectId;
+
   /// Artifacts created in this conversation, keyed into by
   /// [ArtifactRefBlock.artifactId]. Stored inline with the conversation so
   /// persistence stays a single JSON tree until IndexedDB storage lands.
@@ -21,6 +24,7 @@ class Conversation {
     required this.updatedAt,
     this.messages = const [],
     this.starred = false,
+    this.projectId,
     this.artifacts = const [],
   });
 
@@ -36,6 +40,7 @@ class Conversation {
     DateTime? updatedAt,
     List<ChatMessage>? messages,
     bool? starred,
+    Object? projectId = _unset,
     List<Artifact>? artifacts,
   }) {
     return Conversation(
@@ -45,9 +50,13 @@ class Conversation {
       updatedAt: updatedAt ?? this.updatedAt,
       messages: messages ?? this.messages,
       starred: starred ?? this.starred,
+      projectId:
+          projectId == _unset ? this.projectId : projectId as String?,
       artifacts: artifacts ?? this.artifacts,
     );
   }
+
+  static const _unset = Object();
 
   factory Conversation.fromJson(Map<String, dynamic> json) => Conversation(
         id: json['id'] as String,
@@ -58,6 +67,7 @@ class Conversation {
             .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
             .toList(),
         starred: json['starred'] as bool? ?? false,
+        projectId: json['projectId'] as String?,
         artifacts: (json['artifacts'] as List<dynamic>? ?? const [])
             .map((e) => Artifact.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -70,6 +80,7 @@ class Conversation {
         'updatedAt': updatedAt.toIso8601String(),
         'messages': messages.map((e) => e.toJson()).toList(),
         'starred': starred,
+        'projectId': projectId,
         'artifacts': artifacts.map((e) => e.toJson()).toList(),
       };
 }

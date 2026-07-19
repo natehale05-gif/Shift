@@ -1,8 +1,12 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
+import '../state/conversation_store.dart';
 import '../theme/app_colors.dart';
+import '../widgets/common/command_palette.dart';
 import 'chat/chat_screen.dart';
 import 'culture/culture_screen.dart';
 import 'membership/membership_screen.dart';
@@ -36,8 +40,39 @@ class _HomeShellState extends State<HomeShell> {
     SettingsScreen(),
   ];
 
+  void _openPalette() {
+    showCommandPalette(
+      context,
+      onNavigate: (index) => setState(() => _index = index),
+    );
+  }
+
+  void _newChat() {
+    context.read<ConversationStore>().startNewConversation();
+    setState(() => _index = 0);
+  }
+
   @override
   Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+            _openPalette,
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _openPalette,
+        const SingleActivator(LogicalKeyboardKey.keyO,
+            meta: true, shift: true): _newChat,
+        const SingleActivator(LogicalKeyboardKey.keyO,
+            control: true, shift: true): _newChat,
+      },
+      child: FocusScope(
+        autofocus: true,
+        child: _buildShell(context),
+      ),
+    );
+  }
+
+  Widget _buildShell(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 720;

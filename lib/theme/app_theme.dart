@@ -9,7 +9,7 @@ class AppTheme {
 
   static ThemeData light() {
     // Seeded for a coherent tonal palette, but primary is pinned so the tint
-    // is Anthropic's exact terracotta rather than a Material-shifted hue.
+    // is Apple's exact systemPurple rather than a Material-shifted hue.
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.accent,
       brightness: Brightness.light,

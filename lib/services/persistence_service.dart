@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/conversation.dart';
+import '../models/project.dart';
 
 /// Thin wrapper over [SharedPreferences] (backed by browser `localStorage`
 /// on web) — the only persistence in this app, since there's no backend and
@@ -38,6 +39,47 @@ class PersistenceService {
       _conversationsKey,
       jsonEncode(trimmed.map((c) => c.toJson()).toList()),
     );
+  }
+
+  static const _projectsKey = 'shift_ai.projects.v1';
+  static const _userPrefsKey = 'shift_ai.user_prefs.v1';
+
+  Future<List<Project>> loadProjects() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_projectsKey);
+    if (raw == null || raw.isEmpty) return [];
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      return list
+          .map((e) => Project.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveProjects(List<Project> projects) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _projectsKey,
+      jsonEncode(projects.map((p) => p.toJson()).toList()),
+    );
+  }
+
+  Future<Map<String, dynamic>> loadUserPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_userPrefsKey);
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> saveUserPrefs(Map<String, dynamic> value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_userPrefsKey, jsonEncode(value));
   }
 
   Future<String?> loadThemeMode() async {

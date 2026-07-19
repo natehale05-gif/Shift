@@ -51,7 +51,7 @@ class ConversationStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  void startNewConversation() {
+  void startNewConversation({String? projectId}) {
     final now = DateTime.now();
     final convo = Conversation(
       id: _uuid.v4(),
@@ -59,10 +59,77 @@ class ConversationStore extends ChangeNotifier {
       createdAt: now,
       updatedAt: now,
       messages: const [],
+      projectId: projectId,
     );
     _conversations.insert(0, convo);
     _currentId = convo.id;
     notifyListeners();
+  }
+
+  void renameConversation(String id, String title) {
+    final trimmed = title.trim();
+    if (trimmed.isEmpty) return;
+    _mutateConversation(id, (c) => c.copyWith(title: trimmed));
+    _persist();
+  }
+
+  void toggleStar(String id) {
+    _mutateConversation(id, (c) => c.copyWith(starred: !c.starred));
+    _persist();
+  }
+
+  void setConversationProject(String id, String? projectId) {
+    _mutateConversation(id, (c) => c.copyWith(projectId: projectId));
+    _persist();
+  }
+
+  /// Case-insensitive search over titles and message text.
+  List<Conversation> search(String query) {
+    final q = query.trim().toLowerCase();
+    if (q.isEmpty) return conversations;
+    return conversations.where((c) {
+      if (c.title.toLowerCase().contains(q)) return true;
+      return c.messages.any((m) => m.text.toLowerCase().contains(q));
+    }).toList();
+  }
+
+  /// Replaces a user message's text and replays the conversation from that
+  /// point: everything from the edited message onward is dropped, then the
+  /// new text is sent as a fresh turn.
+  Future<void> editAndResend(
+    String messageId,
+    String newText, {
+    ChatOptions options = ChatOptions.none,
+  }) async {
+    final convo = current;
+    if (convo == null) return;
+    final index = convo.messages.indexWhere((m) => m.id == messageId);
+    if (index == -1 || convo.messages[index].role != MessageRole.user) return;
+
+    _mutateConversation(convo.id, (c) {
+      return c.copyWith(messages: c.messages.sublist(0, index));
+    });
+    await sendMessage(newText, options: options);
+  }
+
+  /// Re-runs the turn that produced [assistantMessageId]: the assistant
+  /// reply (and its user prompt) are removed and the prompt is sent again.
+  Future<void> regenerate(
+    String assistantMessageId, {
+    ChatOptions options = ChatOptions.none,
+  }) async {
+    final convo = current;
+    if (convo == null) return;
+    final index =
+        convo.messages.indexWhere((m) => m.id == assistantMessageId);
+    if (index <= 0) return;
+    final userMessage = convo.messages[index - 1];
+    if (userMessage.role != MessageRole.user) return;
+
+    _mutateConversation(convo.id, (c) {
+      return c.copyWith(messages: c.messages.sublist(0, index - 1));
+    });
+    await sendMessage(userMessage.text, options: options);
   }
 
   void selectConversation(String id) {

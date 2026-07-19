@@ -192,7 +192,7 @@ class StudioResponseBank {
   h1 { font-family: Georgia, serif; font-size: 44px; margin: 0 0 12px; }
   p { font-size: 18px; line-height: 1.6; color: #6e6e73; }
   .cta { display: inline-block; margin-top: 24px; padding: 12px 28px; border-radius: 999px;
-         background: #D97757; color: #fff; text-decoration: none; font-weight: 600; }
+         background: #AF52DE; color: #fff; text-decoration: none; font-weight: 600; }
 </style>
 </head>
 <body>

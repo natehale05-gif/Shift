@@ -49,10 +49,15 @@ class MockChatService implements ChatService {
       final studio = structuredRequest?.studioType ??
           StudioResponseBank.detectStudio(userInput);
 
-      await _streamThinking(
-        controller,
-        StudioResponseBank.thinkingText(studio, userInput),
-      );
+      var thinking = StudioResponseBank.thinkingText(studio, userInput);
+      final system = options.systemPrompt ?? '';
+      if (system.contains('Active project:')) {
+        thinking += ' Applying the project\'s instructions and knowledge.';
+      } else if (system.contains('standing instructions') ||
+          system.contains('Address the user as')) {
+        thinking += ' Applying your personalization settings.';
+      }
+      await _streamThinking(controller, thinking);
 
       await _delay(250, 600);
       controller.add(RoutingDetected(studio));

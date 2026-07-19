@@ -2,17 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/conversation.dart';
+import '../../models/project.dart';
+import '../../services/conversation_export.dart';
 import '../../state/conversation_store.dart';
+import '../../state/project_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
+import 'project_detail_sheet.dart';
 
-class ConversationSidebar extends StatelessWidget {
+class ConversationSidebar extends StatefulWidget {
   const ConversationSidebar({super.key});
+
+  @override
+  State<ConversationSidebar> createState() => _ConversationSidebarState();
+}
+
+class _ConversationSidebarState extends State<ConversationSidebar> {
+  String _query = '';
 
   @override
   Widget build(BuildContext context) {
     final store = context.watch<ConversationStore>();
-    final colors = Theme.of(context).extension<AppSemanticColors>()!;
+    final projectStore = context.watch<ProjectStore>();
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+
+    final results = store.search(_query);
+    final starred = results.where((c) => c.starred).toList();
+    final unstarred = results.where((c) => !c.starred).toList();
 
     return Container(
       width: 260,
@@ -21,37 +38,80 @@ class ConversationSidebar extends StatelessWidget {
         border: Border(right: BorderSide(color: colors.border)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.md),
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.md,
+              AppSpacing.xs,
+            ),
             child: FilledButton.tonalIcon(
-              onPressed: () => store.startNewConversation(),
+              onPressed: () => store.startNewConversation(
+                projectId: projectStore.activeProjectId,
+              ),
               icon: const Icon(Icons.add_rounded),
               label: const Text('New chat'),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: AppSpacing.xs,
+            ),
+            child: TextField(
+              onChanged: (value) => setState(() => _query = value),
+              style: theme.textTheme.bodyMedium,
+              decoration: InputDecoration(
+                hintText: 'Search chats…',
+                hintStyle: theme.textTheme.bodyMedium
+                    ?.copyWith(color: colors.textSecondary),
+                prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.md,
+                  vertical: AppSpacing.sm,
+                ),
+              ),
+            ),
+          ),
           Expanded(
-            child: store.conversations.isEmpty
-                ? Padding(
+            child: ListView(
+              children: [
+                _ProjectsSection(projectStore: projectStore),
+                if (starred.isNotEmpty) ...[
+                  const _SectionHeader(label: 'Starred'),
+                  for (final conversation in starred)
+                    _ConversationTile(
+                      conversation: conversation,
+                      project:
+                          projectStore.projectById(conversation.projectId),
+                      selected: conversation.id == store.current?.id,
+                    ),
+                ],
+                if (unstarred.isNotEmpty) ...[
+                  const _SectionHeader(label: 'Chats'),
+                  for (final conversation in unstarred)
+                    _ConversationTile(
+                      conversation: conversation,
+                      project:
+                          projectStore.projectById(conversation.projectId),
+                      selected: conversation.id == store.current?.id,
+                    ),
+                ],
+                if (results.isEmpty)
+                  Padding(
                     padding: const EdgeInsets.all(AppSpacing.lg),
                     child: Text(
-                      'Your conversations will show up here.',
-                      style: Theme.of(context).textTheme.bodySmall,
+                      _query.isEmpty
+                          ? 'Your conversations will show up here.'
+                          : 'No chats match "$_query".',
+                      style: theme.textTheme.bodySmall,
                     ),
-                  )
-                : ListView.builder(
-                    itemCount: store.conversations.length,
-                    itemBuilder: (context, index) {
-                      final convo = store.conversations[index];
-                      final isSelected = convo.id == store.current?.id;
-                      return _ConversationTile(
-                        conversation: convo,
-                        selected: isSelected,
-                        onTap: () => store.selectConversation(convo.id),
-                        onDelete: () => store.deleteConversation(convo.id),
-                      );
-                    },
                   ),
+              ],
+            ),
           ),
         ],
       ),
@@ -59,42 +119,278 @@ class ConversationSidebar extends StatelessWidget {
   }
 }
 
-class _ConversationTile extends StatelessWidget {
-  final Conversation conversation;
-  final bool selected;
-  final VoidCallback onTap;
-  final VoidCallback onDelete;
+class _SectionHeader extends StatelessWidget {
+  final String label;
 
-  const _ConversationTile({
-    required this.conversation,
-    required this.selected,
-    required this.onTap,
-    required this.onDelete,
-  });
+  const _SectionHeader({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.lg,
+        AppSpacing.md,
+        AppSpacing.lg,
+        AppSpacing.xs,
+      ),
+      child: Text(label, style: Theme.of(context).textTheme.labelSmall),
+    );
+  }
+}
+
+/// Projects list: the active project scopes new chats and layers its
+/// instructions/knowledge into every turn's system prompt.
+class _ProjectsSection extends StatelessWidget {
+  final ProjectStore projectStore;
+
+  const _ProjectsSection({required this.projectStore});
+
+  Future<void> _createProject(BuildContext context) async {
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('New project'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Project name'),
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    if (name == null || name.trim().isEmpty || !context.mounted) return;
+    final project = projectStore.createProject(name.trim());
+    if (context.mounted) {
+      showProjectDetailSheet(context, project.id);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.md,
+            AppSpacing.sm,
+            AppSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              Text('Projects', style: theme.textTheme.labelSmall),
+              const Spacer(),
+              IconButton(
+                tooltip: 'New project',
+                iconSize: 16,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(Icons.add_rounded),
+                onPressed: () => _createProject(context),
+              ),
+            ],
+          ),
+        ),
+        for (final project in projectStore.projects)
+          ListTile(
+            dense: true,
+            selected: project.id == projectStore.activeProjectId,
+            leading: Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: project.color,
+                shape: BoxShape.circle,
+              ),
+            ),
+            title: Text(
+              project.name,
+              style: theme.textTheme.bodyMedium,
+              overflow: TextOverflow.ellipsis,
+            ),
+            trailing: IconButton(
+              tooltip: 'Project settings',
+              iconSize: 15,
+              visualDensity: VisualDensity.compact,
+              color: colors.textSecondary,
+              icon: const Icon(Icons.tune_rounded),
+              onPressed: () => showProjectDetailSheet(context, project.id),
+            ),
+            onTap: () => projectStore.setActiveProject(
+              project.id == projectStore.activeProjectId ? null : project.id,
+            ),
+          ),
+        if (projectStore.projects.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            child: Text(
+              'Group chats under shared instructions and knowledge.',
+              style: theme.textTheme.bodySmall,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _ConversationTile extends StatelessWidget {
+  final Conversation conversation;
+  final Project? project;
+  final bool selected;
+
+  const _ConversationTile({
+    required this.conversation,
+    required this.project,
+    required this.selected,
+  });
+
+  Future<void> _rename(BuildContext context) async {
+    final store = context.read<ConversationStore>();
+    final controller = TextEditingController(text: conversation.title);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename chat'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    if (title != null) store.renameConversation(conversation.id, title);
+  }
+
+  Future<void> _moveToProject(BuildContext context) async {
+    final store = context.read<ConversationStore>();
+    final projects = context.read<ProjectStore>().projects;
+    final selectedId = await showDialog<String?>(
+      context: context,
+      builder: (dialogContext) => SimpleDialog(
+        title: const Text('Move to project'),
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.of(dialogContext).pop(''),
+            child: const Text('No project'),
+          ),
+          for (final project in projects)
+            SimpleDialogOption(
+              onPressed: () => Navigator.of(dialogContext).pop(project.id),
+              child: Text(project.name),
+            ),
+        ],
+      ),
+    );
+    if (selectedId == null) return;
+    store.setConversationProject(
+      conversation.id,
+      selectedId.isEmpty ? null : selectedId,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final store = context.read<ConversationStore>();
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      margin:
+          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
       decoration: BoxDecoration(
-        color: selected ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5) : null,
+        color: selected
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
+            : null,
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       ),
       child: ListTile(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppSpacing.radiusMd)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
         dense: true,
+        leading: project != null
+            ? Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: project!.color,
+                  shape: BoxShape.circle,
+                ),
+              )
+            : null,
         title: Text(
           conversation.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodyMedium,
         ),
-        onTap: onTap,
-        trailing: IconButton(
-          icon: const Icon(Icons.close_rounded, size: 16),
-          tooltip: 'Delete',
-          onPressed: onDelete,
+        onTap: () => store.selectConversation(conversation.id),
+        trailing: PopupMenuButton<String>(
+          tooltip: 'Chat options',
+          iconSize: 16,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
+          ),
+          onSelected: (action) {
+            switch (action) {
+              case 'rename':
+                _rename(context);
+              case 'star':
+                store.toggleStar(conversation.id);
+              case 'project':
+                _moveToProject(context);
+              case 'export_md':
+                ConversationExport.downloadMarkdown(conversation);
+              case 'export_json':
+                ConversationExport.downloadJson(conversation);
+              case 'delete':
+                store.deleteConversation(conversation.id);
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(value: 'rename', child: Text('Rename')),
+            PopupMenuItem(
+              value: 'star',
+              child: Text(conversation.starred ? 'Unstar' : 'Star'),
+            ),
+            const PopupMenuItem(
+              value: 'project',
+              child: Text('Move to project…'),
+            ),
+            const PopupMenuItem(
+              value: 'export_md',
+              child: Text('Export as Markdown'),
+            ),
+            const PopupMenuItem(
+              value: 'export_json',
+              child: Text('Export as JSON'),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
         ),
       ),
     );

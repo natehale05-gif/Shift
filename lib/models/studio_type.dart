@@ -62,7 +62,9 @@ enum StudioType {
         StudioType.videoStudio => AppColors.systemBlue,
         StudioType.voiceAvatarStudio => AppColors.systemGreen,
         StudioType.musicStudio => AppColors.systemOrange,
-        StudioType.copyScriptsStudio => AppColors.systemPurple,
+        // systemIndigo, not systemPurple: purple is the app-wide tint now,
+        // and the middleware routing chip (indigo's old home) never renders.
+        StudioType.copyScriptsStudio => AppColors.systemIndigo,
         StudioType.codeStudio => AppColors.systemTeal,
       };
 

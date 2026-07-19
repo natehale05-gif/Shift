@@ -121,10 +121,15 @@ class ChatOptions {
   final bool webSearch;
   final bool deepResearch;
 
+  /// Assembled system prompt for this turn (persona + user prefs + project
+  /// context), built by `assembleSystemPrompt`.
+  final String? systemPrompt;
+
   const ChatOptions({
     this.modelPin,
     this.webSearch = false,
     this.deepResearch = false,
+    this.systemPrompt,
   });
 
   static const none = ChatOptions();

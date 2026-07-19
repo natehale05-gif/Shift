@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
+import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common/glass_app_bar.dart';
@@ -32,6 +33,8 @@ class SettingsScreen extends StatelessWidget {
               onSelectionChanged: (selection) => settings.setThemeMode(selection.first),
             ),
           ),
+          const SizedBox(height: AppSpacing.lg),
+          const _PersonalizationCard(),
           const SizedBox(height: AppSpacing.lg),
           _SectionCard(
             title: 'Data',
@@ -89,6 +92,84 @@ class SettingsScreen extends StatelessWidget {
               Navigator.of(context).pop();
             },
             child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The "memory" layer: nickname, response style, and standing custom
+/// instructions, folded into every turn's system prompt.
+class _PersonalizationCard extends StatefulWidget {
+  const _PersonalizationCard();
+
+  @override
+  State<_PersonalizationCard> createState() => _PersonalizationCardState();
+}
+
+class _PersonalizationCardState extends State<_PersonalizationCard> {
+  late final TextEditingController _nicknameController;
+  late final TextEditingController _instructionsController;
+
+  @override
+  void initState() {
+    super.initState();
+    final prefs = context.read<UserPrefsStore>();
+    _nicknameController = TextEditingController(text: prefs.nickname);
+    _instructionsController =
+        TextEditingController(text: prefs.customInstructions);
+  }
+
+  @override
+  void dispose() {
+    _nicknameController.dispose();
+    _instructionsController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final prefs = context.watch<UserPrefsStore>();
+    return _SectionCard(
+      title: 'Personalization',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'SHIFT AI carries these preferences into every conversation.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _nicknameController,
+            decoration: const InputDecoration(
+              labelText: 'What should SHIFT AI call you?',
+            ),
+            onChanged: prefs.setNickname,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          SegmentedButton<String>(
+            segments: const [
+              ButtonSegment(value: 'concise', label: Text('Concise')),
+              ButtonSegment(value: 'balanced', label: Text('Balanced')),
+              ButtonSegment(value: 'detailed', label: Text('Detailed')),
+            ],
+            selected: {prefs.responseStyle},
+            onSelectionChanged: (selection) =>
+                prefs.setResponseStyle(selection.first),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _instructionsController,
+            minLines: 2,
+            maxLines: 5,
+            decoration: const InputDecoration(
+              labelText: 'Custom instructions',
+              hintText:
+                  'Standing guidance for every chat (tone, interests, context)…',
+            ),
+            onChanged: prefs.setCustomInstructions,
           ),
         ],
       ),

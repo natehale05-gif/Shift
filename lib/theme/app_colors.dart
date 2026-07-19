@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 
-/// Palette blending Apple's system color values (systemIndigo, systemGray6,
-/// true-black dark surfaces) with Anthropic's warm-paper-and-terracotta
-/// identity, so the app reads as if the two companies designed it together:
-/// warm paper surfaces and a terracotta tint by day, Apple true black by
-/// night, Apple system colors for the studio accents throughout.
+/// Palette blending Apple's system color values (systemPurple, systemGray6,
+/// true-black dark surfaces) with Anthropic's warm-paper identity, so the
+/// app reads as if the two companies designed it together: warm paper
+/// surfaces with a purple tint by day, Apple true black by night, Apple
+/// system colors for the studio accents throughout.
 class AppColors {
   AppColors._();
 
-  /// Anthropic terracotta — the app's tint color (links, send button,
-  /// selection states).
-  static const Color accent = Color(0xFFD97757);
+  /// Apple systemPurple (light-mode value) — the app's tint color (links,
+  /// send button, selection states).
+  static const Color accent = Color(0xFFAF52DE);
 
-  /// Lightened terracotta with enough contrast against true-black surfaces.
-  static const Color accentDark = Color(0xFFE08B6D);
+  /// Apple systemPurple's dark-mode value — brighter for contrast against
+  /// true-black surfaces.
+  static const Color accentDark = Color(0xFFBF5AF2);
 
   /// Apple's systemIndigo, kept for the middleware/routing identity (the
-  /// "Shift routes your request" chip) now that terracotta owns the tint.
+  /// "Shift routes your request" chip) and the Copy & Scripts studio accent.
   static const Color systemIndigo = Color(0xFF5E5CE6);
 
   // Anthropic warm paper (light).

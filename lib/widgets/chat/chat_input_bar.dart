@@ -5,7 +5,11 @@ import 'package:uuid/uuid.dart';
 
 import '../../models/attachment.dart';
 import '../../models/studio_type.dart';
+import '../../services/chat_service.dart';
+import '../../services/prompt_assembler.dart';
 import '../../state/conversation_store.dart';
+import '../../state/project_store.dart';
+import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import 'studio_request_sheets.dart';
@@ -14,7 +18,7 @@ const _uuid = Uuid();
 
 /// Claude-style composer: a single rounded card holding the text field with
 /// a row of controls beneath it — studios behind the "+" menu, a model chip,
-/// and a circular terracotta send button.
+/// and a circular purple send button.
 class ChatInputBar extends StatefulWidget {
   const ChatInputBar({super.key});
 
@@ -46,13 +50,40 @@ class _ChatInputBarState extends State<ChatInputBar> {
     });
   }
 
+  /// System prompt for this turn: the conversation's own project wins;
+  /// otherwise the sidebar's active project applies (and scopes the new
+  /// conversation).
+  ChatOptions _buildOptions() {
+    final prefs = context.read<UserPrefsStore>();
+    final projects = context.read<ProjectStore>();
+    final store = context.read<ConversationStore>();
+    final project =
+        projects.projectById(store.current?.projectId) ??
+            projects.activeProject;
+    return ChatOptions(
+      systemPrompt: assembleSystemPrompt(
+        nickname: prefs.nickname,
+        responseStyle: prefs.responseStyle,
+        customInstructions: prefs.customInstructions,
+        project: project,
+      ),
+    );
+  }
+
   void _send() {
     final text = _controller.text.trim();
     if (text.isEmpty && _attachments.isEmpty) return;
-    context.read<ConversationStore>().sendMessage(
-          text,
-          attachments: List.of(_attachments),
-        );
+    final store = context.read<ConversationStore>();
+    if (store.current == null) {
+      store.startNewConversation(
+        projectId: context.read<ProjectStore>().activeProjectId,
+      );
+    }
+    store.sendMessage(
+      text,
+      attachments: List.of(_attachments),
+      options: _buildOptions(),
+    );
     _controller.clear();
     setState(() => _attachments.clear());
     _focusNode.requestFocus();

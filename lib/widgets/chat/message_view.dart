@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/artifact.dart';
 import '../../models/attachment.dart';
@@ -7,6 +8,7 @@ import '../../models/chat_message.dart';
 import '../../models/citation.dart';
 import '../../models/message_block.dart';
 import '../../models/studio_type.dart';
+import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import 'markdown_message.dart';
@@ -49,16 +51,62 @@ class _MessageViewState extends State<MessageView> {
   }
 }
 
-class _UserBubble extends StatelessWidget {
+class _UserBubble extends StatefulWidget {
   final ChatMessage message;
 
   const _UserBubble({required this.message});
 
   @override
+  State<_UserBubble> createState() => _UserBubbleState();
+}
+
+class _UserBubbleState extends State<_UserBubble> {
+  bool _hovering = false;
+
+  ChatMessage get message => widget.message;
+
+  Future<void> _edit() async {
+    final store = context.read<ConversationStore>();
+    final controller = TextEditingController(text: message.text);
+    final newText = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit message'),
+        content: SizedBox(
+          width: 480,
+          child: TextField(
+            controller: controller,
+            autofocus: true,
+            minLines: 2,
+            maxLines: 8,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Save & resend'),
+          ),
+        ],
+      ),
+    );
+    if (newText == null || newText.trim().isEmpty) return;
+    // Everything after this message is replaced by the replayed turn.
+    store.editAndResend(message.id, newText.trim());
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
-    return Align(
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Align(
       alignment: Alignment.centerRight,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -89,22 +137,44 @@ class _UserBubble extends StatelessWidget {
                 ],
               ),
             ),
-          Container(
-            constraints: const BoxConstraints(maxWidth: 600),
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.md,
-            ),
-            decoration: BoxDecoration(
-              color: colors.surfaceAlt,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(
-              message.text,
-              style: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              AnimatedOpacity(
+                opacity: _hovering ? 1 : 0,
+                duration: const Duration(milliseconds: 120),
+                child: IconButton(
+                  tooltip: 'Edit & resend',
+                  iconSize: 15,
+                  visualDensity: VisualDensity.compact,
+                  color: colors.textSecondary,
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: _edit,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Flexible(
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 600),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceAlt,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Text(
+                    message.text,
+                    style: theme.textTheme.bodyLarge?.copyWith(height: 1.5),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
+      ),
       ),
     );
   }
@@ -536,6 +606,12 @@ class _ActionRow extends StatelessWidget {
             icon: Icons.copy_rounded,
             onPressed: () =>
                 Clipboard.setData(ClipboardData(text: message.text)),
+          ),
+          _ActionIcon(
+            tooltip: 'Regenerate',
+            icon: Icons.refresh_rounded,
+            onPressed: () =>
+                context.read<ConversationStore>().regenerate(message.id),
           ),
           const SizedBox(width: AppSpacing.xs),
           Text(
