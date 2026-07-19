@@ -1,3 +1,4 @@
+import 'artifact.dart';
 import 'chat_message.dart';
 
 class Conversation {
@@ -6,6 +7,12 @@ class Conversation {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<ChatMessage> messages;
+  final bool starred;
+
+  /// Artifacts created in this conversation, keyed into by
+  /// [ArtifactRefBlock.artifactId]. Stored inline with the conversation so
+  /// persistence stays a single JSON tree until IndexedDB storage lands.
+  final List<Artifact> artifacts;
 
   const Conversation({
     required this.id,
@@ -13,12 +20,23 @@ class Conversation {
     required this.createdAt,
     required this.updatedAt,
     this.messages = const [],
+    this.starred = false,
+    this.artifacts = const [],
   });
+
+  Artifact? artifactById(String artifactId) {
+    for (final artifact in artifacts) {
+      if (artifact.id == artifactId) return artifact;
+    }
+    return null;
+  }
 
   Conversation copyWith({
     String? title,
     DateTime? updatedAt,
     List<ChatMessage>? messages,
+    bool? starred,
+    List<Artifact>? artifacts,
   }) {
     return Conversation(
       id: id,
@@ -26,6 +44,8 @@ class Conversation {
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       messages: messages ?? this.messages,
+      starred: starred ?? this.starred,
+      artifacts: artifacts ?? this.artifacts,
     );
   }
 
@@ -37,6 +57,10 @@ class Conversation {
         messages: (json['messages'] as List<dynamic>)
             .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
             .toList(),
+        starred: json['starred'] as bool? ?? false,
+        artifacts: (json['artifacts'] as List<dynamic>? ?? const [])
+            .map((e) => Artifact.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -45,5 +69,7 @@ class Conversation {
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
         'messages': messages.map((e) => e.toJson()).toList(),
+        'starred': starred,
+        'artifacts': artifacts.map((e) => e.toJson()).toList(),
       };
 }

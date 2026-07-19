@@ -1,11 +1,16 @@
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../models/attachment.dart';
 import '../../models/studio_type.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import 'studio_request_sheets.dart';
+
+const _uuid = Uuid();
 
 /// Claude-style composer: a single rounded card holding the text field with
 /// a row of controls beneath it — studios behind the "+" menu, a model chip,
@@ -21,6 +26,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   bool _hasText = false;
+  final List<Attachment> _attachments = [];
 
   static const _studios = [
     StudioType.imageStudio,
@@ -42,10 +48,47 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   void _send() {
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
-    context.read<ConversationStore>().sendMessage(text);
+    if (text.isEmpty && _attachments.isEmpty) return;
+    context.read<ConversationStore>().sendMessage(
+          text,
+          attachments: List.of(_attachments),
+        );
     _controller.clear();
+    setState(() => _attachments.clear());
     _focusNode.requestFocus();
+  }
+
+  Future<void> _pickFiles() async {
+    const typeGroup = XTypeGroup(
+      label: 'Images, PDFs & text',
+      extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'pdf', 'txt', 'md'],
+    );
+    final files = await openFiles(acceptedTypeGroups: const [typeGroup]);
+    if (files.isEmpty) return;
+    for (final file in files) {
+      final bytes = await file.readAsBytes();
+      final mimeType = file.mimeType ?? _mimeFromName(file.name);
+      _attachments.add(Attachment(
+        id: _uuid.v4(),
+        name: file.name,
+        mimeType: mimeType,
+        kind: AttachmentKind.fromMimeType(mimeType),
+        bytes: bytes,
+      ));
+    }
+    if (mounted) setState(() {});
+  }
+
+  static String _mimeFromName(String name) {
+    final ext = name.split('.').last.toLowerCase();
+    return switch (ext) {
+      'png' => 'image/png',
+      'jpg' || 'jpeg' => 'image/jpeg',
+      'webp' => 'image/webp',
+      'gif' => 'image/gif',
+      'pdf' => 'application/pdf',
+      _ => 'text/plain',
+    };
   }
 
   Future<void> _openStudioSheet(StudioType studioType) async {
@@ -93,6 +136,44 @@ class _ChatInputBarState extends State<ChatInputBar> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (_attachments.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: AppSpacing.sm,
+                      top: AppSpacing.sm,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: AppSpacing.xs,
+                        runSpacing: AppSpacing.xs,
+                        children: [
+                          for (final attachment in _attachments)
+                            InputChip(
+                              avatar: Icon(
+                                switch (attachment.kind) {
+                                  AttachmentKind.image =>
+                                    Icons.image_outlined,
+                                  AttachmentKind.pdf =>
+                                    Icons.picture_as_pdf_outlined,
+                                  AttachmentKind.text =>
+                                    Icons.description_outlined,
+                                },
+                                size: 15,
+                              ),
+                              label: Text(
+                                attachment.name,
+                                style: theme.textTheme.labelSmall,
+                              ),
+                              visualDensity: VisualDensity.compact,
+                              onDeleted: () => setState(
+                                () => _attachments.remove(attachment),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 TextField(
                   controller: _controller,
                   focusNode: _focusNode,
@@ -113,6 +194,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 Row(
                   children: [
                     _StudioMenuButton(onSelected: _openStudioSheet),
+                    IconButton(
+                      tooltip: 'Attach images, PDFs, or text files',
+                      icon: const Icon(Icons.attach_file_rounded, size: 20),
+                      color: colors.textSecondary,
+                      onPressed: _pickFiles,
+                    ),
                     const SizedBox(width: AppSpacing.xs),
                     const _ModelChip(),
                     const Spacer(),

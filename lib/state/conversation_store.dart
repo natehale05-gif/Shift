@@ -1,11 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/artifact.dart';
+import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
+import '../models/message_block.dart';
 import '../models/studio_request.dart';
 import '../services/chat_service.dart';
 import '../services/persistence_service.dart';
+import 'message_event_folding.dart';
 
 const _uuid = Uuid();
 
@@ -85,9 +89,11 @@ class ConversationStore extends ChangeNotifier {
   Future<void> sendMessage(
     String text, {
     StudioRequest? structuredRequest,
+    List<Attachment> attachments = const [],
+    ChatOptions options = ChatOptions.none,
   }) async {
     final displayText = structuredRequest?.summary ?? text;
-    if (displayText.trim().isEmpty) return;
+    if (displayText.trim().isEmpty && attachments.isEmpty) return;
 
     if (current == null) {
       startNewConversation();
@@ -99,6 +105,7 @@ class ConversationStore extends ChangeNotifier {
       conversationId: conversationId,
       role: MessageRole.user,
       text: displayText,
+      attachments: attachments,
       studioType: structuredRequest?.studioType,
       timestamp: DateTime.now(),
     );
@@ -131,47 +138,62 @@ class ConversationStore extends ChangeNotifier {
       conversation: current!,
       userInput: text,
       structuredRequest: structuredRequest,
+      attachments: attachments,
+      options: options,
     );
 
     await for (final event in stream) {
       switch (event) {
-        case RoutingDetected(:final studioType):
+        case ArtifactCreated(:final artifact):
+          _upsertArtifact(conversationId, assistantMessage.id, artifact);
+        case ArtifactUpdated(:final artifact):
+          _upsertArtifact(conversationId, assistantMessage.id, artifact);
+        case MessageComplete() || MessageError():
           _updateMessage(
             conversationId,
             assistantMessage.id,
-            (m) => m.copyWith(studioType: studioType),
-          );
-        case MessageDelta(:final chunk):
-          _updateMessage(
-            conversationId,
-            assistantMessage.id,
-            (m) => m.copyWith(text: m.text + chunk),
-          );
-        case StudioResultReady(:final result):
-          _updateMessage(
-            conversationId,
-            assistantMessage.id,
-            (m) => m.copyWith(studioResult: result),
-          );
-        case MessageComplete():
-          _updateMessage(
-            conversationId,
-            assistantMessage.id,
-            (m) => m.copyWith(status: MessageStatus.complete),
+            (m) => foldMessageEvent(m, event),
           );
           _persist();
-        case MessageError(:final message):
+        default:
           _updateMessage(
             conversationId,
             assistantMessage.id,
-            (m) => m.copyWith(
-              text: m.text.isEmpty ? 'Something went wrong: $message' : m.text,
-              status: MessageStatus.error,
-            ),
+            (m) => foldMessageEvent(m, event),
           );
-          _persist();
       }
     }
+  }
+
+  /// Adds or replaces the artifact on the conversation and appends an
+  /// [ArtifactRefBlock] to the streaming assistant message pointing at the
+  /// artifact's newest version.
+  void _upsertArtifact(
+    String conversationId,
+    String messageId,
+    Artifact artifact,
+  ) {
+    _mutateConversation(conversationId, (convo) {
+      final artifacts = [...convo.artifacts];
+      final index = artifacts.indexWhere((a) => a.id == artifact.id);
+      if (index == -1) {
+        artifacts.add(artifact);
+      } else {
+        artifacts[index] = artifact;
+      }
+      return convo.copyWith(artifacts: artifacts);
+    });
+    _updateMessage(conversationId, messageId, (m) {
+      return m.copyWith(blocks: [
+        ...m.blocks,
+        ArtifactRefBlock(
+          artifactId: artifact.id,
+          title: artifact.title,
+          kind: artifact.kind,
+          versionIndex: artifact.versions.length - 1,
+        ),
+      ]);
+    });
   }
 
   void _mutateConversation(
