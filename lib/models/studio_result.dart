@@ -1,0 +1,152 @@
+/// Discriminated union of mock outputs a studio can attach to a chat message.
+/// Every variant is fabricated client-side by [MockChatService] — there is no
+/// real diffusion/video/voice/music model behind any of this.
+sealed class StudioResult {
+  const StudioResult();
+
+  Map<String, dynamic> toJson();
+
+  static StudioResult fromJson(Map<String, dynamic> json) {
+    return switch (json['type'] as String) {
+      'image' => ImageResult.fromJson(json),
+      'video' => VideoResult.fromJson(json),
+      'audio' => AudioResult.fromJson(json),
+      'copy' => CopyResult.fromJson(json),
+      _ => throw ArgumentError('Unknown StudioResult type: ${json['type']}'),
+    };
+  }
+}
+
+class ImageResult extends StudioResult {
+  final String prompt;
+  final String aspectRatio;
+  final String stylePreset;
+  final int count;
+  final int seed;
+
+  const ImageResult({
+    required this.prompt,
+    required this.aspectRatio,
+    required this.stylePreset,
+    required this.count,
+    required this.seed,
+  });
+
+  factory ImageResult.fromJson(Map<String, dynamic> json) => ImageResult(
+        prompt: json['prompt'] as String,
+        aspectRatio: json['aspectRatio'] as String,
+        stylePreset: json['stylePreset'] as String,
+        count: json['count'] as int,
+        seed: json['seed'] as int,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'image',
+        'prompt': prompt,
+        'aspectRatio': aspectRatio,
+        'stylePreset': stylePreset,
+        'count': count,
+        'seed': seed,
+      };
+}
+
+class VideoResult extends StudioResult {
+  final String prompt;
+  final int durationSec;
+  final String aspectRatio;
+  final bool identityLock;
+  final int seed;
+
+  const VideoResult({
+    required this.prompt,
+    required this.durationSec,
+    required this.aspectRatio,
+    required this.identityLock,
+    required this.seed,
+  });
+
+  factory VideoResult.fromJson(Map<String, dynamic> json) => VideoResult(
+        prompt: json['prompt'] as String,
+        durationSec: json['durationSec'] as int,
+        aspectRatio: json['aspectRatio'] as String,
+        identityLock: json['identityLock'] as bool,
+        seed: json['seed'] as int,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'video',
+        'prompt': prompt,
+        'durationSec': durationSec,
+        'aspectRatio': aspectRatio,
+        'identityLock': identityLock,
+        'seed': seed,
+      };
+}
+
+enum AudioKind { voice, music }
+
+class AudioResult extends StudioResult {
+  final AudioKind kind;
+  final String title;
+  final String subtitle;
+  final int durationSec;
+  final int seed;
+  final String? transcript;
+
+  const AudioResult({
+    required this.kind,
+    required this.title,
+    required this.subtitle,
+    required this.durationSec,
+    required this.seed,
+    this.transcript,
+  });
+
+  factory AudioResult.fromJson(Map<String, dynamic> json) => AudioResult(
+        kind: AudioKind.values.firstWhere((e) => e.name == json['kind']),
+        title: json['title'] as String,
+        subtitle: json['subtitle'] as String,
+        durationSec: json['durationSec'] as int,
+        seed: json['seed'] as int,
+        transcript: json['transcript'] as String?,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'audio',
+        'kind': kind.name,
+        'title': title,
+        'subtitle': subtitle,
+        'durationSec': durationSec,
+        'seed': seed,
+        'transcript': transcript,
+      };
+}
+
+class CopyResult extends StudioResult {
+  final String contentType;
+  final String tone;
+  final String text;
+
+  const CopyResult({
+    required this.contentType,
+    required this.tone,
+    required this.text,
+  });
+
+  factory CopyResult.fromJson(Map<String, dynamic> json) => CopyResult(
+        contentType: json['contentType'] as String,
+        tone: json['tone'] as String,
+        text: json['text'] as String,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'copy',
+        'contentType': contentType,
+        'tone': tone,
+        'text': text,
+      };
+}

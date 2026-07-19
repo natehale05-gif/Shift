@@ -1,0 +1,54 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shift_ai/models/studio_type.dart';
+import 'package:shift_ai/services/studio_response_bank.dart';
+
+void main() {
+  group('StudioResponseBank.detectStudio', () {
+    test('routes image keywords to Image Studio', () {
+      expect(StudioResponseBank.detectStudio('make me a logo'), StudioType.imageStudio);
+      expect(StudioResponseBank.detectStudio('need a product shot for the launch'), StudioType.imageStudio);
+    });
+
+    test('routes video keywords to Video Studio', () {
+      expect(StudioResponseBank.detectStudio('cut a short reel for TikTok'), StudioType.videoStudio);
+      expect(StudioResponseBank.detectStudio('I need a trailer'), StudioType.videoStudio);
+    });
+
+    test('routes voice/avatar keywords to Voice & Avatar Studio', () {
+      expect(StudioResponseBank.detectStudio('clone my voice for this'), StudioType.voiceAvatarStudio);
+      expect(StudioResponseBank.detectStudio('narrate this script'), StudioType.voiceAvatarStudio);
+    });
+
+    test('routes music keywords to Music Studio', () {
+      expect(StudioResponseBank.detectStudio('drop a lo-fi beat'), StudioType.musicStudio);
+      expect(StudioResponseBank.detectStudio('I need a soundtrack'), StudioType.musicStudio);
+    });
+
+    test('routes copy keywords to Copy & Scripts Studio', () {
+      expect(StudioResponseBank.detectStudio('write me a sales letter'), StudioType.copyScriptsStudio);
+      expect(StudioResponseBank.detectStudio('need a punchy hook'), StudioType.copyScriptsStudio);
+    });
+
+    test('falls back to middleware when nothing matches', () {
+      expect(StudioResponseBank.detectStudio('what time is it in Tokyo?'), StudioType.middleware);
+    });
+
+    test('is case-insensitive', () {
+      expect(StudioResponseBank.detectStudio('MAKE ME A LOGO'), StudioType.imageStudio);
+    });
+  });
+
+  group('StudioResponseBank.seedFromString', () {
+    test('is deterministic for the same input', () {
+      final a = StudioResponseBank.seedFromString('same prompt');
+      final b = StudioResponseBank.seedFromString('same prompt');
+      expect(a, b);
+    });
+
+    test('differs for different input', () {
+      final a = StudioResponseBank.seedFromString('prompt one');
+      final b = StudioResponseBank.seedFromString('prompt two');
+      expect(a, isNot(b));
+    });
+  });
+}

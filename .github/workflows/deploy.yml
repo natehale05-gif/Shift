@@ -1,0 +1,61 @@
+name: Deploy Flutter web to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - claude/shiftai-flutter-chat-app-rjtgyj
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.35.5
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build web
+        run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+
+      # Belt-and-suspenders SPA fallback. The app itself never changes the
+      # browser URL (single-route IndexedStack navigation), so this normally
+      # shouldn't matter, but it protects against a stray deep link 404-ing
+      # on GitHub Pages' static hosting.
+      - name: Add SPA fallback
+        run: cp build/web/index.html build/web/404.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
