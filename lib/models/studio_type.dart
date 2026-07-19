@@ -9,7 +9,8 @@ enum StudioType {
   videoStudio,
   voiceAvatarStudio,
   musicStudio,
-  copyScriptsStudio;
+  copyScriptsStudio,
+  codeStudio;
 
   String get displayName => switch (this) {
         StudioType.middleware => 'SHIFT AI',
@@ -18,6 +19,7 @@ enum StudioType {
         StudioType.voiceAvatarStudio => 'Voice & Avatar Studio',
         StudioType.musicStudio => 'Music Studio',
         StudioType.copyScriptsStudio => 'Copy & Scripts Studio',
+        StudioType.codeStudio => 'Code Studio',
       };
 
   String get shortName => switch (this) {
@@ -27,6 +29,7 @@ enum StudioType {
         StudioType.voiceAvatarStudio => 'Voice & Avatar',
         StudioType.musicStudio => 'Music',
         StudioType.copyScriptsStudio => 'Copy & Scripts',
+        StudioType.codeStudio => 'Code',
       };
 
   String get tagline => switch (this) {
@@ -37,6 +40,7 @@ enum StudioType {
           'Your voice, your face, any language.',
         StudioType.musicStudio => 'Drop a vibe, get a track.',
         StudioType.copyScriptsStudio => 'Hooks, captions, scripts, sold.',
+        StudioType.codeStudio => 'Ship code, not just chat.',
       };
 
   IconData get icon => switch (this) {
@@ -46,6 +50,7 @@ enum StudioType {
         StudioType.voiceAvatarStudio => Icons.record_voice_over_rounded,
         StudioType.musicStudio => Icons.music_note_rounded,
         StudioType.copyScriptsStudio => Icons.edit_note_rounded,
+        StudioType.codeStudio => Icons.code_rounded,
       };
 
   /// Each studio's accent is one of Apple's own named system colors, so the
@@ -58,6 +63,7 @@ enum StudioType {
         StudioType.voiceAvatarStudio => AppColors.systemGreen,
         StudioType.musicStudio => AppColors.systemOrange,
         StudioType.copyScriptsStudio => AppColors.systemPurple,
+        StudioType.codeStudio => AppColors.systemTeal,
       };
 
   static StudioType fromName(String name) => StudioType.values.firstWhere(

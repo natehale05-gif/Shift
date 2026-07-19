@@ -32,10 +32,11 @@ class AppColors {
   static const Color warningText = Color(0xFF8A5A00);
   static const Color warningTextDark = Color(0xFFE8B948);
 
-  // Apple system colors used as the five studios' accent hues.
+  // Apple system colors used as the six studios' accent hues.
   static const Color systemPink = Color(0xFFFF375F);
   static const Color systemBlue = Color(0xFF0A84FF);
   static const Color systemGreen = Color(0xFF30D158);
   static const Color systemOrange = Color(0xFFFF9F0A);
   static const Color systemPurple = Color(0xFFBF5AF2);
+  static const Color systemTeal = Color(0xFF40C8E0);
 }

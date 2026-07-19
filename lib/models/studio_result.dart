@@ -12,6 +12,7 @@ sealed class StudioResult {
       'video' => VideoResult.fromJson(json),
       'audio' => AudioResult.fromJson(json),
       'copy' => CopyResult.fromJson(json),
+      'code' => CodeResult.fromJson(json),
       _ => throw ArgumentError('Unknown StudioResult type: ${json['type']}'),
     };
   }
@@ -148,5 +149,34 @@ class CopyResult extends StudioResult {
         'contentType': contentType,
         'tone': tone,
         'text': text,
+      };
+}
+
+/// A generated code snippet, presented as a downloadable "artifact" (in the
+/// same spirit as Claude's Artifacts panel) rather than an inline chat
+/// bubble.
+class CodeResult extends StudioResult {
+  final String language;
+  final String filename;
+  final String code;
+
+  const CodeResult({
+    required this.language,
+    required this.filename,
+    required this.code,
+  });
+
+  factory CodeResult.fromJson(Map<String, dynamic> json) => CodeResult(
+        language: json['language'] as String,
+        filename: json['filename'] as String,
+        code: json['code'] as String,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'code',
+        'language': language,
+        'filename': filename,
+        'code': code,
       };
 }

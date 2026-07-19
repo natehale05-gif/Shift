@@ -60,9 +60,9 @@ class SettingsScreen extends StatelessWidget {
                 Text('SHIFT AI', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  'A middleware AI that routes your requests to specialized studios — Image, Video, Voice & Avatar, Music, and Copy & Scripts. '
-                  'This build is a local prototype: chat replies and studio results are simulated, and Membership/EcoPay screens are illustrative '
-                  'demos only — no real purchases, credits, or payouts occur anywhere in this app.',
+                  'A middleware AI that routes your requests to specialized studios — Image, Video, Voice & Avatar, Music, Copy & Scripts, and Code. '
+                  'This build is a local prototype: chat replies and studio results are simulated. Images, audio, and code are downloadable as real files. '
+                  'Membership/EcoPay screens are illustrative demos only — no real purchases, credits, or payouts occur anywhere in this app.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.sm),

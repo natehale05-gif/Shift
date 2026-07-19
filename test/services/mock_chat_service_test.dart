@@ -27,6 +27,17 @@ void main() {
     test('routes copy keywords to Copy & Scripts Studio', () {
       expect(StudioResponseBank.detectStudio('write me a sales letter'), StudioType.copyScriptsStudio);
       expect(StudioResponseBank.detectStudio('need a punchy hook'), StudioType.copyScriptsStudio);
+      expect(StudioResponseBank.detectStudio('draft an ad script for the launch'), StudioType.copyScriptsStudio);
+    });
+
+    test('routes code keywords to Code Studio', () {
+      expect(StudioResponseBank.detectStudio('write a python function to reverse a string'), StudioType.codeStudio);
+      expect(StudioResponseBank.detectStudio('debug this for loop'), StudioType.codeStudio);
+      expect(StudioResponseBank.detectStudio('write a shell script to backup files'), StudioType.codeStudio);
+    });
+
+    test('bare "script" reads as Code Studio, not Copy & Scripts', () {
+      expect(StudioResponseBank.detectStudio('write me a script to rename files'), StudioType.codeStudio);
     });
 
     test('falls back to middleware when nothing matches', () {

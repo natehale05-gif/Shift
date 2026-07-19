@@ -3,6 +3,7 @@ import 'dart:math';
 import '../models/studio_result.dart';
 import '../models/studio_request.dart';
 import '../models/studio_type.dart';
+import 'download_service.dart';
 
 /// Canned templates and keyword tables backing [MockChatService]. Every
 /// "generated" asset here is fabricated client-side — there is no real
@@ -27,8 +28,18 @@ class StudioResponseBank {
       'music', 'song', 'beat', 'soundtrack', 'jingle', 'track', 'audio bed',
     ],
     StudioType.copyScriptsStudio: [
-      'caption', 'script', 'hook', 'sales letter', 'ad copy', 'headline',
-      'tagline', 'email copy', 'write me',
+      // Note: a compound phrase containing "video" (e.g. "video script")
+      // would still match videoStudio's bare "video" keyword first, since
+      // that studio is checked earlier below — reasonable, since wanting a
+      // video script often does mean wanting the video itself.
+      'caption', 'hook', 'sales letter', 'ad copy', 'headline', 'tagline',
+      'email copy', 'ad script', 'sales script',
+    ],
+    StudioType.codeStudio: [
+      'code', 'function', 'algorithm', 'debug', 'refactor', 'programming',
+      'python', 'javascript', 'typescript', 'dart', 'swift', 'sql query',
+      'regex', 'bug fix', 'unit test', 'api endpoint', 'shell script',
+      'script', // bare "script" reads as a programming script in this app
     ],
   };
 
@@ -48,7 +59,7 @@ class StudioResponseBank {
   static String middlewareReply(String input) {
     final trimmed = input.trim();
     final templates = [
-      "Here's my take: $trimmed\n\nI didn't spot a clear match for one of the five studios here, so I'm answering this one directly. Tell me if you'd rather I hand it off to Image, Video, Voice & Avatar, Music, or Copy & Scripts.",
+      "Here's my take: $trimmed\n\nI didn't spot a clear match for one of the six studios here, so I'm answering this one directly. Tell me if you'd rather I hand it off to Image, Video, Voice & Avatar, Music, Copy & Scripts, or Code.",
       "Got it — $trimmed\n\nThinking about this as your middleware AI: I can route this to a specialized studio if you want a generated asset, or keep chatting it through with you here. What would help most?",
       "On it. Taking \"$trimmed\" at face value, here's a quick pass — and if you want visuals, audio, video, or copy out of this, just say the word and I'll dispatch it to the right studio.",
     ];
@@ -67,6 +78,8 @@ class StudioResponseBank {
         "Routing this to Music Studio — let's score \"$input\".",
       StudioType.copyScriptsStudio =>
         "Routing this to Copy & Scripts Studio to write \"$input\".",
+      StudioType.codeStudio =>
+        "Routing this to Code Studio to build \"$input\".",
       StudioType.middleware => middlewareReply(input),
     };
   }
@@ -78,6 +91,7 @@ class StudioResponseBank {
       StudioType.voiceAvatarStudio => 'Voice pass is ready. I can switch voices, tone, or language on request.',
       StudioType.musicStudio => 'Track is scored and ready. Want a different mood or tempo?',
       StudioType.copyScriptsStudio => 'Copy is drafted below — tell me the tone or platform to tighten it.',
+      StudioType.codeStudio => 'Here\'s a first pass below — downloadable as its own file. Tell me the language or a bug to fix and I\'ll revise it.',
       StudioType.middleware => '',
     };
   }
@@ -123,6 +137,15 @@ class StudioResponseBank {
           contentType: r.contentType,
           tone: r.tone,
           text: _copyText(r, seed),
+        ),
+      CodeRequest r => CodeResult(
+          language: r.language,
+          filename: _codeFilename(r.language, r.prompt),
+          code: _codeSnippet(
+            language: r.language,
+            prompt: r.prompt,
+            includeComments: r.includeComments,
+          ),
         ),
     };
   }
@@ -174,6 +197,11 @@ class StudioResponseBank {
             seed,
           ),
         ),
+      StudioType.codeStudio => CodeResult(
+          language: 'Python',
+          filename: _codeFilename('Python', input),
+          code: _codeSnippet(language: 'Python', prompt: input, includeComments: true),
+        ),
       StudioType.middleware => throw ArgumentError('No studio result for middleware'),
     };
   }
@@ -205,5 +233,107 @@ class StudioResponseBank {
       'Ad Copy' => 'Stop scrolling. $subject just changed the math. See it for yourself.',
       _ => '$subject — drafted in the ${r.tone} tone for ${r.platform}.',
     };
+  }
+
+  static const _codeExtensions = {
+    'Python': 'py',
+    'JavaScript': 'js',
+    'TypeScript': 'ts',
+    'Dart': 'dart',
+    'Swift': 'swift',
+    'SQL': 'sql',
+    'HTML': 'html',
+  };
+
+  static String _codeFilename(String language, String prompt) =>
+      '${_slug(prompt)}.${_codeExtensions[language] ?? 'txt'}';
+
+  /// lower_snake_case identifier derived from the prompt, for use as a
+  /// function name and base filename.
+  static String _slug(String prompt) => DownloadService.slugify(prompt, fallback: 'snippet');
+
+  /// lowerCamelCase identifier for languages that conventionally name
+  /// functions that way.
+  static String _camelSlug(String prompt) {
+    final parts = _slug(prompt).split('_');
+    if (parts.isEmpty) return 'snippet';
+    return parts.first +
+        parts.skip(1).map((w) => w.isEmpty ? '' : w[0].toUpperCase() + w.substring(1)).join();
+  }
+
+  static String _codeSnippet({
+    required String language,
+    required String prompt,
+    required bool includeComments,
+  }) {
+    final snakeName = _slug(prompt);
+    final camelName = _camelSlug(prompt);
+    final doc = prompt.trim().isEmpty ? 'Generated snippet' : prompt.trim();
+
+    final code = switch (language) {
+      'Python' => '''
+def $snakeName():
+${includeComments ? '    """$doc"""\n' : ''}    # TODO: implement based on: $doc
+    result = None
+    return result
+
+
+if __name__ == "__main__":
+    print($snakeName())
+''',
+      'JavaScript' => '''
+${includeComments ? '/**\n * $doc\n */\n' : ''}function $camelName() {
+  // TODO: implement based on: $doc
+  return null;
+}
+
+console.log($camelName());
+''',
+      'TypeScript' => '''
+${includeComments ? '/**\n * $doc\n */\n' : ''}function $camelName(): unknown {
+  // TODO: implement based on: $doc
+  return null;
+}
+
+console.log($camelName());
+''',
+      'Dart' => '''
+${includeComments ? '/// $doc\n' : ''}dynamic $camelName() {
+  // TODO: implement based on: $doc
+  return null;
+}
+
+void main() {
+  print($camelName());
+}
+''',
+      'Swift' => '''
+${includeComments ? '/// $doc\n' : ''}func $camelName() -> Any? {
+    // TODO: implement based on: $doc
+    return nil
+}
+
+print($camelName())
+''',
+      'SQL' => '''
+${includeComments ? '-- $doc\n' : ''}SELECT *
+FROM your_table
+WHERE 1 = 1; ${includeComments ? '-- TODO: refine based on: $doc' : ''}
+''',
+      'HTML' => '''
+${includeComments ? '<!-- $doc -->\n' : ''}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${prompt.trim().isEmpty ? 'Untitled' : prompt.trim()}</title>
+</head>
+<body>
+  ${includeComments ? '<!-- TODO: implement based on: $doc -->' : '<div></div>'}
+</body>
+</html>
+''',
+      _ => '// TODO: implement based on: $doc',
+    };
+    return code.trim();
   }
 }

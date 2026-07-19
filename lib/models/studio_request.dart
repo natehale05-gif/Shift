@@ -112,3 +112,21 @@ class CopyScriptsRequest extends StudioRequest {
   String get summary =>
       '$contentType  ·  $tone  ·  for $platform${brandNotes.isNotEmpty ? '  ·  "$brandNotes"' : ''}';
 }
+
+class CodeRequest extends StudioRequest {
+  final String prompt;
+  final String language;
+  final bool includeComments;
+
+  const CodeRequest({
+    required this.prompt,
+    required this.language,
+    required this.includeComments,
+  });
+
+  @override
+  StudioType get studioType => StudioType.codeStudio;
+
+  @override
+  String get summary => '$prompt  ·  $language';
+}

@@ -137,6 +137,7 @@ class _EmptyState extends StatelessWidget {
                     StudioType.voiceAvatarStudio,
                     StudioType.musicStudio,
                     StudioType.copyScriptsStudio,
+                    StudioType.codeStudio,
                   ])
                     Chip(
                       avatar: Icon(studio.icon, size: 16, color: studio.accent),

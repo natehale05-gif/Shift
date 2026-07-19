@@ -20,6 +20,7 @@ Future<StudioRequest?> showStudioRequestSheet(
       StudioType.voiceAvatarStudio => const _VoiceAvatarRequestSheet(),
       StudioType.musicStudio => const _MusicRequestSheet(),
       StudioType.copyScriptsStudio => const _CopyScriptsRequestSheet(),
+      StudioType.codeStudio => const _CodeRequestSheet(),
       StudioType.middleware => throw ArgumentError('No sheet for middleware'),
     },
   );
@@ -448,6 +449,65 @@ class _CopyScriptsRequestSheetState extends State<_CopyScriptsRequestSheet> {
           controller: _notesController,
           decoration: const InputDecoration(hintText: 'Brand voice notes (optional)…'),
           maxLines: 2,
+        ),
+      ],
+    );
+  }
+}
+
+class _CodeRequestSheet extends StatefulWidget {
+  const _CodeRequestSheet();
+
+  @override
+  State<_CodeRequestSheet> createState() => _CodeRequestSheetState();
+}
+
+class _CodeRequestSheetState extends State<_CodeRequestSheet> {
+  final _promptController = TextEditingController();
+  String _language = 'Python';
+  bool _includeComments = true;
+
+  static const _languages = ['Python', 'JavaScript', 'TypeScript', 'Dart', 'Swift', 'SQL', 'HTML'];
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _SheetScaffold(
+      studioType: StudioType.codeStudio,
+      canSubmit: _promptController.text.trim().isNotEmpty,
+      onSubmit: () => Navigator.of(context).pop(
+        CodeRequest(
+          prompt: _promptController.text.trim(),
+          language: _language,
+          includeComments: _includeComments,
+        ),
+      ),
+      fields: [
+        TextField(
+          controller: _promptController,
+          decoration: const InputDecoration(hintText: 'What should this code do?'),
+          maxLines: 3,
+          onChanged: (_) => setState(() {}),
+        ),
+        const SizedBox(height: AppSpacing.md),
+        _ChipSelector(
+          label: 'Language',
+          options: _languages,
+          selected: _language,
+          labelBuilder: (v) => v,
+          onSelected: (v) => setState(() => _language = v),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Include comments'),
+          subtitle: const Text('Docstring/comment lines explaining the code'),
+          value: _includeComments,
+          onChanged: (v) => setState(() => _includeComments = v),
         ),
       ],
     );

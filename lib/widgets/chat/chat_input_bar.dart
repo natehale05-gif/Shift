@@ -24,6 +24,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
     StudioType.voiceAvatarStudio,
     StudioType.musicStudio,
     StudioType.copyScriptsStudio,
+    StudioType.codeStudio,
   ];
 
   void _send() {
