@@ -5,6 +5,7 @@ import 'screens/home_shell.dart';
 import 'services/mock_chat_service.dart';
 import 'services/persistence_service.dart';
 import 'state/app_settings_store.dart';
+import 'state/artifact_panel_store.dart';
 import 'state/conversation_store.dart';
 import 'state/ecopay_calculator_store.dart';
 import 'theme/app_theme.dart';
@@ -42,6 +43,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
         ChangeNotifierProvider.value(value: _conversationStore),
         ChangeNotifierProvider.value(value: _appSettingsStore),
         ChangeNotifierProvider(create: (_) => EcopayCalculatorStore()),
+        ChangeNotifierProvider(create: (_) => ArtifactPanelStore()),
       ],
       child: Consumer<AppSettingsStore>(
         builder: (context, settings, _) {

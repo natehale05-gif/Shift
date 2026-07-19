@@ -112,17 +112,12 @@ class MockChatService implements ChatService {
         ? StudioResponseBank.buildResult(structuredRequest)
         : StudioResponseBank.buildResultFromFreeform(studio, userInput);
 
-    // Page-shaped code prompts get an HTML artifact instead of an inline
-    // code card — the artifact IS the deliverable there.
-    final htmlArtifactOnly = studio == StudioType.codeStudio &&
-        structuredRequest == null &&
-        StudioResponseBank.wantsHtmlArtifact(userInput);
-    if (!htmlArtifactOnly) {
-      controller.add(StudioResultReady(result));
-    }
-
+    // Code output ships as an artifact (side panel), not an inline card —
+    // the artifact IS the deliverable, with copy/download/versions there.
     if (studio == StudioType.codeStudio) {
       _emitCodeArtifact(controller, conversation, userInput, result);
+    } else {
+      controller.add(StudioResultReady(result));
     }
 
     final followUp = StudioResponseBank.studioFollowUp(studio);

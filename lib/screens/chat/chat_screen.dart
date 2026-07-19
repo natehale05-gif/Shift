@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/studio_type.dart';
+import '../../state/artifact_panel_store.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_typography.dart';
+import '../../widgets/artifacts/artifact_panel.dart';
 import '../../widgets/chat/chat_input_bar.dart';
 import '../../widgets/chat/conversation_sidebar.dart';
 import '../../widgets/chat/message_view.dart';
@@ -62,24 +64,44 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           drawer:
               wideLayout ? null : const Drawer(child: ConversationSidebar()),
-          body: Row(
-            children: [
-              if (wideLayout)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  curve: Curves.easeOutCubic,
-                  width: _sidebarOpen ? 280 : 0,
-                  child: const ClipRect(
-                    child: OverflowBox(
-                      alignment: Alignment.centerLeft,
-                      minWidth: 280,
-                      maxWidth: 280,
-                      child: ConversationSidebar(),
-                    ),
+          body: Consumer<ArtifactPanelStore>(
+            builder: (context, panel, _) {
+              // Side-by-side panel needs real width; below that the panel
+              // covers the chat as a full overlay.
+              final sideBySide = constraints.maxWidth >= 1100;
+              final panelWidth =
+                  (constraints.maxWidth * 0.42).clamp(380.0, 560.0);
+              return Stack(
+                children: [
+                  Row(
+                    children: [
+                      if (wideLayout)
+                        AnimatedContainer(
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          width: _sidebarOpen ? 280 : 0,
+                          child: const ClipRect(
+                            child: OverflowBox(
+                              alignment: Alignment.centerLeft,
+                              minWidth: 280,
+                              maxWidth: 280,
+                              child: ConversationSidebar(),
+                            ),
+                          ),
+                        ),
+                      const Expanded(child: _ChatBody()),
+                      if (panel.isOpen && sideBySide)
+                        SizedBox(
+                          width: panelWidth,
+                          child: const ArtifactPanel(),
+                        ),
+                    ],
                   ),
-                ),
-              const Expanded(child: _ChatBody()),
-            ],
+                  if (panel.isOpen && !sideBySide)
+                    const Positioned.fill(child: ArtifactPanel()),
+                ],
+              );
+            },
           ),
         );
       },
@@ -168,7 +190,14 @@ class _ChatBodyState extends State<_ChatBody> {
                       constraints: const BoxConstraints(
                         maxWidth: _kProseColumnWidth,
                       ),
-                      child: MessageView(message: messages[index]),
+                      child: MessageView(
+                        message: messages[index],
+                        onOpenArtifact: (ref) =>
+                            context.read<ArtifactPanelStore>().open(
+                                  ref.artifactId,
+                                  versionIndex: ref.versionIndex,
+                                ),
+                      ),
                     ),
                   ),
                 ),
