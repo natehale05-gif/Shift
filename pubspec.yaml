@@ -65,17 +65,19 @@ flutter:
 
   # Bundled locally (not fetched from a font CDN at runtime) so text renders
   # reliably on static GitHub Pages hosting with no backend and no guaranteed
-  # network access to third-party font services.
+  # network access to third-party font services. Inter (SIL Open Font
+  # License, freely redistributable) reads closer to SF Pro's proportions
+  # than Roboto for the Apple-HIG-adjacent feel this app is going for.
   fonts:
-    - family: Roboto
+    - family: Inter
       fonts:
-        - asset: assets/fonts/Roboto-Regular.ttf
-        - asset: assets/fonts/Roboto-Medium.ttf
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
           weight: 500
-        - asset: assets/fonts/Roboto-Bold.ttf
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
           weight: 700
-        - asset: assets/fonts/Roboto-Light.ttf
-          weight: 300
 
   # To add assets to your application, add an assets section, like this:
   # assets:

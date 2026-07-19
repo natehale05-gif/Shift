@@ -5,6 +5,7 @@ import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/common/glass_app_bar.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -15,7 +16,7 @@ class SettingsScreen extends StatelessWidget {
     final colors = Theme.of(context).extension<AppSemanticColors>()!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: GlassAppBar(title: const Text('Settings')),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [

@@ -1,5 +1,8 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
 import 'chat/chat_screen.dart';
 import 'culture/culture_screen.dart';
 import 'membership/membership_screen.dart';
@@ -44,21 +47,25 @@ class _HomeShellState extends State<HomeShell> {
           return Scaffold(
             body: Row(
               children: [
-                NavigationRail(
-                  selectedIndex: _index,
-                  onDestinationSelected: (i) => setState(() => _index = i),
-                  labelType: NavigationRailLabelType.all,
-                  leading: const _BrandMark(),
-                  destinations: [
-                    for (final d in _destinations)
-                      NavigationRailDestination(
-                        icon: Icon(d.icon),
-                        selectedIcon: Icon(d.selectedIcon),
-                        label: Text(d.label),
-                      ),
-                  ],
+                _FrostedPanel(
+                  edge: _FrostedEdge.right,
+                  child: NavigationRail(
+                    backgroundColor: Colors.transparent,
+                    selectedIndex: _index,
+                    onDestinationSelected: (i) => setState(() => _index = i),
+                    labelType: NavigationRailLabelType.all,
+                    leading: const _BrandMark(),
+                    indicatorShape: const StadiumBorder(),
+                    destinations: [
+                      for (final d in _destinations)
+                        NavigationRailDestination(
+                          icon: Icon(d.icon),
+                          selectedIcon: Icon(d.selectedIcon),
+                          label: Text(d.label),
+                        ),
+                    ],
+                  ),
                 ),
-                const VerticalDivider(width: 1),
                 Expanded(child: body),
               ],
             ),
@@ -67,20 +74,54 @@ class _HomeShellState extends State<HomeShell> {
 
         return Scaffold(
           body: body,
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _index,
-            onDestinationSelected: (i) => setState(() => _index = i),
-            destinations: [
-              for (final d in _destinations)
-                NavigationDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selectedIcon),
-                  label: d.label,
-                ),
-            ],
+          bottomNavigationBar: _FrostedPanel(
+            edge: _FrostedEdge.top,
+            child: NavigationBar(
+              backgroundColor: Colors.transparent,
+              selectedIndex: _index,
+              onDestinationSelected: (i) => setState(() => _index = i),
+              destinations: [
+                for (final d in _destinations)
+                  NavigationDestination(
+                    icon: Icon(d.icon),
+                    selectedIcon: Icon(d.selectedIcon),
+                    label: d.label,
+                  ),
+              ],
+            ),
           ),
         );
       },
+    );
+  }
+}
+
+enum _FrostedEdge { right, top }
+
+/// A translucent, blurred backdrop (macOS "sidebar material" / iOS tab-bar
+/// vibrancy) with a hairline edge, used behind the primary navigation chrome
+/// so content is faintly visible through it rather than a flat opaque panel.
+class _FrostedPanel extends StatelessWidget {
+  final Widget child;
+  final _FrostedEdge edge;
+  const _FrostedPanel({required this.child, required this.edge});
+
+  @override
+  Widget build(BuildContext context) {
+    final side = BorderSide(color: Theme.of(context).dividerColor);
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
+            border: edge == _FrostedEdge.right
+                ? Border(right: side)
+                : Border(top: side),
+          ),
+          child: child,
+        ),
+      ),
     );
   }
 }
@@ -99,7 +140,7 @@ class _BrandMark extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF6C6CE5), Color(0xFFB07CE0)],
+                colors: [AppColors.accent, AppColors.systemPurple],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),

@@ -7,6 +7,7 @@ import '../../theme/app_spacing.dart';
 import '../../widgets/chat/chat_input_bar.dart';
 import '../../widgets/chat/conversation_sidebar.dart';
 import '../../widgets/chat/message_bubble.dart';
+import '../../widgets/common/glass_app_bar.dart';
 
 class ChatScreen extends StatelessWidget {
   const ChatScreen({super.key});
@@ -17,7 +18,7 @@ class ChatScreen extends StatelessWidget {
       builder: (context, constraints) {
         final showSidebar = constraints.maxWidth >= 900;
         return Scaffold(
-          appBar: AppBar(
+          appBar: GlassAppBar(
             title: const Text('SHIFT AI'),
             leading: showSidebar
                 ? null

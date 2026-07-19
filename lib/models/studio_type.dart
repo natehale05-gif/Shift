@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../theme/app_colors.dart';
+
 /// The specialized AI "studio" a request is routed to by the middleware AI.
 enum StudioType {
   middleware,
@@ -46,13 +48,16 @@ enum StudioType {
         StudioType.copyScriptsStudio => Icons.edit_note_rounded,
       };
 
+  /// Each studio's accent is one of Apple's own named system colors, so the
+  /// per-studio badges/chips read as part of the same system as the rest of
+  /// the chrome rather than an arbitrary brand palette.
   Color get accent => switch (this) {
-        StudioType.middleware => const Color(0xFF6C6CE5),
-        StudioType.imageStudio => const Color(0xFFE5787A),
-        StudioType.videoStudio => const Color(0xFF4FB0E8),
-        StudioType.voiceAvatarStudio => const Color(0xFF56C596),
-        StudioType.musicStudio => const Color(0xFFE6A23C),
-        StudioType.copyScriptsStudio => const Color(0xFFB07CE0),
+        StudioType.middleware => AppColors.accent, // systemIndigo
+        StudioType.imageStudio => AppColors.systemPink,
+        StudioType.videoStudio => AppColors.systemBlue,
+        StudioType.voiceAvatarStudio => AppColors.systemGreen,
+        StudioType.musicStudio => AppColors.systemOrange,
+        StudioType.copyScriptsStudio => AppColors.systemPurple,
       };
 
   static StudioType fromName(String name) => StudioType.values.firstWhere(

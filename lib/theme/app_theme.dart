@@ -54,7 +54,12 @@ class AppTheme {
       colorScheme: colorScheme,
       scaffoldBackgroundColor: background,
       textTheme: textTheme,
-      splashFactory: InkSparkle.splashFactory,
+      // Apple platforms never show a Material ink ripple — presses dim
+      // subtly instead. Removing the splash (each control's own pressed-
+      // state overlay still applies) is a small but load-bearing detail
+      // for reading as "Apple-made" rather than Material-made.
+      splashFactory: NoSplash.splashFactory,
+      highlightColor: Colors.transparent,
       dividerColor: border,
       cardTheme: CardThemeData(
         color: colorScheme.surface,

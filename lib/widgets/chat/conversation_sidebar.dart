@@ -17,6 +17,7 @@ class ConversationSidebar extends StatelessWidget {
     return Container(
       width: 260,
       decoration: BoxDecoration(
+        color: colors.surfaceAlt.withValues(alpha: 0.5),
         border: Border(right: BorderSide(color: colors.border)),
       ),
       child: Column(

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../models/studio_result.dart';
+import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import 'procedural_painters.dart';
@@ -28,12 +29,12 @@ class StudioResultCard extends StatelessWidget {
 }
 
 const _palette = [
-  Color(0xFF6C6CE5),
-  Color(0xFFE5787A),
-  Color(0xFF4FB0E8),
-  Color(0xFF56C596),
-  Color(0xFFE6A23C),
-  Color(0xFFB07CE0),
+  AppColors.accent,
+  AppColors.systemPink,
+  AppColors.systemBlue,
+  AppColors.systemGreen,
+  AppColors.systemOrange,
+  AppColors.systemPurple,
 ];
 
 List<Color> _paletteFromSeed(int seed) {
