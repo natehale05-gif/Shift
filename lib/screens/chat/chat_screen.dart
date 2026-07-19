@@ -4,48 +4,115 @@ import 'package:provider/provider.dart';
 import '../../models/studio_type.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
+import '../../theme/app_theme.dart';
+import '../../theme/app_typography.dart';
 import '../../widgets/chat/chat_input_bar.dart';
 import '../../widgets/chat/conversation_sidebar.dart';
-import '../../widgets/chat/message_bubble.dart';
+import '../../widgets/chat/message_view.dart';
 import '../../widgets/common/glass_app_bar.dart';
 
-class ChatScreen extends StatelessWidget {
+/// The message column and composer share this width so the conversation
+/// reads as a single centered prose column, like the Claude app.
+const double _kProseColumnWidth = 760;
+
+class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  bool _sidebarOpen = true;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final showSidebar = constraints.maxWidth >= 900;
+        final wideLayout = constraints.maxWidth >= 900;
         return Scaffold(
           appBar: GlassAppBar(
-            title: const Text('SHIFT AI'),
-            leading: showSidebar
-                ? null
-                : Builder(
-                    builder: (context) => IconButton(
-                      icon: const Icon(Icons.menu_rounded),
-                      onPressed: () => Scaffold.of(context).openDrawer(),
-                    ),
-                  ),
+            title: const _ChatTitle(),
+            leading: Builder(
+              builder: (context) => IconButton(
+                tooltip: wideLayout ? 'Toggle sidebar' : 'Chats',
+                icon: Icon(
+                  wideLayout
+                      ? Icons.view_sidebar_outlined
+                      : Icons.menu_rounded,
+                ),
+                onPressed: () {
+                  if (wideLayout) {
+                    setState(() => _sidebarOpen = !_sidebarOpen);
+                  } else {
+                    Scaffold.of(context).openDrawer();
+                  }
+                },
+              ),
+            ),
             actions: [
               IconButton(
                 tooltip: 'New chat',
                 icon: const Icon(Icons.add_comment_outlined),
-                onPressed: () => context.read<ConversationStore>().startNewConversation(),
+                onPressed: () =>
+                    context.read<ConversationStore>().startNewConversation(),
               ),
               const SizedBox(width: AppSpacing.sm),
             ],
           ),
-          drawer: showSidebar ? null : const Drawer(child: ConversationSidebar()),
+          drawer:
+              wideLayout ? null : const Drawer(child: ConversationSidebar()),
           body: Row(
             children: [
-              if (showSidebar) const ConversationSidebar(),
+              if (wideLayout)
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  width: _sidebarOpen ? 280 : 0,
+                  child: const ClipRect(
+                    child: OverflowBox(
+                      alignment: Alignment.centerLeft,
+                      minWidth: 280,
+                      maxWidth: 280,
+                      child: ConversationSidebar(),
+                    ),
+                  ),
+                ),
               const Expanded(child: _ChatBody()),
             ],
           ),
         );
       },
+    );
+  }
+}
+
+class _ChatTitle extends StatelessWidget {
+  const _ChatTitle();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('SHIFT AI'),
+        const SizedBox(width: AppSpacing.sm),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: colors.surfaceAlt,
+            borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+            border: Border.all(color: colors.border),
+          ),
+          child: Text(
+            'Simulated',
+            style: theme.textTheme.labelSmall
+                ?.copyWith(color: colors.textSecondary),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -89,14 +156,29 @@ class _ChatBodyState extends State<_ChatBody> {
               ? const _EmptyState()
               : ListView.separated(
                   controller: _scrollController,
-                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.xl,
+                  ),
                   itemCount: messages.length,
-                  separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.md),
-                  itemBuilder: (context, index) => MessageBubble(message: messages[index]),
+                  separatorBuilder: (_, __) =>
+                      const SizedBox(height: AppSpacing.lg),
+                  itemBuilder: (context, index) => Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        maxWidth: _kProseColumnWidth,
+                      ),
+                      child: MessageView(message: messages[index]),
+                    ),
+                  ),
                 ),
         ),
-        const Divider(height: 1),
-        const ChatInputBar(),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _kProseColumnWidth),
+            child: const ChatInputBar(),
+          ),
+        ),
       ],
     );
   }
@@ -110,18 +192,31 @@ class _EmptyState extends StatelessWidget {
     final theme = Theme.of(context);
     return Center(
       child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 520),
+        constraints: const BoxConstraints(maxWidth: 560),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.auto_awesome_rounded, size: 40, color: theme.colorScheme.primary),
-              const SizedBox(height: AppSpacing.md),
-              Text('One studio. Every AI tool.', style: theme.textTheme.headlineMedium, textAlign: TextAlign.center),
+              Icon(
+                Icons.auto_awesome_rounded,
+                size: 36,
+                color: theme.colorScheme.primary,
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              Text(
+                'One studio. Every AI tool.',
+                style: AppTypography.serifDisplay(
+                  fontSize: 32,
+                  color: theme.textTheme.headlineMedium!.color!,
+                ),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: AppSpacing.sm),
               Text(
-                'Talk to SHIFT AI like you would a person — it routes your request to the right specialized studio automatically, or use a quick action below.',
+                'Talk to SHIFT AI like you would a person — it routes your '
+                'request to the right specialized studio automatically, or '
+                'pick a studio from the + menu below.',
                 style: theme.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),

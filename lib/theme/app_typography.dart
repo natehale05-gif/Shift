@@ -10,6 +10,27 @@ import 'package:flutter/material.dart';
 class AppTypography {
   AppTypography._();
 
+  /// Serif display face for the wordmark, empty-state greeting, artifact
+  /// titles, and section headers — the Anthropic half of the identity.
+  /// Everything running-text stays Inter; code stays JetBrains Mono.
+  static const String serifFamily = 'Source Serif 4';
+
+  static TextStyle serifDisplay({
+    required double fontSize,
+    required Color color,
+    FontWeight fontWeight = FontWeight.w600,
+    double height = 1.15,
+  }) {
+    return TextStyle(
+      fontFamily: serifFamily,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      height: height,
+      letterSpacing: -0.2,
+      color: color,
+    );
+  }
+
   static TextTheme textTheme(Color primary, Color secondary) {
     final base = Typography.blackMountainView.apply(fontFamily: 'Inter');
     return base.copyWith(

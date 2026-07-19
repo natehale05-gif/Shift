@@ -57,7 +57,7 @@ enum StudioType {
   /// per-studio badges/chips read as part of the same system as the rest of
   /// the chrome rather than an arbitrary brand palette.
   Color get accent => switch (this) {
-        StudioType.middleware => AppColors.accent, // systemIndigo
+        StudioType.middleware => AppColors.systemIndigo,
         StudioType.imageStudio => AppColors.systemPink,
         StudioType.videoStudio => AppColors.systemBlue,
         StudioType.voiceAvatarStudio => AppColors.systemGreen,

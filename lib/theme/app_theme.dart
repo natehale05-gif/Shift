@@ -8,11 +8,13 @@ class AppTheme {
   AppTheme._();
 
   static ThemeData light() {
+    // Seeded for a coherent tonal palette, but primary is pinned so the tint
+    // is Anthropic's exact terracotta rather than a Material-shifted hue.
     final colorScheme = ColorScheme.fromSeed(
       seedColor: AppColors.accent,
       brightness: Brightness.light,
       surface: AppColors.lightSurface,
-    );
+    ).copyWith(primary: AppColors.accent);
     return _base(
       colorScheme: colorScheme,
       background: AppColors.lightBackground,
@@ -28,7 +30,7 @@ class AppTheme {
       seedColor: AppColors.accent,
       brightness: Brightness.dark,
       surface: AppColors.darkSurface,
-    );
+    ).copyWith(primary: AppColors.accentDark);
     return _base(
       colorScheme: colorScheme,
       background: AppColors.darkBackground,

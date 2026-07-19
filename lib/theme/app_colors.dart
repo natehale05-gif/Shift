@@ -1,21 +1,29 @@
 import 'package:flutter/material.dart';
 
-/// Palette built from Apple's own system color values (the same named
-/// constants iOS/macOS ship — systemIndigo, systemGray6, label/secondaryLabel,
-/// etc.) so the chrome and tint read as authentically "Apple" rather than an
-/// approximation.
+/// Palette blending Apple's system color values (systemIndigo, systemGray6,
+/// true-black dark surfaces) with Anthropic's warm-paper-and-terracotta
+/// identity, so the app reads as if the two companies designed it together:
+/// warm paper surfaces and a terracotta tint by day, Apple true black by
+/// night, Apple system colors for the studio accents throughout.
 class AppColors {
   AppColors._();
 
-  /// Apple's systemIndigo (dark-mode value — vivid enough to read well on
-  /// both light and dark surfaces as this app's single tint color).
-  static const Color accent = Color(0xFF5E5CE6);
+  /// Anthropic terracotta — the app's tint color (links, send button,
+  /// selection states).
+  static const Color accent = Color(0xFFD97757);
 
-  // Apple systemGray6 / systemBackground / label / secondaryLabel (light).
-  static const Color lightBackground = Color(0xFFF5F5F7);
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightSurfaceAlt = Color(0xFFF0F0F2);
-  static const Color lightBorder = Color(0xFFE3E3E6);
+  /// Lightened terracotta with enough contrast against true-black surfaces.
+  static const Color accentDark = Color(0xFFE08B6D);
+
+  /// Apple's systemIndigo, kept for the middleware/routing identity (the
+  /// "Shift routes your request" chip) now that terracotta owns the tint.
+  static const Color systemIndigo = Color(0xFF5E5CE6);
+
+  // Anthropic warm paper (light).
+  static const Color lightBackground = Color(0xFFF5F4EF);
+  static const Color lightSurface = Color(0xFFFCFBF8);
+  static const Color lightSurfaceAlt = Color(0xFFEFEDE6);
+  static const Color lightBorder = Color(0xFFE5E2D9);
   static const Color lightTextPrimary = Color(0xFF1D1D1F);
   static const Color lightTextSecondary = Color(0xFF6E6E73);
 

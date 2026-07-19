@@ -140,7 +140,7 @@ class _BrandMark extends StatelessWidget {
             height: 40,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [AppColors.accent, AppColors.systemPurple],
+                colors: [AppColors.accentDark, AppColors.accent],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
