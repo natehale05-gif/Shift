@@ -27,6 +27,7 @@ sealed class MessageBlock {
         ),
       'image' => ImageBlock(
           alt: json['alt'] as String,
+          assetId: json['assetId'] as String?,
           pngBytes: json['pngBase64'] != null
               ? base64Decode(json['pngBase64'] as String)
               : null,
@@ -106,20 +107,23 @@ class ToolUseBlock extends MessageBlock {
       };
 }
 
-/// A generated image. Bytes are session-only for now: persisted JSON drops
-/// them (an "image not saved" placeholder renders after reload) until
-/// IndexedDB asset storage lands.
+/// A generated image. The persisted JSON stores only [assetId] — the bytes
+/// live in the IndexedDB asset store and are rehydrated lazily when the
+/// block renders. [pngBytes] is the in-memory copy from the session that
+/// generated the image.
 class ImageBlock extends MessageBlock {
   final String alt;
   final Uint8List? pngBytes;
+  final String? assetId;
 
-  const ImageBlock({required this.alt, this.pngBytes});
+  const ImageBlock({required this.alt, this.pngBytes, this.assetId});
 
   @override
   Map<String, dynamic> toJson() => {
         'type': 'image',
         'alt': alt,
-        // pngBase64 intentionally omitted — see class doc.
+        'assetId': assetId,
+        // Raw bytes intentionally omitted — see class doc.
       };
 }
 

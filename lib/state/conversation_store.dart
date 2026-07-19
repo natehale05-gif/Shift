@@ -70,17 +70,17 @@ class ConversationStore extends ChangeNotifier {
     final trimmed = title.trim();
     if (trimmed.isEmpty) return;
     _mutateConversation(id, (c) => c.copyWith(title: trimmed));
-    _persist();
+    _persistConversation(id);
   }
 
   void toggleStar(String id) {
     _mutateConversation(id, (c) => c.copyWith(starred: !c.starred));
-    _persist();
+    _persistConversation(id);
   }
 
   void setConversationProject(String id, String? projectId) {
     _mutateConversation(id, (c) => c.copyWith(projectId: projectId));
-    _persist();
+    _persistConversation(id);
   }
 
   /// Case-insensitive search over titles and message text.
@@ -143,14 +143,14 @@ class ConversationStore extends ChangeNotifier {
       _currentId = _conversations.isNotEmpty ? conversations.first.id : null;
     }
     notifyListeners();
-    _persist();
+    persistence.deleteConversation(id);
   }
 
   void clearAllHistory() {
     _conversations = [];
     _currentId = null;
     notifyListeners();
-    _persist();
+    persistence.saveConversations(const []);
   }
 
   Future<void> sendMessage(
@@ -215,13 +215,24 @@ class ConversationStore extends ChangeNotifier {
           _upsertArtifact(conversationId, assistantMessage.id, artifact);
         case ArtifactUpdated(:final artifact):
           _upsertArtifact(conversationId, assistantMessage.id, artifact);
+        case ImageGenerated(:final pngBytes, :final alt):
+          // Bytes go to the asset store (IndexedDB) so the image survives
+          // reload; the block keeps them in memory for immediate display.
+          final assetId = _uuid.v4();
+          persistence.saveAsset(assetId, pngBytes);
+          _updateMessage(conversationId, assistantMessage.id, (m) {
+            return m.copyWith(blocks: [
+              ...m.blocks,
+              ImageBlock(alt: alt, pngBytes: pngBytes, assetId: assetId),
+            ]);
+          });
         case MessageComplete() || MessageError():
           _updateMessage(
             conversationId,
             assistantMessage.id,
             (m) => foldMessageEvent(m, event),
           );
-          _persist();
+          _persistConversation(conversationId);
         default:
           _updateMessage(
             conversationId,
@@ -286,5 +297,22 @@ class ConversationStore extends ChangeNotifier {
     });
   }
 
-  Future<void> _persist() => persistence.saveConversations(_conversations);
+  /// Saves just the mutated conversation, then trims history past the cap
+  /// (oldest first) from both memory and storage.
+  Future<void> _persistConversation(String id) async {
+    final index = _conversations.indexWhere((c) => c.id == id);
+    if (index == -1) return;
+    await persistence.saveConversation(_conversations[index]);
+
+    if (_conversations.length > PersistenceService.maxStoredConversations) {
+      final sorted = conversations; // newest first
+      final excess =
+          sorted.skip(PersistenceService.maxStoredConversations).toList();
+      for (final old in excess) {
+        _conversations.removeWhere((c) => c.id == old.id);
+        await persistence.deleteConversation(old.id);
+      }
+      notifyListeners();
+    }
+  }
 }

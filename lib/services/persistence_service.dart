@@ -1,52 +1,172 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/conversation.dart';
 import '../models/project.dart';
+import 'storage/storage_backend.dart';
 
-/// Thin wrapper over [SharedPreferences] (backed by browser `localStorage`
-/// on web) — the only persistence in this app, since there's no backend and
-/// no auth yet.
+/// The app's persistence layer, backed by IndexedDB (via idb_shim) so
+/// conversations, artifacts, and generated-image assets aren't squeezed
+/// into localStorage's ~5MB quota. The public API predates the IndexedDB
+/// move — callers never changed.
+///
+/// On first run after the migration shipped, any data the earlier
+/// localStorage (shared_preferences) build stored is copied over once; the
+/// old values are left in place as a backup.
 class PersistenceService {
-  static const _conversationsKey = 'shift_ai.conversations.v1';
+  static const _conversationsKeyV1 = 'shift_ai.conversations.v1';
   static const _themeModeKey = 'shift_ai.theme_mode.v1';
   static const _selectedTierKey = 'shift_ai.selected_tier.v1';
+  static const _projectsKey = 'shift_ai.projects.v1';
+  static const _userPrefsKey = 'shift_ai.user_prefs.v1';
+  static const _migratedFlagKey = 'shift_ai.migrated_to_idb.v1';
   static const maxStoredConversations = 50;
 
-  Future<List<Conversation>> loadConversations() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_conversationsKey);
-    if (raw == null || raw.isEmpty) return [];
+  /// Generated images kept before oldest are pruned.
+  static const maxStoredAssets = 40;
+
+  final StorageBackend _backend;
+  Future<void>? _migration;
+
+  PersistenceService({StorageBackend? backend})
+      : _backend = backend ?? StorageBackend();
+
+  /// One-shot localStorage → IndexedDB copy, run lazily before the first
+  /// read. Failures (e.g. no shared_preferences in a bare test harness)
+  /// just skip migration — there'd be nothing to migrate there anyway.
+  Future<void> _ensureMigrated() => _migration ??= _migrate();
+
+  Future<void> _migrate() async {
     try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      return list
-          .map((e) => Conversation.fromJson(e as Map<String, dynamic>))
-          .toList();
+      if (await _backend.getKv(_migratedFlagKey) == 'true') return;
+      final prefs = await SharedPreferences.getInstance();
+
+      final conversationsRaw = prefs.getString(_conversationsKeyV1);
+      if (conversationsRaw != null && conversationsRaw.isNotEmpty) {
+        try {
+          final list = jsonDecode(conversationsRaw) as List<dynamic>;
+          for (final entry in list) {
+            final map = entry as Map<String, dynamic>;
+            await _backend.putConversationJson(
+              map['id'] as String,
+              jsonEncode(map),
+            );
+          }
+        } catch (_) {
+          // Corrupt old blob: nothing worth carrying over.
+        }
+      }
+      for (final key in [
+        _themeModeKey,
+        _selectedTierKey,
+        _projectsKey,
+        _userPrefsKey,
+      ]) {
+        final value = prefs.getString(key);
+        if (value != null) await _backend.putKv(key, value);
+      }
+      await _backend.putKv(_migratedFlagKey, 'true');
     } catch (_) {
-      return [];
+      // shared_preferences unavailable (plain unit-test harness):
+      // proceed with an empty IndexedDB.
     }
   }
 
-  Future<void> saveConversations(List<Conversation> conversations) async {
-    final prefs = await SharedPreferences.getInstance();
-    final trimmed = conversations.length > maxStoredConversations
-        ? (conversations..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)))
-            .take(maxStoredConversations)
-            .toList()
-        : conversations;
-    await prefs.setString(
-      _conversationsKey,
-      jsonEncode(trimmed.map((c) => c.toJson()).toList()),
+  // --- conversations ---
+
+  Future<List<Conversation>> loadConversations() async {
+    await _ensureMigrated();
+    final jsonStrings = await _backend.getAllConversationJson();
+    final conversations = <Conversation>[];
+    for (final raw in jsonStrings) {
+      try {
+        conversations
+            .add(Conversation.fromJson(jsonDecode(raw) as Map<String, dynamic>));
+      } catch (_) {
+        // Skip an unreadable record rather than losing the whole history.
+      }
+    }
+    conversations.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return conversations;
+  }
+
+  /// Persists a single conversation — the common path while chatting.
+  Future<void> saveConversation(Conversation conversation) async {
+    await _ensureMigrated();
+    await _backend.putConversationJson(
+      conversation.id,
+      jsonEncode(conversation.toJson()),
     );
   }
 
-  static const _projectsKey = 'shift_ai.projects.v1';
-  static const _userPrefsKey = 'shift_ai.user_prefs.v1';
+  Future<void> deleteConversation(String id) async {
+    await _ensureMigrated();
+    await _backend.deleteConversation(id);
+  }
+
+  /// Bulk rewrite (clear-all, cap trimming).
+  Future<void> saveConversations(List<Conversation> conversations) async {
+    await _ensureMigrated();
+    await _backend.clearConversations();
+    final trimmed = [...conversations]
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    for (final conversation in trimmed.take(maxStoredConversations)) {
+      await _backend.putConversationJson(
+        conversation.id,
+        jsonEncode(conversation.toJson()),
+      );
+    }
+  }
+
+  // --- assets (generated images etc.) ---
+
+  Future<void> saveAsset(String id, Uint8List bytes) async {
+    await _ensureMigrated();
+    await _backend.putAsset(id, bytes);
+    final index = await _backend.assetIndex();
+    if (index.length > maxStoredAssets) {
+      for (final (assetId, _) in index.take(index.length - maxStoredAssets)) {
+        await _backend.deleteAsset(assetId);
+      }
+    }
+  }
+
+  Future<Uint8List?> loadAsset(String id) async {
+    await _ensureMigrated();
+    return _backend.getAsset(id);
+  }
+
+  // --- small settings (kv) ---
+
+  Future<String?> _getKv(String key) async {
+    await _ensureMigrated();
+    return _backend.getKv(key);
+  }
+
+  Future<void> _putKv(String key, String value) async {
+    await _ensureMigrated();
+    await _backend.putKv(key, value);
+  }
+
+  Future<String?> loadThemeMode() => _getKv(_themeModeKey);
+
+  Future<void> saveThemeMode(String mode) => _putKv(_themeModeKey, mode);
+
+  Future<String?> loadSelectedTier() => _getKv(_selectedTierKey);
+
+  Future<void> saveSelectedTier(String? tierId) async {
+    await _ensureMigrated();
+    if (tierId == null) {
+      await _backend.deleteKv(_selectedTierKey);
+    } else {
+      await _backend.putKv(_selectedTierKey, tierId);
+    }
+  }
 
   Future<List<Project>> loadProjects() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_projectsKey);
+    final raw = await _getKv(_projectsKey);
     if (raw == null || raw.isEmpty) return [];
     try {
       final list = jsonDecode(raw) as List<dynamic>;
@@ -58,17 +178,13 @@ class PersistenceService {
     }
   }
 
-  Future<void> saveProjects(List<Project> projects) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _projectsKey,
-      jsonEncode(projects.map((p) => p.toJson()).toList()),
-    );
-  }
+  Future<void> saveProjects(List<Project> projects) => _putKv(
+        _projectsKey,
+        jsonEncode(projects.map((p) => p.toJson()).toList()),
+      );
 
   Future<Map<String, dynamic>> loadUserPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_userPrefsKey);
+    final raw = await _getKv(_userPrefsKey);
     if (raw == null || raw.isEmpty) return {};
     try {
       return jsonDecode(raw) as Map<String, dynamic>;
@@ -77,32 +193,6 @@ class PersistenceService {
     }
   }
 
-  Future<void> saveUserPrefs(Map<String, dynamic> value) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_userPrefsKey, jsonEncode(value));
-  }
-
-  Future<String?> loadThemeMode() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_themeModeKey);
-  }
-
-  Future<void> saveThemeMode(String mode) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_themeModeKey, mode);
-  }
-
-  Future<String?> loadSelectedTier() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_selectedTierKey);
-  }
-
-  Future<void> saveSelectedTier(String? tierId) async {
-    final prefs = await SharedPreferences.getInstance();
-    if (tierId == null) {
-      await prefs.remove(_selectedTierKey);
-    } else {
-      await prefs.setString(_selectedTierKey, tierId);
-    }
-  }
+  Future<void> saveUserPrefs(Map<String, dynamic> value) =>
+      _putKv(_userPrefsKey, jsonEncode(value));
 }

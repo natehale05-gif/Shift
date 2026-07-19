@@ -43,6 +43,8 @@ dependencies:
   flutter_highlight: ^0.7.0
   gpt_markdown: ^1.1.8
   file_selector: ^1.0.3
+  # 2.7+ needs a newer Dart SDK than this project's pinned Flutter ships.
+  idb_shim: ^2.6.7
 
 dev_dependencies:
   flutter_test:

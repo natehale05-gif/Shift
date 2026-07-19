@@ -390,40 +390,68 @@ class _ImageBlockView extends StatelessWidget {
 
   const _ImageBlockView({required this.block});
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<AppSemanticColors>()!;
-    if (block.pngBytes == null) {
-      // Bytes aren't persisted yet (localStorage quota) — after a reload
-      // only this placeholder remains.
-      return Container(
-        padding: const EdgeInsets.all(AppSpacing.md),
-        decoration: BoxDecoration(
-          color: colors.surfaceAlt,
-          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.image_not_supported_outlined,
-                size: 16, color: colors.textSecondary),
-            const SizedBox(width: 8),
-            Text(
-              'Image not saved — ${block.alt}',
-              style: theme.textTheme.labelMedium,
-            ),
-          ],
+  Widget _image(Uint8List bytes) => ClipRRect(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 420),
+          child: Image.memory(bytes, fit: BoxFit.contain),
         ),
       );
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Image.memory(block.pngBytes!, fit: BoxFit.contain),
+
+  Widget _placeholder(BuildContext context, String label) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: colors.surfaceAlt,
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.image_not_supported_outlined,
+              size: 16, color: colors.textSecondary),
+          const SizedBox(width: 8),
+          Text(label, style: theme.textTheme.labelMedium),
+        ],
       ),
     );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (block.pngBytes != null) return _image(block.pngBytes!);
+
+    if (block.assetId != null) {
+      // Reloaded session: bytes live in the IndexedDB asset store.
+      return FutureBuilder<Uint8List?>(
+        future:
+            context.read<ConversationStore>().persistence.loadAsset(block.assetId!),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const SizedBox(
+              height: 48,
+              width: 48,
+              child: Center(
+                child: SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 1.6),
+                ),
+              ),
+            );
+          }
+          final bytes = snapshot.data;
+          return bytes != null
+              ? _image(bytes)
+              : _placeholder(
+                  context, 'Image no longer stored — ${block.alt}');
+        },
+      );
+    }
+
+    return _placeholder(context, 'Image not saved — ${block.alt}');
   }
 }
 
