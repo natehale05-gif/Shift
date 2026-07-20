@@ -51,6 +51,45 @@ void main() {
       expect(body.containsKey('generationConfig'), isFalse);
     });
 
+    test('does not duplicate the new user turn when the store has already '
+        'appended it to history', () {
+      final conversation = Conversation(
+        id: 'c2',
+        title: 'x',
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+        messages: [
+          ..._history().messages,
+          ChatMessage(
+            id: 'm3',
+            conversationId: 'c2',
+            role: MessageRole.user,
+            text: 'new question',
+            timestamp: DateTime(2026),
+          ),
+          ChatMessage(
+            id: 'm4',
+            conversationId: 'c2',
+            role: MessageRole.assistant,
+            text: '',
+            status: MessageStatus.streaming,
+            timestamp: DateTime(2026),
+          ),
+        ],
+      );
+
+      final body = GeminiClient.buildRequestBody(
+        conversation: conversation,
+        userInput: 'new question',
+      );
+
+      final contents = body['contents'] as List;
+      expect(contents, hasLength(3));
+      expect((contents[0] as Map)['role'], 'user');
+      expect((contents[1] as Map)['role'], 'model');
+      expect((contents[2] as Map)['role'], 'user');
+    });
+
     test('image output requests TEXT+IMAGE modalities', () {
       final body = GeminiClient.buildRequestBody(
         conversation: Conversation(

@@ -19,6 +19,8 @@ import 'providers/anthropic_tools.dart';
 import 'providers/gemini_api_config.dart';
 import 'providers/gemini_client.dart';
 import 'router/model_router.dart';
+import 'studio_clarification.dart';
+import 'studio_response_bank.dart';
 
 const _uuid = Uuid();
 
@@ -119,13 +121,21 @@ class RealChatService implements ChatService {
         return;
       }
 
+      // A terse follow-up to our own clarifying question ("navy blue")
+      // continues the same studio request rather than being reclassified
+      // from scratch — regardless of whether the question was asked by the
+      // mock or a live provider (both end their questions with '?').
+      final pending = findPendingClarification(conversation);
+
       final route = options.modelPin != null
           ? ChatRoute.chat // an explicit model pin bypasses routing
-          : await _router.route(
-              input: userInput,
-              anthropicKey: keys.anthropicKey,
-              geminiKey: keys.geminiKey,
-            );
+          : pending != null
+              ? routeForStudio(pending.$1)
+              : await _router.route(
+                  input: userInput,
+                  anthropicKey: keys.anthropicKey,
+                  geminiKey: keys.geminiKey,
+                );
 
       final executor = chooseExecutor(
         route,
@@ -139,8 +149,8 @@ class RealChatService implements ChatService {
               controller, conversation, userInput, attachments, options, route);
         case Executor.gemini:
           if (route == ChatRoute.imageGen) {
-            controller.add(RoutingDetected(route.studioType));
-            await _runGeminiImage(controller, userInput, close: false);
+            await _runGeminiImageWithClarification(
+                controller, userInput, pending);
           } else {
             await _runGeminiChat(controller, conversation, userInput,
                 attachments, options, route);
@@ -276,6 +286,29 @@ class RealChatService implements ChatService {
       grounding: options.webSearch || route == ChatRoute.webSearch,
     );
     await controller.addStream(events);
+  }
+
+  /// Freeform image prompts get the same "ask before guessing" gate as the
+  /// mock — Gemini's image endpoint is one-shot (no conversation), so this
+  /// is the only chance to ask before spending a real generation call.
+  Future<void> _runGeminiImageWithClarification(
+    StreamController<ChatEvent> controller,
+    String userInput,
+    (StudioType, String)? pending,
+  ) async {
+    controller.add(const RoutingDetected(StudioType.imageStudio));
+    if (pending == null) {
+      final question = StudioResponseBank.clarifyingQuestion(
+          StudioType.imageStudio, userInput);
+      if (question != null) {
+        controller.add(MessageDelta(question));
+        controller.add(const MessageComplete());
+        return;
+      }
+    }
+    final effectiveInput =
+        pending != null ? '${pending.$2} $userInput'.trim() : userInput;
+    await _runGeminiImage(controller, effectiveInput, close: false);
   }
 
   Future<void> _runGeminiImage(

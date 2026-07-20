@@ -123,6 +123,51 @@ void main() {
       expect(lastContent['text'], 'new question');
     });
 
+    test('does not duplicate the new user turn when the store has already '
+        'appended it to history', () {
+      // This is the real shape ConversationStore hands to a ChatService:
+      // the new user message and an empty streaming placeholder for the
+      // reply are already the trailing two entries.
+      final conversation = Conversation(
+        id: 'c3',
+        title: 'x',
+        createdAt: DateTime(2026),
+        updatedAt: DateTime(2026),
+        messages: [
+          ..._history().messages,
+          ChatMessage(
+            id: 'm3',
+            conversationId: 'c3',
+            role: MessageRole.user,
+            text: 'new question',
+            timestamp: DateTime(2026, 7, 19, 9, 2),
+          ),
+          ChatMessage(
+            id: 'm4',
+            conversationId: 'c3',
+            role: MessageRole.assistant,
+            text: '',
+            status: MessageStatus.streaming,
+            timestamp: DateTime(2026, 7, 19, 9, 2),
+          ),
+        ],
+      );
+
+      final body = AnthropicClient.buildRequestBody(
+        conversation: conversation,
+        userInput: 'new question',
+        model: AnthropicApiConfig.defaultModel,
+      );
+
+      final messages = body['messages'] as List;
+      // Same 3 messages as the golden-shape test above (2 prior turns + 1
+      // new one) — not 4, which is what duplication would produce.
+      expect(messages, hasLength(3));
+      expect((messages[0] as Map)['role'], 'user');
+      expect((messages[1] as Map)['role'], 'assistant');
+      expect((messages[2] as Map)['role'], 'user');
+    });
+
     test('haiku gets no thinking parameter', () {
       final body = AnthropicClient.buildRequestBody(
         conversation: _history(),

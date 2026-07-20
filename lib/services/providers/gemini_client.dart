@@ -33,8 +33,25 @@ class GeminiClient {
     bool grounding = false,
     bool imageOutput = false,
   }) {
+    // The store already appends this turn's own user message (plus an
+    // empty streaming placeholder for the reply) to [conversation] before
+    // handing it to a ChatService. Both are dropped from history here since
+    // the new user turn is re-added below — otherwise it would be
+    // duplicated as two consecutive user turns.
+    final history = List.of(conversation.messages);
+    if (history.isNotEmpty &&
+        history.last.role == MessageRole.assistant &&
+        history.last.text.trim().isEmpty) {
+      history.removeLast();
+      if (history.isNotEmpty &&
+          history.last.role == MessageRole.user &&
+          history.last.text == userInput) {
+        history.removeLast();
+      }
+    }
+
     final contents = <Map<String, dynamic>>[];
-    for (final message in conversation.messages) {
+    for (final message in history) {
       if (message.text.trim().isEmpty) continue;
       switch (message.role) {
         case MessageRole.user:

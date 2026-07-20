@@ -11,6 +11,7 @@ import '../models/studio_result.dart';
 import '../models/studio_type.dart';
 import '../models/usage_report.dart';
 import 'chat_service.dart';
+import 'studio_clarification.dart';
 import 'studio_response_bank.dart';
 
 const _uuid = Uuid();
@@ -46,10 +47,20 @@ class MockChatService implements ChatService {
     ChatOptions options,
   ) async {
     try {
+      // A terse follow-up to our own clarifying question ("navy blue")
+      // continues the same studio request rather than being reclassified
+      // from scratch — the studio comes from that pending question, and
+      // its answer merges into a complete prompt.
+      final pending = structuredRequest == null
+          ? findPendingClarification(conversation)
+          : null;
       final studio = structuredRequest?.studioType ??
+          pending?.$1 ??
           StudioResponseBank.detectStudio(userInput);
+      final effectiveInput =
+          pending != null ? '${pending.$2} $userInput'.trim() : userInput;
 
-      var thinking = StudioResponseBank.thinkingText(studio, userInput);
+      var thinking = StudioResponseBank.thinkingText(studio, effectiveInput);
       final system = options.systemPrompt ?? '';
       if (system.contains('Active project:')) {
         thinking += ' Applying the project\'s instructions and knowledge.';
@@ -81,8 +92,8 @@ class MockChatService implements ChatService {
               StudioResponseBank.wantsWebSearch(userInput))) {
         await _runWebSearch(controller, userInput);
       } else {
-        await _runStudioFlow(
-            controller, conversation, studio, userInput, structuredRequest);
+        await _runStudioFlow(controller, conversation, studio, effectiveInput,
+            structuredRequest, pending != null);
       }
 
       controller.add(UsageReported(UsageReport(
@@ -104,14 +115,28 @@ class MockChatService implements ChatService {
     StudioType studio,
     String userInput,
     StudioRequest? structuredRequest,
+    bool isAnsweringClarification,
   ) async {
-    final introText = structuredRequest != null
-        ? StudioResponseBank.routingIntro(studio, structuredRequest.summary)
-        : StudioResponseBank.routingIntro(studio, userInput);
-
-    await _streamText(controller, introText);
+    if (studio != StudioType.middleware && isAnsweringClarification) {
+      await _streamText(controller, StudioResponseBank.clarificationAck(studio));
+    } else {
+      final introText = structuredRequest != null
+          ? StudioResponseBank.routingIntro(studio, structuredRequest.summary)
+          : StudioResponseBank.routingIntro(studio, userInput);
+      await _streamText(controller, introText);
+    }
 
     if (studio == StudioType.middleware) return;
+
+    // Ask before guessing, like Claude does — but only once per request;
+    // a reply to our own question always proceeds straight to generating.
+    if (structuredRequest == null && !isAnsweringClarification) {
+      final question = StudioResponseBank.clarifyingQuestion(studio, userInput);
+      if (question != null) {
+        await _streamText(controller, '\n\n$question');
+        return;
+      }
+    }
 
     await _delay(500, 1100);
     final result = structuredRequest != null

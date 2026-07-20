@@ -100,6 +100,64 @@ class StudioResponseBank {
     };
   }
 
+  static int _wordCount(String input) => input
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((w) => w.isNotEmpty)
+      .length;
+
+  /// A studio-specific clarifying question for prompts too thin to act on
+  /// well — the same instinct a thoughtful collaborator (or Claude) has:
+  /// ask before guessing. Returns null when the prompt already has enough
+  /// to go on.
+  static String? clarifyingQuestion(StudioType studio, String input) {
+    final words = _wordCount(input);
+    return switch (studio) {
+      StudioType.imageStudio => words < 6
+          ? "Happy to create that — a couple quick things first: what's "
+              'the subject or brand, and any style or color preferences '
+              '(minimal, playful, bold, a specific palette)?'
+          : null,
+      StudioType.videoStudio => words < 6
+          ? "Happy to put that together — what's it for (an ad, a demo, "
+              'a personal clip), and about how long should it run?'
+          : null,
+      StudioType.voiceAvatarStudio => words < 8
+          ? 'I can do that — what should the voiceover actually say, and '
+              'is there a tone or specific voice you have in mind?'
+          : null,
+      StudioType.musicStudio => words < 5
+          ? 'Sure thing — what mood or genre are you thinking, and '
+              'roughly how long should the track run?'
+          : null,
+      StudioType.copyScriptsStudio => words < 6
+          ? "Happy to write that — what's it for (a caption, hook, "
+              'script, ad copy, email), which platform, and what tone '
+              'should it have?'
+          : null,
+      StudioType.codeStudio => words < 6
+          ? 'Happy to build that — which language should I use, and can '
+              'you say a bit more about what it should do?'
+          : null,
+      StudioType.middleware => null,
+    };
+  }
+
+  /// Short acknowledgment used instead of the usual routing intro when
+  /// this turn is answering a prior clarifying question rather than
+  /// starting a fresh request.
+  static String clarificationAck(StudioType studio) {
+    return switch (studio) {
+      StudioType.imageStudio => "Great, that's enough to go on.",
+      StudioType.videoStudio => "Perfect, that's enough to go on.",
+      StudioType.voiceAvatarStudio => 'Got it, generating that now.',
+      StudioType.musicStudio => 'Got it, scoring that now.',
+      StudioType.copyScriptsStudio => 'Got it, drafting that now.',
+      StudioType.codeStudio => 'Got it, building that now.',
+      StudioType.middleware => '',
+    };
+  }
+
   static int seedFromString(String input) => input.codeUnits.fold<int>(
         7,
         (acc, c) => (acc * 31 + c) & 0x7fffffff,

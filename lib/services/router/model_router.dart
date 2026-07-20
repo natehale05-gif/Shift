@@ -50,20 +50,29 @@ ChatRoute? parseRouteJson(String text) {
   }
 }
 
+/// The route that continues a given studio's request — used both by the
+/// keyword fallback below and to keep a reply to our own clarifying
+/// question ("navy blue") on the same studio rather than reclassifying it.
+ChatRoute routeForStudio(StudioType studio) => switch (studio) {
+      StudioType.imageStudio => ChatRoute.imageGen,
+      StudioType.videoStudio => ChatRoute.video,
+      StudioType.voiceAvatarStudio => ChatRoute.audio,
+      StudioType.musicStudio => ChatRoute.audio,
+      StudioType.copyScriptsStudio => ChatRoute.writing,
+      StudioType.codeStudio => ChatRoute.code,
+      StudioType.middleware => ChatRoute.chat,
+    };
+
 /// Maps the existing keyword tables onto routes — the no-key (and
 /// LLM-parse-failure) fallback, so routing never breaks.
 ChatRoute keywordRoute(String input) {
-  return switch (StudioResponseBank.detectStudio(input)) {
-    StudioType.imageStudio => ChatRoute.imageGen,
-    StudioType.videoStudio => ChatRoute.video,
-    StudioType.voiceAvatarStudio => ChatRoute.audio,
-    StudioType.musicStudio => ChatRoute.audio,
-    StudioType.copyScriptsStudio => ChatRoute.writing,
-    StudioType.codeStudio => ChatRoute.code,
-    StudioType.middleware => StudioResponseBank.wantsWebSearch(input)
+  final studio = StudioResponseBank.detectStudio(input);
+  if (studio == StudioType.middleware) {
+    return StudioResponseBank.wantsWebSearch(input)
         ? ChatRoute.webSearch
-        : ChatRoute.chat,
-  };
+        : ChatRoute.chat;
+  }
+  return routeForStudio(studio);
 }
 
 const _routerSystemPrompt =

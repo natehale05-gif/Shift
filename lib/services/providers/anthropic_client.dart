@@ -30,8 +30,25 @@ class AnthropicClient {
     bool stream = true,
     int maxTokens = AnthropicApiConfig.defaultMaxTokens,
   }) {
+    // The store already appends this turn's own user message (plus an
+    // empty streaming placeholder for the reply) to [conversation] before
+    // handing it to a ChatService. Both are dropped from history here since
+    // the new user turn is re-added below (with this call's attachments) —
+    // otherwise it would be duplicated as two consecutive user messages.
+    final history = List.of(conversation.messages);
+    if (history.isNotEmpty &&
+        history.last.role == MessageRole.assistant &&
+        history.last.text.trim().isEmpty) {
+      history.removeLast();
+      if (history.isNotEmpty &&
+          history.last.role == MessageRole.user &&
+          history.last.text == userInput) {
+        history.removeLast();
+      }
+    }
+
     final messages = <Map<String, dynamic>>[];
-    for (final message in conversation.messages) {
+    for (final message in history) {
       if (message.text.trim().isEmpty) continue;
       switch (message.role) {
         case MessageRole.user:
