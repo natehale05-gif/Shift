@@ -5,6 +5,7 @@ import '../../models/studio_type.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/artifact_panel_store.dart';
 import '../../state/conversation_store.dart';
+import '../../state/home_shell_controller.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_typography.dart';
@@ -33,12 +34,18 @@ class _ChatScreenState extends State<ChatScreen> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wideLayout = constraints.maxWidth >= 900;
+        // Matches HomeShell's own breakpoint: below this, the app has no
+        // NavigationRail and everything (including chat history) lives in
+        // the shell's single hamburger drawer instead of a per-screen one.
+        final appWide = MediaQuery.sizeOf(context).width >= 720;
         return Scaffold(
           appBar: GlassAppBar(
             title: const _ChatTitle(),
             leading: Builder(
               builder: (context) => IconButton(
-                tooltip: wideLayout ? 'Toggle sidebar' : 'Chats',
+                tooltip: wideLayout
+                    ? 'Toggle sidebar'
+                    : (appWide ? 'Chats' : 'Menu'),
                 icon: Icon(
                   wideLayout
                       ? Icons.view_sidebar_outlined
@@ -47,8 +54,10 @@ class _ChatScreenState extends State<ChatScreen> {
                 onPressed: () {
                   if (wideLayout) {
                     setState(() => _sidebarOpen = !_sidebarOpen);
-                  } else {
+                  } else if (appWide) {
                     Scaffold.of(context).openDrawer();
+                  } else {
+                    context.read<HomeShellController>().openDrawer();
                   }
                 },
               ),
@@ -63,8 +72,9 @@ class _ChatScreenState extends State<ChatScreen> {
               const SizedBox(width: AppSpacing.sm),
             ],
           ),
-          drawer:
-              wideLayout ? null : const Drawer(child: ConversationSidebar()),
+          drawer: (!wideLayout && appWide)
+              ? const Drawer(child: ConversationSidebar())
+              : null,
           body: Consumer<ArtifactPanelStore>(
             builder: (context, panel, _) {
               // Side-by-side panel needs real width; below that the panel

@@ -5,7 +5,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../state/conversation_store.dart';
+import '../state/home_shell_controller.dart';
 import '../theme/app_colors.dart';
+import '../widgets/common/app_nav_drawer.dart';
 import '../widgets/common/command_palette.dart';
 import 'chat/chat_screen.dart';
 import 'culture/culture_screen.dart';
@@ -25,13 +27,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
-
-  static const _destinations = [
-    (icon: Icons.chat_bubble_outline_rounded, selectedIcon: Icons.chat_bubble_rounded, label: 'Chat'),
-    (icon: Icons.workspace_premium_outlined, selectedIcon: Icons.workspace_premium_rounded, label: 'Membership'),
-    (icon: Icons.groups_outlined, selectedIcon: Icons.groups_rounded, label: 'Culture'),
-    (icon: Icons.settings_outlined, selectedIcon: Icons.settings_rounded, label: 'Settings'),
-  ];
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   static const _screens = [
     ChatScreen(),
@@ -77,53 +73,55 @@ class _HomeShellState extends State<HomeShell> {
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 720;
         final body = IndexedStack(index: _index, children: _screens);
+        final controller = HomeShellController(
+          openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+        );
 
         if (isWide) {
-          return Scaffold(
-            body: Row(
-              children: [
-                _FrostedPanel(
-                  edge: _FrostedEdge.right,
-                  child: NavigationRail(
-                    backgroundColor: Colors.transparent,
-                    selectedIndex: _index,
-                    onDestinationSelected: (i) => setState(() => _index = i),
-                    labelType: NavigationRailLabelType.all,
-                    leading: const _BrandMark(),
-                    indicatorShape: const StadiumBorder(),
-                    destinations: [
-                      for (final d in _destinations)
-                        NavigationRailDestination(
-                          icon: Icon(d.icon),
-                          selectedIcon: Icon(d.selectedIcon),
-                          label: Text(d.label),
-                        ),
-                    ],
+          // The rail already surfaces every destination, so no drawer is
+          // needed here.
+          return Provider<HomeShellController>.value(
+            value: controller,
+            child: Scaffold(
+              body: Row(
+                children: [
+                  _FrostedPanel(
+                    child: NavigationRail(
+                      backgroundColor: Colors.transparent,
+                      selectedIndex: _index,
+                      onDestinationSelected: (i) =>
+                          setState(() => _index = i),
+                      labelType: NavigationRailLabelType.all,
+                      leading: const _BrandMark(),
+                      indicatorShape: const StadiumBorder(),
+                      destinations: [
+                        for (final d in homeShellDestinations)
+                          NavigationRailDestination(
+                            icon: Icon(d.icon),
+                            selectedIcon: Icon(d.selectedIcon),
+                            label: Text(d.label),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                Expanded(child: body),
-              ],
+                  Expanded(child: body),
+                ],
+              ),
             ),
           );
         }
 
-        return Scaffold(
-          body: body,
-          bottomNavigationBar: _FrostedPanel(
-            edge: _FrostedEdge.top,
-            child: NavigationBar(
-              backgroundColor: Colors.transparent,
-              selectedIndex: _index,
-              onDestinationSelected: (i) => setState(() => _index = i),
-              destinations: [
-                for (final d in _destinations)
-                  NavigationDestination(
-                    icon: Icon(d.icon),
-                    selectedIcon: Icon(d.selectedIcon),
-                    label: d.label,
-                  ),
-              ],
+        // Narrow layout: no bottom tab bar — every destination, plus chat
+        // history, lives in the one hamburger-triggered drawer instead.
+        return Provider<HomeShellController>.value(
+          value: controller,
+          child: Scaffold(
+            key: _scaffoldKey,
+            drawer: AppNavDrawer(
+              currentIndex: _index,
+              onSelect: (i) => setState(() => _index = i),
             ),
+            body: body,
           ),
         );
       },
@@ -131,15 +129,12 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-enum _FrostedEdge { right, top }
-
-/// A translucent, blurred backdrop (macOS "sidebar material" / iOS tab-bar
-/// vibrancy) with a hairline edge, used behind the primary navigation chrome
-/// so content is faintly visible through it rather than a flat opaque panel.
+/// A translucent, blurred backdrop (macOS "sidebar material" vibrancy) with
+/// a hairline trailing edge, used behind the NavigationRail so content is
+/// faintly visible through it rather than a flat opaque panel.
 class _FrostedPanel extends StatelessWidget {
   final Widget child;
-  final _FrostedEdge edge;
-  const _FrostedPanel({required this.child, required this.edge});
+  const _FrostedPanel({required this.child});
 
   @override
   Widget build(BuildContext context) {
@@ -150,9 +145,7 @@ class _FrostedPanel extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
-            border: edge == _FrostedEdge.right
-                ? Border(right: side)
-                : Border(top: side),
+            border: Border(right: side),
           ),
           child: child,
         ),

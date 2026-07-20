@@ -8,6 +8,7 @@ import '../../theme/app_spacing.dart';
 import 'api_keys_section.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common/glass_app_bar.dart';
+import '../../widgets/common/home_menu_button.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -18,7 +19,12 @@ class SettingsScreen extends StatelessWidget {
     final colors = Theme.of(context).extension<AppSemanticColors>()!;
 
     return Scaffold(
-      appBar: GlassAppBar(title: const Text('Settings')),
+      appBar: GlassAppBar(
+        title: const Text('Settings'),
+        leading: MediaQuery.sizeOf(context).width < 720
+            ? const HomeMenuButton()
+            : null,
+      ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         children: [

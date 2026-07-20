@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common/glass_app_bar.dart';
+import '../../widgets/common/home_menu_button.dart';
 
 class _CultureEvent {
   final IconData icon;
@@ -50,7 +51,12 @@ class CultureScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).extension<AppSemanticColors>()!;
     return Scaffold(
-      appBar: GlassAppBar(title: const Text('Culture')),
+      appBar: GlassAppBar(
+        title: const Text('Culture'),
+        leading: MediaQuery.sizeOf(context).width < 720
+            ? const HomeMenuButton()
+            : null,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(

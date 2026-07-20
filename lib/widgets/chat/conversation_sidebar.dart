@@ -11,7 +11,11 @@ import '../../theme/app_theme.dart';
 import 'project_detail_sheet.dart';
 
 class ConversationSidebar extends StatefulWidget {
-  const ConversationSidebar({super.key});
+  /// Called after "New chat" is pressed or a conversation is selected —
+  /// lets an embedding drawer close itself and switch to the Chat tab.
+  final VoidCallback? onActivated;
+
+  const ConversationSidebar({super.key, this.onActivated});
 
   @override
   State<ConversationSidebar> createState() => _ConversationSidebarState();
@@ -48,9 +52,12 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
               AppSpacing.xs,
             ),
             child: FilledButton.tonalIcon(
-              onPressed: () => store.startNewConversation(
-                projectId: projectStore.activeProjectId,
-              ),
+              onPressed: () {
+                store.startNewConversation(
+                  projectId: projectStore.activeProjectId,
+                );
+                widget.onActivated?.call();
+              },
               icon: const Icon(Icons.add_rounded),
               label: const Text('New chat'),
             ),
@@ -88,6 +95,7 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
                       project:
                           projectStore.projectById(conversation.projectId),
                       selected: conversation.id == store.current?.id,
+                      onActivated: widget.onActivated,
                     ),
                 ],
                 if (unstarred.isNotEmpty) ...[
@@ -98,6 +106,7 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
                       project:
                           projectStore.projectById(conversation.projectId),
                       selected: conversation.id == store.current?.id,
+                      onActivated: widget.onActivated,
                     ),
                 ],
                 if (results.isEmpty)
@@ -251,11 +260,13 @@ class _ConversationTile extends StatelessWidget {
   final Conversation conversation;
   final Project? project;
   final bool selected;
+  final VoidCallback? onActivated;
 
   const _ConversationTile({
     required this.conversation,
     required this.project,
     required this.selected,
+    this.onActivated,
   });
 
   Future<void> _rename(BuildContext context) async {
@@ -347,7 +358,10 @@ class _ConversationTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: theme.textTheme.bodyMedium,
         ),
-        onTap: () => store.selectConversation(conversation.id),
+        onTap: () {
+          store.selectConversation(conversation.id);
+          onActivated?.call();
+        },
         trailing: PopupMenuButton<String>(
           tooltip: 'Chat options',
           iconSize: 16,

@@ -6,6 +6,7 @@ import '../../state/app_settings_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../widgets/common/disclaimer_banner.dart';
 import '../../widgets/common/glass_app_bar.dart';
+import '../../widgets/common/home_menu_button.dart';
 import '../../widgets/membership/payout_stream_card.dart';
 import '../../widgets/membership/tier_card.dart';
 import 'ecopay_calculator_screen.dart';
@@ -20,6 +21,9 @@ class MembershipScreen extends StatelessWidget {
       child: Scaffold(
         appBar: GlassAppBar(
           title: const Text('Membership & EcoPay'),
+          leading: MediaQuery.sizeOf(context).width < 720
+              ? const HomeMenuButton()
+              : null,
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Plans'),
