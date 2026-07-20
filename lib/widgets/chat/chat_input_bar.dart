@@ -5,9 +5,12 @@ import 'package:uuid/uuid.dart';
 
 import '../../models/attachment.dart';
 import '../../models/studio_type.dart';
+import 'dart:async';
+
 import '../../services/chat_service.dart';
 import '../../services/prompt_assembler.dart';
 import '../../services/providers/anthropic_api_config.dart';
+import '../../services/speech/speech_service.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/conversation_store.dart';
 import '../../state/project_store.dart';
@@ -39,6 +42,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
   bool _webSearchEnabled = false;
   bool _codeExecutionEnabled = false;
   bool _deepResearchEnabled = false;
+
+  bool _listening = false;
+  StreamSubscription<SpeechResult>? _speechSubscription;
+  String _textBeforeDictation = '';
 
   static const _studios = [
     StudioType.imageStudio,
@@ -142,8 +149,41 @@ class _ChatInputBarState extends State<ChatInputBar> {
         .sendMessage('', structuredRequest: request);
   }
 
+  void _toggleDictation() {
+    if (!SpeechService.isSupported) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text(
+            'Voice input isn\'t supported in this browser — try Chrome, '
+            'Edge, or Safari.'),
+      ));
+      return;
+    }
+    if (_listening) {
+      SpeechService.stop();
+      setState(() => _listening = false);
+      return;
+    }
+    _textBeforeDictation =
+        _controller.text.isEmpty ? '' : '${_controller.text.trimRight()} ';
+    setState(() => _listening = true);
+    _speechSubscription = SpeechService.listen().listen(
+      (result) {
+        _controller.text = _textBeforeDictation + result.transcript;
+        _controller.selection = TextSelection.collapsed(
+          offset: _controller.text.length,
+        );
+      },
+      onDone: () {
+        if (mounted) setState(() => _listening = false);
+        _focusNode.requestFocus();
+      },
+    );
+  }
+
   @override
   void dispose() {
+    _speechSubscription?.cancel();
+    SpeechService.stop();
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();
@@ -298,13 +338,19 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     ),
                     const Spacer(),
                     IconButton(
-                      tooltip: 'Voice input — coming soon',
-                      icon: const Icon(Icons.mic_none_rounded, size: 20),
-                      color: colors.textSecondary,
-                      onPressed: null,
-                      disabledColor: colors.textSecondary.withValues(
-                        alpha: 0.5,
+                      tooltip: _listening
+                          ? 'Stop dictation'
+                          : 'Dictate your message',
+                      icon: Icon(
+                        _listening
+                            ? Icons.mic_rounded
+                            : Icons.mic_none_rounded,
+                        size: 20,
                       ),
+                      color: _listening
+                          ? theme.colorScheme.primary
+                          : colors.textSecondary,
+                      onPressed: _toggleDictation,
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     _SendButton(enabled: _hasText, onPressed: _send),

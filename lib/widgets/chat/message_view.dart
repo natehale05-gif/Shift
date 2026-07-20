@@ -9,6 +9,7 @@ import '../../models/citation.dart';
 import '../../models/message_block.dart';
 import '../../models/studio_type.dart';
 import '../../services/download_service.dart';
+import '../../services/speech/speech_service.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
@@ -657,6 +658,12 @@ class _ActionRow extends StatelessWidget {
             onPressed: () =>
                 context.read<ConversationStore>().regenerate(message.id),
           ),
+          if (TtsService.isSupported)
+            _ActionIcon(
+              tooltip: 'Read aloud',
+              icon: Icons.volume_up_outlined,
+              onPressed: () => TtsService.speak(message.text),
+            ),
           const SizedBox(width: AppSpacing.xs),
           Text(
             TimeOfDay.fromDateTime(message.timestamp).format(context),
