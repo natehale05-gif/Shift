@@ -16,6 +16,7 @@ import 'chat_service.dart';
 import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
 import 'procedural_art.dart';
+import 'studio_composition.dart';
 import 'providers/anthropic_api_config.dart';
 import 'providers/anthropic_client.dart';
 import 'providers/anthropic_tools.dart';
@@ -130,12 +131,15 @@ class RealChatService implements ChatService {
       // mock or a live provider (both end their questions with '?').
       final pending = findPendingClarification(conversation);
 
-      // "Build me a dog treat website with several photos": force Code
-      // Studio directly rather than trusting the classifier/keyword
-      // fallback to prefer it over the image keywords in the same prompt —
-      // _runAnthropicChat below embeds the photos once the page exists.
-      final wantsBoth =
-          pending == null && wantsCodeAndImageStudios(conversation, userInput);
+      // One composition decision for the turn (see studio_composition).
+      // pageAssembly ("build a website with photos") forces Code Studio
+      // directly rather than trusting the classifier to prefer it over the
+      // image keywords in the same prompt — _runAnthropicChat below embeds
+      // the photos once the page exists.
+      final plan = pending == null
+          ? planComposition(conversation, userInput)
+          : CompositionPlan.none;
+      final wantsBoth = plan.kind == CompositionKind.pageAssembly;
 
       final route = options.modelPin != null
           ? ChatRoute.chat // an explicit model pin bypasses routing

@@ -14,6 +14,7 @@ import 'artifact_composition.dart';
 import 'chat_service.dart';
 import 'procedural_art.dart';
 import 'studio_clarification.dart';
+import 'studio_composition.dart';
 import 'studio_response_bank.dart';
 
 const _uuid = Uuid();
@@ -56,12 +57,14 @@ class MockChatService implements ChatService {
       final pending = structuredRequest == null
           ? findPendingClarification(conversation)
           : null;
-      // "Build me a dog treat website with several photos": a fresh
-      // request that wants Code Studio and Image Studio working together
-      // in one turn, not one studio now and a follow-up composition later.
-      final wantsBoth = structuredRequest == null &&
-          pending == null &&
-          wantsCodeAndImageStudios(conversation, userInput);
+      // One composition decision for the whole turn (see studio_composition).
+      // pageAssembly = "build a website with photos" (Code + Image together);
+      // editArtifact = "add a hero image to the website" (splice into an
+      // existing artifact). Everything else is a single studio.
+      final plan = (structuredRequest == null && pending == null)
+          ? planComposition(conversation, userInput)
+          : CompositionPlan.none;
+      final wantsBoth = plan.kind == CompositionKind.pageAssembly;
       final studio = wantsBoth
           ? StudioType.codeStudio
           : (structuredRequest?.studioType ??
@@ -102,10 +105,8 @@ class MockChatService implements ChatService {
               StudioResponseBank.wantsWebSearch(userInput))) {
         await _runWebSearch(controller, userInput);
       } else {
-        final composeTarget = structuredRequest == null &&
-                studio == StudioType.imageStudio
-            ? findArtifactCompositionTarget(conversation, effectiveInput)
-            : null;
+        final composeTarget =
+            plan.kind == CompositionKind.editArtifact ? plan.editTarget : null;
         await _runStudioFlow(
           controller,
           conversation,
