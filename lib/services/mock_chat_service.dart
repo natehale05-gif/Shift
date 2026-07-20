@@ -77,7 +77,8 @@ class MockChatService implements ChatService {
       if (wantsResearch) {
         await _runDeepResearch(controller, conversation, userInput);
       } else if (studio == StudioType.middleware &&
-          StudioResponseBank.wantsWebSearch(userInput)) {
+          (options.webSearch ||
+              StudioResponseBank.wantsWebSearch(userInput))) {
         await _runWebSearch(controller, userInput);
       } else {
         await _runStudioFlow(

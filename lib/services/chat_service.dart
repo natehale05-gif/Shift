@@ -119,6 +119,7 @@ class ChatOptions {
   /// Exact model id to use, bypassing the router. Null = auto-route.
   final String? modelPin;
   final bool webSearch;
+  final bool codeExecution;
   final bool deepResearch;
 
   /// Assembled system prompt for this turn (persona + user prefs + project
@@ -128,6 +129,7 @@ class ChatOptions {
   const ChatOptions({
     this.modelPin,
     this.webSearch = false,
+    this.codeExecution = false,
     this.deepResearch = false,
     this.systemPrompt,
   });

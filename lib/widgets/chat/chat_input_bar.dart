@@ -36,6 +36,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   /// Exact model id pinned from the model chip; null = auto-route.
   String? _modelPin;
+  bool _webSearchEnabled = false;
+  bool _codeExecutionEnabled = false;
 
   static const _studios = [
     StudioType.imageStudio,
@@ -67,6 +69,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
             projects.activeProject;
     return ChatOptions(
       modelPin: _modelPin,
+      webSearch: _webSearchEnabled,
+      codeExecution: _codeExecutionEnabled,
       systemPrompt: assembleSystemPrompt(
         nickname: prefs.nickname,
         responseStyle: prefs.responseStyle,
@@ -236,6 +240,40 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       icon: const Icon(Icons.attach_file_rounded, size: 20),
                       color: colors.textSecondary,
                       onPressed: _pickFiles,
+                    ),
+                    PopupMenuButton<String>(
+                      tooltip: 'Tools',
+                      position: PopupMenuPosition.over,
+                      shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppSpacing.radiusMd),
+                      ),
+                      icon: Icon(
+                        Icons.tune_rounded,
+                        size: 20,
+                        color: _webSearchEnabled || _codeExecutionEnabled
+                            ? theme.colorScheme.primary
+                            : colors.textSecondary,
+                      ),
+                      onSelected: (value) => setState(() {
+                        if (value == 'web') {
+                          _webSearchEnabled = !_webSearchEnabled;
+                        } else if (value == 'code') {
+                          _codeExecutionEnabled = !_codeExecutionEnabled;
+                        }
+                      }),
+                      itemBuilder: (context) => [
+                        CheckedPopupMenuItem(
+                          value: 'web',
+                          checked: _webSearchEnabled,
+                          child: const Text('Web search'),
+                        ),
+                        CheckedPopupMenuItem(
+                          value: 'code',
+                          checked: _codeExecutionEnabled,
+                          child: const Text('Run code (server)'),
+                        ),
+                      ],
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     _ModelChip(

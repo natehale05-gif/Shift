@@ -11,6 +11,7 @@ import 'chat_service.dart';
 import 'mock_chat_service.dart';
 import 'providers/anthropic_api_config.dart';
 import 'providers/anthropic_client.dart';
+import 'providers/anthropic_tools.dart';
 import 'router/model_router.dart';
 
 const _uuid = Uuid();
@@ -127,6 +128,14 @@ class RealChatService implements ChatService {
     final buffer = StringBuffer();
     var failed = false;
 
+    // Server tools: explicit composer toggles, plus web search whenever the
+    // router decided the prompt needs fresh information.
+    final tools = <Map<String, dynamic>>[
+      if (options.webSearch || route == ChatRoute.webSearch)
+        AnthropicTools.webSearch,
+      if (options.codeExecution) AnthropicTools.codeExecution,
+    ];
+
     final events = _anthropic.streamChat(
       apiKey: keys.anthropicKey,
       conversation: conversation,
@@ -134,6 +143,7 @@ class RealChatService implements ChatService {
       model: model,
       attachments: attachments,
       systemPrompt: options.systemPrompt,
+      tools: tools,
     );
 
     await for (final event in events) {

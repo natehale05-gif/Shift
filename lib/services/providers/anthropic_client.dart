@@ -2,11 +2,14 @@ import 'dart:convert';
 
 import '../../models/attachment.dart';
 import '../../models/chat_message.dart';
+import '../../models/citation.dart';
 import '../../models/conversation.dart';
 import '../../models/usage_report.dart';
 import '../chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'anthropic_api_config.dart';
+import 'anthropic_stream_accumulator.dart';
+import 'anthropic_tools.dart';
 
 /// Raw-HTTP Anthropic Messages API client (no official Dart SDK exists).
 /// The request builder and SSE→ChatEvent mapper are pure and unit-tested;
@@ -163,7 +166,12 @@ class AnthropicClient {
     yield const MessageComplete();
   }
 
-  /// Streams one chat turn against the live API.
+  /// Streams one chat turn against the live API, with optional server
+  /// tools. Server-side tool loops that hit the API's iteration limit end
+  /// with `stop_reason: "pause_turn"` — the turn is resumed automatically
+  /// (re-sending the accumulated assistant blocks; the server detects the
+  /// trailing tool block and picks up where it left off), capped at
+  /// [maxContinuations] rounds.
   Stream<ChatEvent> streamChat({
     required String apiKey,
     required Conversation conversation,
@@ -171,20 +179,80 @@ class AnthropicClient {
     required String model,
     List<Attachment> attachments = const [],
     String? systemPrompt,
-  }) {
-    final body = buildRequestBody(
+    List<Map<String, dynamic>> tools = const [],
+    int maxContinuations = 5,
+  }) async* {
+    final baseBody = buildRequestBody(
       conversation: conversation,
       userInput: userInput,
       model: model,
       attachments: attachments,
       systemPrompt: systemPrompt,
     );
-    final events = _sse.postJson(
-      uri: AnthropicApiConfig.messagesEndpoint,
-      headers: AnthropicApiConfig.headers(apiKey),
-      body: jsonEncode(body),
-    );
-    return mapSseEvents(events, model: model);
+    if (tools.isNotEmpty) baseBody['tools'] = tools;
+
+    final headers = AnthropicApiConfig.headers(apiKey);
+    if (tools.any((t) => (t['type'] as String? ?? '').startsWith('code_execution'))) {
+      headers['anthropic-beta'] = AnthropicTools.codeExecutionBeta;
+    }
+
+    final messages =
+        List<Map<String, dynamic>>.from(baseBody['messages'] as List);
+    var inputTokens = 0;
+    var outputTokens = 0;
+    final allCitations = <String, Citation>{};
+
+    for (var round = 0; round <= maxContinuations; round++) {
+      final accumulator = AnthropicStreamAccumulator();
+      final body = {...baseBody, 'messages': messages};
+      final sseEvents = _sse.postJson(
+        uri: AnthropicApiConfig.messagesEndpoint,
+        headers: headers,
+        body: jsonEncode(body),
+      );
+
+      await for (final sseEvent in sseEvents) {
+        for (final chatEvent in accumulator.onSseEvent(sseEvent)) {
+          if (chatEvent is MessageError) {
+            yield chatEvent;
+            return;
+          }
+          yield chatEvent;
+        }
+      }
+
+      inputTokens += accumulator.inputTokens;
+      outputTokens += accumulator.outputTokens;
+      for (final citation in accumulator.citations) {
+        allCitations[citation.url] = citation;
+      }
+
+      if (accumulator.stopReason == 'refusal') {
+        yield const MessageError(
+            'The model declined to answer this request.');
+        return;
+      }
+      if (accumulator.stopReason == 'pause_turn' &&
+          round < maxContinuations) {
+        // No extra user message — just the assistant's partial turn.
+        messages.add({
+          'role': 'assistant',
+          'content': accumulator.contentBlocks,
+        });
+        continue;
+      }
+      break;
+    }
+
+    if (allCitations.isNotEmpty) {
+      yield CitationsReady(allCitations.values.toList());
+    }
+    yield UsageReported(UsageReport(
+      inputTokens: inputTokens,
+      outputTokens: outputTokens,
+      model: AnthropicApiConfig.displayName(model),
+    ));
+    yield const MessageComplete();
   }
 
   /// Small non-streaming call to classify a prompt or validate a key.
