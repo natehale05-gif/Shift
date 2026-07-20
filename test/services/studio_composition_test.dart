@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/models/artifact.dart';
 import 'package:shift_ai/models/conversation.dart';
+import 'package:shift_ai/models/studio_result.dart';
 import 'package:shift_ai/models/studio_type.dart';
 import 'package:shift_ai/services/studio_composition.dart';
 
@@ -119,6 +120,68 @@ void main() {
       final plan =
           planComposition(_convo(), 'add a hero image to the website');
       expect(plan.kind, CompositionKind.none);
+    });
+
+    test('"write and narrate…" is Copy -> Voice (narratedScript)', () {
+      final plan =
+          planComposition(_convo(), 'write and narrate a welcome message');
+      expect(plan.kind, CompositionKind.narratedScript);
+      expect(plan.host, StudioType.voiceAvatarStudio);
+      expect(plan.contributors, contains(StudioType.copyScriptsStudio));
+    });
+
+    test('"write a video script and make it" is Copy -> Video', () {
+      final plan = planComposition(
+          _convo(), 'write a video script and make the video');
+      expect(plan.kind, CompositionKind.scriptedVideo);
+      expect(plan.host, StudioType.videoStudio);
+    });
+
+    test('"write a jingle" is Copy -> Music', () {
+      final plan =
+          planComposition(_convo(), 'write a jingle for my bakery');
+      expect(plan.kind, CompositionKind.jingle);
+      expect(plan.host, StudioType.musicStudio);
+    });
+
+    test('narrating user-provided text (no write signal) stays single '
+        'studio', () {
+      final plan =
+          planComposition(_convo(), 'narrate this line for me please');
+      expect(plan.kind, CompositionKind.none);
+    });
+
+    test('a page that also names video prefers page assembly over '
+        'scriptedVideo', () {
+      final plan = planComposition(
+          _convo(), 'write a website with a video clip');
+      expect(plan.kind, CompositionKind.pageAssembly);
+    });
+  });
+
+  group('copyFedResult', () {
+    test('narratedScript carries the script as a voice transcript', () {
+      final result =
+          copyFedResult(CompositionKind.narratedScript, 'welcome', 'Hello!');
+      expect(result, isA<AudioResult>());
+      final audio = result as AudioResult;
+      expect(audio.kind, AudioKind.voice);
+      expect(audio.transcript, 'Hello!');
+    });
+
+    test('scriptedVideo carries the script as the video prompt', () {
+      final result =
+          copyFedResult(CompositionKind.scriptedVideo, 'promo', 'Shot 1...');
+      expect(result, isA<VideoResult>());
+      expect((result as VideoResult).prompt, 'Shot 1...');
+    });
+
+    test('jingle is a music result with a title', () {
+      final result =
+          copyFedResult(CompositionKind.jingle, 'bakery', 'la la la');
+      expect(result, isA<AudioResult>());
+      expect((result as AudioResult).kind, AudioKind.music);
+      expect(result.title, isNotEmpty);
     });
   });
 

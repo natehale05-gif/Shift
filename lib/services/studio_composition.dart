@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import '../models/artifact.dart';
 import '../models/conversation.dart';
+import '../models/studio_result.dart';
 import '../models/studio_type.dart';
 import 'artifact_composition.dart';
 import 'studio_response_bank.dart';
@@ -162,7 +164,130 @@ CompositionPlan planComposition(Conversation conversation, String input) {
     }
   }
 
+  // 3. Copy & Scripts writes something, then another studio produces from
+  //    it — "write and narrate…", "write a video script and make it",
+  //    "write a jingle". Requires an explicit write/script signal plus the
+  //    downstream media studio (and not a page request, handled above).
+  if (_wantsWritten(input)) {
+    if (studios.contains(StudioType.voiceAvatarStudio)) {
+      return _copyFedPlan(CompositionKind.narratedScript);
+    }
+    if (studios.contains(StudioType.videoStudio)) {
+      return _copyFedPlan(CompositionKind.scriptedVideo);
+    }
+    if (studios.contains(StudioType.musicStudio)) {
+      return _copyFedPlan(CompositionKind.jingle);
+    }
+  }
+
   return CompositionPlan.none;
+}
+
+final _writtenSignal = RegExp(
+    r'\b(write|writes|writing|written|draft|drafts|script|scripts|scripted|'
+    r'compose|lyrics?)\b');
+
+bool _wantsWritten(String input) => _writtenSignal.hasMatch(input.toLowerCase());
+
+CompositionPlan _copyFedPlan(CompositionKind kind) => CompositionPlan(
+      kind: kind,
+      host: copyFedHost(kind),
+      contributors: {StudioType.copyScriptsStudio, copyFedHost(kind)},
+    );
+
+/// True for the three Copy-feeds-media kinds.
+bool isCopyFed(CompositionKind kind) =>
+    kind == CompositionKind.narratedScript ||
+    kind == CompositionKind.scriptedVideo ||
+    kind == CompositionKind.jingle;
+
+/// The studio whose result card carries a copy-fed turn's output.
+StudioType copyFedHost(CompositionKind kind) => switch (kind) {
+      CompositionKind.narratedScript => StudioType.voiceAvatarStudio,
+      CompositionKind.scriptedVideo => StudioType.videoStudio,
+      CompositionKind.jingle => StudioType.musicStudio,
+      _ => StudioType.middleware,
+    };
+
+String copyFedIntro(CompositionKind kind) => switch (kind) {
+      CompositionKind.narratedScript =>
+        'Routing this to Copy & Scripts to write the script, then Voice & '
+            'Avatar Studio to narrate it.',
+      CompositionKind.scriptedVideo =>
+        'Routing this to Copy & Scripts to write the script, then Video '
+            'Studio to shoot it.',
+      CompositionKind.jingle =>
+        'Routing this to Copy & Scripts to write the hook, then Music Studio '
+            'to score it.',
+      _ => '',
+    };
+
+String copyFedFollowUp(CompositionKind kind) => switch (kind) {
+      CompositionKind.narratedScript =>
+        'Script written and voiced above. Want a different tone or voice?',
+      CompositionKind.scriptedVideo =>
+        'Script written and the clip is drafted above. I can adjust the '
+            'scenes or length.',
+      CompositionKind.jingle =>
+        'Hook written and scored above. Want a different mood or tempo?',
+      _ => '',
+    };
+
+/// The instruction handed to a live text model (Claude/Gemini) to write the
+/// script for a copy-fed turn.
+String scriptLlmPrompt(CompositionKind kind, String userInput) => switch (kind) {
+      CompositionKind.narratedScript =>
+        'Write a short, warm spoken voiceover script (3-4 sentences) for: '
+            '"$userInput". Output only the words to be spoken — no stage '
+            'directions, no quotes.',
+      CompositionKind.scriptedVideo =>
+        'Write a short video script with 3-4 shots (each a brief on-screen '
+            'note plus a VO line) for: "$userInput". Keep it under 120 words.',
+      CompositionKind.jingle =>
+        'Write a catchy two-line jingle hook (lyrics only) for: "$userInput".',
+      _ => userInput,
+    };
+
+/// The mock's template script when no live text model wrote one.
+String mockScript(CompositionKind kind, String userInput) => switch (kind) {
+      CompositionKind.narratedScript =>
+        StudioResponseBank.narrationScript(userInput),
+      CompositionKind.scriptedVideo =>
+        StudioResponseBank.videoScriptText(userInput),
+      CompositionKind.jingle => StudioResponseBank.jingleHook(userInput).lyric,
+      _ => '',
+    };
+
+/// The media result a copy-fed turn attaches, carrying the written [script].
+StudioResult copyFedResult(
+    CompositionKind kind, String userInput, String script) {
+  final seed = StudioResponseBank.seedFromString(userInput);
+  return switch (kind) {
+    CompositionKind.narratedScript => AudioResult(
+        kind: AudioKind.voice,
+        title: 'Narration',
+        subtitle: 'Voiceover',
+        durationSec: max(4, (script.split(' ').length / 2.5).round()),
+        seed: seed,
+        transcript: script,
+      ),
+    CompositionKind.scriptedVideo => VideoResult(
+        prompt: script,
+        durationSec: 15,
+        aspectRatio: '16:9',
+        identityLock: false,
+        seed: seed,
+      ),
+    CompositionKind.jingle => AudioResult(
+        kind: AudioKind.music,
+        title: StudioResponseBank.jingleHook(userInput).title,
+        subtitle: 'Uplifting · 100 BPM',
+        durationSec: 20,
+        seed: seed,
+        transcript: script,
+      ),
+    _ => throw ArgumentError('not a copy-fed kind: $kind'),
+  };
 }
 
 // ---------------------------------------------------------------------------

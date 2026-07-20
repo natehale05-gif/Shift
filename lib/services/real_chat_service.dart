@@ -142,6 +142,15 @@ class RealChatService implements ChatService {
           : CompositionPlan.none;
       final wantsBoth = plan.kind == CompositionKind.pageAssembly;
 
+      // Copy & Scripts writes a script, then a media studio produces from it.
+      // The write step is real (Claude/Gemini); the voice/video/music is
+      // synthesized, since no live provider generates those.
+      if (isCopyFed(plan.kind)) {
+        await _runCopyFedMedia(controller, plan.kind, userInput);
+        await controller.close();
+        return;
+      }
+
       final route = options.modelPin != null
           ? ChatRoute.chat // an explicit model pin bypasses routing
           : pending != null
@@ -288,6 +297,50 @@ class RealChatService implements ChatService {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
+
+  /// Copy & Scripts writes the script with a live text model (Claude/Gemini);
+  /// the downstream voice/video/music is synthesized locally. The written
+  /// script is streamed and also carried on the media result.
+  Future<void> _runCopyFedMedia(
+    StreamController<ChatEvent> controller,
+    CompositionKind kind,
+    String userInput,
+  ) async {
+    controller.add(RoutingDetected(copyFedHost(kind)));
+    controller.add(MessageDelta('${copyFedIntro(kind)}\n\n'));
+
+    var script = '';
+    try {
+      script = (await _writeText(scriptLlmPrompt(kind, userInput))).trim();
+    } catch (_) {
+      // Fall through to the template below.
+    }
+    if (script.isEmpty) script = mockScript(kind, userInput);
+
+    controller.add(MessageDelta('$script\n\n'));
+    controller.add(StudioResultReady(copyFedResult(kind, userInput, script)));
+    final followUp = copyFedFollowUp(kind);
+    if (followUp.isNotEmpty) controller.add(MessageDelta(followUp));
+    controller.add(const MessageComplete());
+  }
+
+  /// Small non-streaming completion on whichever text model the user has a
+  /// key for (Claude preferred).
+  Future<String> _writeText(String prompt) {
+    if (keys.hasAnthropicKey) {
+      return _anthropic.complete(
+        apiKey: keys.anthropicKey,
+        model: AnthropicApiConfig.haikuModel,
+        prompt: prompt,
+        maxTokens: 400,
+      );
+    }
+    return _gemini.complete(
+      apiKey: keys.geminiKey,
+      prompt: prompt,
+      model: GeminiApiConfig.flashModel,
+    );
+  }
 
   Future<void> _runGeminiChat(
     StreamController<ChatEvent> controller,

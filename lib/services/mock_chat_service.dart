@@ -69,9 +69,11 @@ class MockChatService implements ChatService {
       final wantsBoth = plan.kind == CompositionKind.pageAssembly;
       final studio = wantsBoth
           ? StudioType.codeStudio
-          : (structuredRequest?.studioType ??
-              pending?.$1 ??
-              StudioResponseBank.detectStudio(userInput));
+          : isCopyFed(plan.kind)
+              ? copyFedHost(plan.kind)
+              : (structuredRequest?.studioType ??
+                  pending?.$1 ??
+                  StudioResponseBank.detectStudio(userInput));
       final effectiveInput =
           pending != null ? '${pending.$2} $userInput'.trim() : userInput;
 
@@ -106,6 +108,8 @@ class MockChatService implements ChatService {
           (options.webSearch ||
               StudioResponseBank.wantsWebSearch(userInput))) {
         await _runWebSearch(controller, userInput);
+      } else if (isCopyFed(plan.kind)) {
+        await _runCopyFedMedia(controller, plan.kind, effectiveInput);
       } else {
         final composeTarget =
             plan.kind == CompositionKind.editArtifact ? plan.editTarget : null;
@@ -196,6 +200,26 @@ class MockChatService implements ChatService {
         : composeTarget != null
             ? StudioResponseBank.compositionFollowUp(composeTarget.title)
             : StudioResponseBank.studioFollowUp(studio);
+    if (followUp.isNotEmpty) {
+      await _streamText(controller, '\n\n$followUp');
+    }
+  }
+
+  /// Copy & Scripts writes something, then a downstream studio produces from
+  /// it in the same turn: a narrated voiceover, a scripted video, or a scored
+  /// jingle. The written script is streamed as text and also carried on the
+  /// media result (its transcript/prompt), so the handoff is visible.
+  Future<void> _runCopyFedMedia(
+    StreamController<ChatEvent> controller,
+    CompositionKind kind,
+    String userInput,
+  ) async {
+    await _streamText(controller, copyFedIntro(kind));
+    await _delay(500, 1000);
+    final script = mockScript(kind, userInput);
+    await _streamText(controller, '\n\n$script');
+    controller.add(StudioResultReady(copyFedResult(kind, userInput, script)));
+    final followUp = copyFedFollowUp(kind);
     if (followUp.isNotEmpty) {
       await _streamText(controller, '\n\n$followUp');
     }

@@ -214,6 +214,39 @@ class StudioResponseBank {
     );
   }
 
+  // --- Copy & Scripts feeding another studio (mock script text) ----------
+
+  /// A short spoken voiceover script the mock's Copy & Scripts contributor
+  /// hands to Voice for narration.
+  static String narrationScript(String prompt) {
+    final subject = prompt.trim().isEmpty ? 'this' : prompt.trim();
+    return 'Hi there, and welcome. We\'re so glad you\'re here. '
+        'Everything you need for $subject is just a tap away — no fuss, no '
+        'friction. This is SHIFT AI, and this is only the beginning.';
+  }
+
+  /// A short shot-by-shot video script (VO + on-screen) for the mock's
+  /// Copy -> Video flow. Reuses the existing "Script" copy template.
+  static String videoScriptText(String prompt) => _copyText(
+        CopyScriptsRequest(
+          contentType: 'Script',
+          tone: 'Bold',
+          platform: 'Web',
+          brandNotes: prompt,
+        ),
+        seedFromString(prompt),
+      );
+
+  /// A jingle hook (title + two-line lyric) for the mock's Copy -> Music flow.
+  static ({String title, String lyric}) jingleHook(String prompt) {
+    final subject = prompt.trim().isEmpty ? 'your brand' : prompt.trim();
+    return (
+      title: _trackTitle('Uplifting', seedFromString(subject)),
+      lyric: 'Feel the shift, hear it in the sound —\n'
+          '$subject is turning it all around.',
+    );
+  }
+
   static int seedFromString(String input) => input.codeUnits.fold<int>(
         7,
         (acc, c) => (acc * 31 + c) & 0x7fffffff,
