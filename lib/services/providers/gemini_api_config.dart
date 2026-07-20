@@ -11,6 +11,17 @@ class GeminiApiConfig {
   static const proModel = 'gemini-2.5-pro';
   static const imageModel = 'gemini-2.5-flash-image';
 
+  /// Live (realtime voice) model id — the Live API is the fastest-moving
+  /// part of Gemini, so expect this to need updating; the Live overlay
+  /// surfaces raw connection errors for exactly that reason.
+  static const liveModel = 'gemini-live-2.5-flash-preview';
+
+  /// BidiGenerateContent WebSocket endpoint for the Live API.
+  static Uri liveEndpoint(String apiKey) => Uri.parse(
+      'wss://generativelanguage.googleapis.com/ws/google.ai.'
+      'generativelanguage.v1beta.GenerativeService.BidiGenerateContent'
+      '?key=$apiKey');
+
   /// SSE streaming chat endpoint.
   static Uri streamEndpoint(String model, String apiKey) =>
       Uri.parse('$_base/models/$model:streamGenerateContent?alt=sse&key=$apiKey');

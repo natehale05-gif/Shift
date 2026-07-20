@@ -7,7 +7,9 @@ import '../../models/attachment.dart';
 import '../../models/studio_type.dart';
 import 'dart:async';
 
+import '../../screens/chat/live_voice_overlay.dart';
 import '../../services/chat_service.dart';
+import '../../services/live/live_voice_controller.dart';
 import '../../services/prompt_assembler.dart';
 import '../../services/providers/anthropic_api_config.dart';
 import '../../services/speech/speech_service.dart';
@@ -352,6 +354,27 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           : colors.textSecondary,
                       onPressed: _toggleDictation,
                     ),
+                    Builder(builder: (context) {
+                      final keys = context.watch<ApiKeysStore>();
+                      final enabled = keys.hasGeminiKey &&
+                          LiveVoiceController.isSupported;
+                      return IconButton(
+                        tooltip: enabled
+                            ? 'Live voice conversation (experimental)'
+                            : 'Live voice (experimental) — needs a Google '
+                                'key in Settings',
+                        icon:
+                            const Icon(Icons.graphic_eq_rounded, size: 20),
+                        color: enabled
+                            ? theme.colorScheme.primary
+                            : colors.textSecondary
+                                .withValues(alpha: 0.5),
+                        onPressed: enabled
+                            ? () => showLiveVoiceOverlay(
+                                context, keys.geminiKey)
+                            : null,
+                      );
+                    }),
                     const SizedBox(width: AppSpacing.xs),
                     _SendButton(enabled: _hasText, onPressed: _send),
                   ],
