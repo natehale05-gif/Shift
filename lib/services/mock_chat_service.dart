@@ -228,21 +228,37 @@ class MockChatService implements ChatService {
     controller.add(const DeepResearchProgress(stage: 'synthesizing'));
     await _delay(700, 1200);
 
+    final citations = StudioResponseBank.cannedCitations(userInput);
+    final topic = userInput.trim();
+    final report = StringBuffer('# Research: $topic\n\n')
+      ..writeln('_Simulated report — add an API key for live research._\n')
+      ..writeln('## Findings\n')
+      ..writeln('1. The topic splits into sub-questions, each searched in '
+          'its own round [1].')
+      ..writeln('2. Sources are collected per round and deduplicated [2].')
+      ..writeln('3. The final report ships as this markdown artifact with '
+          'numbered citations [3].\n')
+      ..writeln('## Sources\n');
+    for (var i = 0; i < citations.length; i++) {
+      report.writeln('${i + 1}. [${citations[i].title}](${citations[i].url})');
+    }
+    controller.add(ArtifactCreated(Artifact(
+      id: _uuid.v4(),
+      conversationId: conversation.id,
+      title: 'Research: $topic',
+      kind: ArtifactKind.markdown,
+      versions: [
+        ArtifactVersion(content: report.toString(), createdAt: DateTime.now()),
+      ],
+    )));
+
     await _streamText(
       controller,
-      'Here\'s a simulated deep-research summary of "${userInput.trim()}". '
-      'In live mode this runs multiple real search rounds and synthesizes a '
-      'cited report; the flow below is the exact shape that will take.\n\n'
-      '**Key findings (simulated)**\n\n'
-      '1. The topic breaks into a few clear sub-questions, each researched '
-      'in its own round.\n'
-      '2. Sources are collected per round and deduplicated.\n'
-      '3. The final report arrives as a versioned artifact with numbered '
-      'citations.',
+      'Simulated research complete — 2 rounds, ${citations.length} '
+      'sources. The report artifact above shows exactly how a live run '
+      'will read.',
     );
-    controller.add(CitationsReady(
-      StudioResponseBank.cannedCitations(userInput),
-    ));
+    controller.add(CitationsReady(citations));
   }
 
   Future<void> _streamThinking(

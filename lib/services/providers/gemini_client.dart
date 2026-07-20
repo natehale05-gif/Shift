@@ -257,14 +257,15 @@ class GeminiClient {
     }
   }
 
-  /// Small completion used for routing classification.
+  /// Small completion used for routing classification and synthesis.
   Future<String> complete({
     required String apiKey,
     required String prompt,
     String? systemPrompt,
+    String model = GeminiApiConfig.flashModel,
   }) async {
     final response = await _postJson(
-      GeminiApiConfig.generateEndpoint(GeminiApiConfig.flashModel, apiKey),
+      GeminiApiConfig.generateEndpoint(model, apiKey),
       buildRequestBody(
         conversation: Conversation(
           id: '_',
@@ -276,8 +277,7 @@ class GeminiClient {
         systemPrompt: systemPrompt,
       ),
     );
-    final (events, _, _) =
-        mapChunk(response, model: GeminiApiConfig.flashModel);
+    final (events, _, _) = mapChunk(response, model: model);
     return events.whereType<MessageDelta>().map((e) => e.chunk).join();
   }
 

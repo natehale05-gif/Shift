@@ -38,6 +38,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
   String? _modelPin;
   bool _webSearchEnabled = false;
   bool _codeExecutionEnabled = false;
+  bool _deepResearchEnabled = false;
 
   static const _studios = [
     StudioType.imageStudio,
@@ -71,6 +72,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
       modelPin: _modelPin,
       webSearch: _webSearchEnabled,
       codeExecution: _codeExecutionEnabled,
+      deepResearch: _deepResearchEnabled,
       systemPrompt: assembleSystemPrompt(
         nickname: prefs.nickname,
         responseStyle: prefs.responseStyle,
@@ -274,6 +276,20 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           child: const Text('Run code (server)'),
                         ),
                       ],
+                    ),
+                    IconButton(
+                      tooltip: _deepResearchEnabled
+                          ? 'Deep Research is on for the next message'
+                          : 'Deep Research: multi-round searched, cited '
+                              'report (simulated until a key is added)',
+                      icon: const Icon(Icons.travel_explore_rounded,
+                          size: 20),
+                      color: _deepResearchEnabled
+                          ? theme.colorScheme.primary
+                          : colors.textSecondary,
+                      onPressed: () => setState(
+                        () => _deepResearchEnabled = !_deepResearchEnabled,
+                      ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     _ModelChip(

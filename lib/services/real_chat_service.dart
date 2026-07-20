@@ -1,17 +1,22 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
 
 import '../models/artifact.dart';
 import '../models/attachment.dart';
+import '../models/citation.dart';
 import '../models/conversation.dart';
 import '../models/studio_request.dart';
+import '../models/studio_type.dart';
 import '../state/api_keys_store.dart';
 import 'chat_service.dart';
+import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
 import 'providers/anthropic_api_config.dart';
 import 'providers/anthropic_client.dart';
 import 'providers/anthropic_tools.dart';
+import 'providers/gemini_api_config.dart';
 import 'providers/gemini_client.dart';
 import 'router/model_router.dart';
 
@@ -105,8 +110,12 @@ class RealChatService implements ChatService {
         return;
       }
       if (options.deepResearch) {
-        await _delegateToMock(
-            controller, conversation, userInput, null, attachments, options);
+        if (keys.isLive) {
+          await _runDeepResearch(controller, conversation, userInput);
+        } else {
+          await _delegateToMock(controller, conversation, userInput, null,
+              attachments, options);
+        }
         return;
       }
 
@@ -147,6 +156,107 @@ class RealChatService implements ChatService {
       await controller.close();
     }
   }
+
+  /// Live deep research: the engine's plan/search/synthesize steps run on
+  /// whichever provider the user has a key for (Claude preferred).
+  Future<void> _runDeepResearch(
+    StreamController<ChatEvent> controller,
+    Conversation conversation,
+    String topic,
+  ) async {
+    controller.add(const RoutingDetected(StudioType.middleware));
+    final useAnthropic = keys.hasAnthropicKey;
+
+    Future<String> completeText(String prompt,
+        {bool strongModel = false}) async {
+      if (useAnthropic) {
+        return _anthropic.complete(
+          apiKey: keys.anthropicKey,
+          model: strongModel
+              ? AnthropicApiConfig.defaultModel
+              : AnthropicApiConfig.haikuModel,
+          prompt: prompt,
+          maxTokens: strongModel ? 8000 : 300,
+        );
+      }
+      return _gemini.complete(
+        apiKey: keys.geminiKey,
+        prompt: prompt,
+        model: strongModel
+            ? GeminiApiConfig.proModel
+            : GeminiApiConfig.flashModel,
+      );
+    }
+
+    final engine = DeepResearchEngine(
+      planQueries: (topic) async {
+        final reply = await completeText(
+          'Propose up to 3 focused web-search queries to research this '
+          'topic: "$topic". Respond with ONLY a minified JSON array of '
+          'strings — no prose, no code fences.',
+        );
+        try {
+          final cleaned =
+              reply.replaceAll(RegExp(r'```(json)?'), '').trim();
+          return (jsonDecode(cleaned) as List).cast<String>();
+        } catch (_) {
+          return [topic];
+        }
+      },
+      search: (query) async {
+        final buffer = StringBuffer();
+        final citations = <Citation>[];
+        final events = useAnthropic
+            ? _anthropic.streamChat(
+                apiKey: keys.anthropicKey,
+                conversation: _emptyConversation(),
+                userInput: 'Search the web and concisely summarize the '
+                    'key findings for: $query',
+                model: AnthropicApiConfig.sonnetModel,
+                tools: const [AnthropicTools.webSearch],
+                maxContinuations: 3,
+              )
+            : _gemini.streamChat(
+                apiKey: keys.geminiKey,
+                conversation: _emptyConversation(),
+                userInput: 'Search the web and concisely summarize the '
+                    'key findings for: $query',
+                grounding: true,
+              );
+        await for (final event in events) {
+          if (event is MessageDelta) buffer.write(event.chunk);
+          if (event is CitationsReady) citations.addAll(event.citations);
+          if (event is MessageError) throw Exception(event.message);
+        }
+        return ResearchRoundResult(
+          notes: buffer.toString(),
+          citations: citations,
+        );
+      },
+      synthesize: (topic, notes) => completeText(
+        'Write a well-structured markdown research report on "$topic" '
+        'from these research notes. Use numbered citation markers like '
+        '[1] that correspond to the order sources first appear. Notes:\n\n'
+        '$notes',
+        strongModel: true,
+      ),
+    );
+
+    var sawError = false;
+    await for (final event
+        in engine.run(topic: topic, conversationId: conversation.id)) {
+      if (event is MessageError) sawError = true;
+      controller.add(event);
+    }
+    if (!sawError) controller.add(const MessageComplete());
+  }
+
+  static Conversation _emptyConversation() => Conversation(
+        id: '_research',
+        title: '_',
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      );
 
   Future<void> _runGeminiChat(
     StreamController<ChatEvent> controller,
