@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'screens/home_shell.dart';
 import 'services/mock_chat_service.dart';
 import 'services/persistence_service.dart';
+import 'services/real_chat_service.dart';
+import 'state/api_keys_store.dart';
 import 'state/app_settings_store.dart';
 import 'state/artifact_panel_store.dart';
 import 'state/conversation_store.dart';
@@ -21,6 +23,7 @@ class ShiftAiApp extends StatefulWidget {
 
 class _ShiftAiAppState extends State<ShiftAiApp> {
   late final PersistenceService _persistence;
+  late final ApiKeysStore _apiKeysStore;
   late final ConversationStore _conversationStore;
   late final AppSettingsStore _appSettingsStore;
   late final ProjectStore _projectStore;
@@ -30,11 +33,17 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
   void initState() {
     super.initState();
     _persistence = PersistenceService();
-    // MockChatService is the only ChatService implementation today. Swap it
-    // for a real backend by implementing ChatService and changing this one
-    // line — nothing else in the app depends on it being mocked.
+    _apiKeysStore = ApiKeysStore(persistence: _persistence)..load();
+    // The selector decides per message: live provider calls when the user
+    // has added an API key, the fully-functional mock otherwise. Nothing
+    // else in the app branches on which one is active.
+    final chatService = ChatServiceSelector(
+      keys: _apiKeysStore,
+      real: RealChatService(keys: _apiKeysStore),
+      mock: MockChatService(),
+    );
     _conversationStore = ConversationStore(
-      chatService: MockChatService(),
+      chatService: chatService,
       persistence: _persistence,
     )..load();
     _appSettingsStore = AppSettingsStore(persistence: _persistence)..load();
@@ -52,6 +61,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
         ChangeNotifierProvider(create: (_) => ArtifactPanelStore()),
         ChangeNotifierProvider.value(value: _projectStore),
         ChangeNotifierProvider.value(value: _userPrefsStore),
+        ChangeNotifierProvider.value(value: _apiKeysStore),
       ],
       child: Consumer<AppSettingsStore>(
         builder: (context, settings, _) {

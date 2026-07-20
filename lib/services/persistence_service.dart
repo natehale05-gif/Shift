@@ -183,6 +183,19 @@ class PersistenceService {
         jsonEncode(projects.map((p) => p.toJson()).toList()),
       );
 
+  /// Provider API keys (BYOK). Stored in this browser's IndexedDB only —
+  /// there is no backend to send them to.
+  Future<String?> loadApiKey(String keyName) => _getKv(keyName);
+
+  Future<void> saveApiKey(String keyName, String? value) async {
+    await _ensureMigrated();
+    if (value == null || value.isEmpty) {
+      await _backend.deleteKv(keyName);
+    } else {
+      await _backend.putKv(keyName, value);
+    }
+  }
+
   Future<Map<String, dynamic>> loadUserPrefs() async {
     final raw = await _getKv(_userPrefsKey);
     if (raw == null || raw.isEmpty) return {};

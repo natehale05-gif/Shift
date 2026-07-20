@@ -5,6 +5,7 @@ import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
 import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
+import 'api_keys_section.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/common/glass_app_bar.dart';
 
@@ -32,6 +33,11 @@ class SettingsScreen extends StatelessWidget {
               selected: {settings.themeMode},
               onSelectionChanged: (selection) => settings.setThemeMode(selection.first),
             ),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          const _SectionCard(
+            title: 'API keys (live AI)',
+            child: ApiKeysSection(),
           ),
           const SizedBox(height: AppSpacing.lg),
           const _PersonalizationCard(),

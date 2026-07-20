@@ -7,6 +7,8 @@ import '../../models/attachment.dart';
 import '../../models/studio_type.dart';
 import '../../services/chat_service.dart';
 import '../../services/prompt_assembler.dart';
+import '../../services/providers/anthropic_api_config.dart';
+import '../../state/api_keys_store.dart';
 import '../../state/conversation_store.dart';
 import '../../state/project_store.dart';
 import '../../state/user_prefs_store.dart';
@@ -31,6 +33,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
   final _focusNode = FocusNode();
   bool _hasText = false;
   final List<Attachment> _attachments = [];
+
+  /// Exact model id pinned from the model chip; null = auto-route.
+  String? _modelPin;
 
   static const _studios = [
     StudioType.imageStudio,
@@ -61,6 +66,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
         projects.projectById(store.current?.projectId) ??
             projects.activeProject;
     return ChatOptions(
+      modelPin: _modelPin,
       systemPrompt: assembleSystemPrompt(
         nickname: prefs.nickname,
         responseStyle: prefs.responseStyle,
@@ -232,7 +238,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       onPressed: _pickFiles,
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    const _ModelChip(),
+                    _ModelChip(
+                      modelPin: _modelPin,
+                      onSelected: (pin) => setState(() => _modelPin = pin),
+                    ),
                     const Spacer(),
                     IconButton(
                       tooltip: 'Voice input — coming soon',
@@ -252,7 +261,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'SHIFT AI is in demo mode — responses are simulated.',
+            context.watch<ApiKeysStore>().hasAnthropicKey
+                ? 'Live mode — SHIFT AI can make mistakes. Usage bills to '
+                    'your API key.'
+                : 'SHIFT AI is in demo mode — responses are simulated.',
             style: theme.textTheme.labelSmall
                 ?.copyWith(color: colors.textSecondary),
           ),
@@ -297,16 +309,44 @@ class _StudioMenuButton extends StatelessWidget {
   }
 }
 
+/// Model picker: Auto (the middleware routes each request) or a pinned
+/// model that bypasses routing. Pins only matter in live mode; the mock
+/// ignores them.
 class _ModelChip extends StatelessWidget {
-  const _ModelChip();
+  final String? modelPin;
+  final ValueChanged<String?> onSelected;
+
+  const _ModelChip({required this.modelPin, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
-    return Tooltip(
-      message: 'Model routing is automatic — the middleware AI picks the '
-          'right studio for each request.',
+    final label = modelPin == null
+        ? 'Auto'
+        : AnthropicApiConfig.displayName(modelPin!);
+
+    return PopupMenuButton<String>(
+      tooltip: 'Choose a model — Auto lets the middleware AI route each '
+          'request.',
+      position: PopupMenuPosition.over,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      ),
+      onSelected: (value) => onSelected(value == 'auto' ? null : value),
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem(
+          value: 'auto',
+          checked: modelPin == null,
+          child: const Text('Auto (recommended)'),
+        ),
+        for (final model in AnthropicApiConfig.availableModels)
+          CheckedPopupMenuItem(
+            value: model,
+            checked: modelPin == model,
+            child: Text(AnthropicApiConfig.displayName(model)),
+          ),
+      ],
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
@@ -320,7 +360,7 @@ class _ModelChip extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              'Auto',
+              label,
               style: theme.textTheme.labelMedium
                   ?.copyWith(color: colors.textSecondary),
             ),

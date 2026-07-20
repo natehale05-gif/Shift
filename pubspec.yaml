@@ -45,6 +45,10 @@ dependencies:
   file_selector: ^1.0.3
   # 2.7+ needs a newer Dart SDK than this project's pinned Flutter ships.
   idb_shim: ^2.6.7
+  http: ^1.2.2
+  # Streaming fetch on web — package:http's XHR-based BrowserClient buffers
+  # whole responses, which breaks incremental SSE.
+  fetch_client: ^1.2.1
 
 dev_dependencies:
   flutter_test:

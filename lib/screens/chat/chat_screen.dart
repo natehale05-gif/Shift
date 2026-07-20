@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/studio_type.dart';
+import '../../state/api_keys_store.dart';
 import '../../state/artifact_panel_store.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
@@ -116,22 +117,35 @@ class _ChatTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
+    final live = context.watch<ApiKeysStore>().hasAnthropicKey;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text('SHIFT AI'),
         const SizedBox(width: AppSpacing.sm),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-          decoration: BoxDecoration(
-            color: colors.surfaceAlt,
-            borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
-            border: Border.all(color: colors.border),
-          ),
-          child: Text(
-            'Simulated',
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: colors.textSecondary),
+        Tooltip(
+          message: live
+              ? 'Live — chat calls the real API with your key.'
+              : 'Simulated — add an API key in Settings for live AI.',
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: live
+                  ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                  : colors.surfaceAlt,
+              borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+              border: Border.all(
+                color: live ? theme.colorScheme.primary : colors.border,
+              ),
+            ),
+            child: Text(
+              live ? 'Live' : 'Simulated',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: live
+                    ? theme.colorScheme.primary
+                    : colors.textSecondary,
+              ),
+            ),
           ),
         ),
       ],
