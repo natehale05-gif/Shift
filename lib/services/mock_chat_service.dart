@@ -10,7 +10,9 @@ import '../models/studio_request.dart';
 import '../models/studio_result.dart';
 import '../models/studio_type.dart';
 import '../models/usage_report.dart';
+import 'artifact_composition.dart';
 import 'chat_service.dart';
+import 'procedural_art.dart';
 import 'studio_clarification.dart';
 import 'studio_response_bank.dart';
 
@@ -92,8 +94,12 @@ class MockChatService implements ChatService {
               StudioResponseBank.wantsWebSearch(userInput))) {
         await _runWebSearch(controller, userInput);
       } else {
+        final composeTarget = structuredRequest == null &&
+                studio == StudioType.imageStudio
+            ? findArtifactCompositionTarget(conversation, effectiveInput)
+            : null;
         await _runStudioFlow(controller, conversation, studio, effectiveInput,
-            structuredRequest, pending != null);
+            structuredRequest, pending != null, composeTarget);
       }
 
       controller.add(UsageReported(UsageReport(
@@ -116,8 +122,12 @@ class MockChatService implements ChatService {
     String userInput,
     StudioRequest? structuredRequest,
     bool isAnsweringClarification,
+    Artifact? composeTarget,
   ) async {
-    if (studio != StudioType.middleware && isAnsweringClarification) {
+    if (composeTarget != null) {
+      await _streamText(
+          controller, StudioResponseBank.compositionIntro(composeTarget.title));
+    } else if (studio != StudioType.middleware && isAnsweringClarification) {
       await _streamText(controller, StudioResponseBank.clarificationAck(studio));
     } else {
       final introText = structuredRequest != null
@@ -143,18 +153,38 @@ class MockChatService implements ChatService {
         ? StudioResponseBank.buildResult(structuredRequest)
         : StudioResponseBank.buildResultFromFreeform(studio, userInput);
 
-    // Code output ships as an artifact (side panel), not an inline card —
-    // the artifact IS the deliverable, with copy/download/versions there.
-    if (studio == StudioType.codeStudio) {
+    if (composeTarget != null) {
+      // Two studios in one turn: Image Studio's output gets woven into the
+      // artifact another studio already built, instead of standing alone.
+      await _composeImageIntoArtifact(controller, composeTarget, result as ImageResult);
+    } else if (studio == StudioType.codeStudio) {
+      // Code output ships as an artifact (side panel), not an inline card —
+      // the artifact IS the deliverable, with copy/download/versions there.
       _emitCodeArtifact(controller, conversation, userInput, result);
     } else {
       controller.add(StudioResultReady(result));
     }
 
-    final followUp = StudioResponseBank.studioFollowUp(studio);
+    final followUp = composeTarget != null
+        ? StudioResponseBank.compositionFollowUp(composeTarget.title)
+        : StudioResponseBank.studioFollowUp(studio);
     if (followUp.isNotEmpty) {
       await _streamText(controller, '\n\n$followUp');
     }
+  }
+
+  /// Rasterizes the generated image to real PNG bytes and splices it into
+  /// the target HTML artifact as a new version.
+  Future<void> _composeImageIntoArtifact(
+    StreamController<ChatEvent> controller,
+    Artifact target,
+    ImageResult result,
+  ) async {
+    final pngBytes = await rasterizeGradientArt(seed: result.seed);
+    final updatedHtml =
+        embedImageAsHero(target.latest.content, pngBytes, altText: result.prompt);
+    controller.add(
+        ArtifactUpdated(target.withNewVersion(updatedHtml, DateTime.now())));
   }
 
   /// Code-routed turns also produce an artifact: a runnable HTML page for

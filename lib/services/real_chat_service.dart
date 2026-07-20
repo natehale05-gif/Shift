@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 
@@ -10,6 +11,7 @@ import '../models/conversation.dart';
 import '../models/studio_request.dart';
 import '../models/studio_type.dart';
 import '../state/api_keys_store.dart';
+import 'artifact_composition.dart';
 import 'chat_service.dart';
 import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
@@ -150,7 +152,7 @@ class RealChatService implements ChatService {
         case Executor.gemini:
           if (route == ChatRoute.imageGen) {
             await _runGeminiImageWithClarification(
-                controller, userInput, pending);
+                controller, conversation, userInput, pending);
           } else {
             await _runGeminiChat(controller, conversation, userInput,
                 attachments, options, route);
@@ -293,6 +295,7 @@ class RealChatService implements ChatService {
   /// is the only chance to ask before spending a real generation call.
   Future<void> _runGeminiImageWithClarification(
     StreamController<ChatEvent> controller,
+    Conversation conversation,
     String userInput,
     (StudioType, String)? pending,
   ) async {
@@ -308,7 +311,52 @@ class RealChatService implements ChatService {
     }
     final effectiveInput =
         pending != null ? '${pending.$2} $userInput'.trim() : userInput;
+
+    // "Add a hero image to the website": Gemini generates the asset, then
+    // it's spliced into the artifact Claude (or a prior turn) already
+    // built — two studios composing within one turn.
+    final composeTarget =
+        findArtifactCompositionTarget(conversation, effectiveInput);
+    if (composeTarget != null) {
+      await _composeGeminiImageIntoArtifact(
+          controller, composeTarget, effectiveInput);
+      return;
+    }
+
     await _runGeminiImage(controller, effectiveInput, close: false);
+  }
+
+  /// Generates the image with the real Gemini endpoint, then splices the
+  /// bytes into [target]'s HTML as a new artifact version instead of
+  /// showing them as a separate inline image.
+  Future<void> _composeGeminiImageIntoArtifact(
+    StreamController<ChatEvent> controller,
+    Artifact target,
+    String prompt,
+  ) async {
+    controller.add(MessageDelta(
+        'Generating the image with Gemini, then adding it into '
+        '"${target.title}"…\n\n'));
+    Uint8List? bytes;
+    await for (final event
+        in _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt)) {
+      switch (event) {
+        case ImageGenerated(:final pngBytes):
+          bytes = pngBytes;
+        case MessageComplete():
+          break; // re-added below, after the artifact update
+        default:
+          controller.add(event);
+      }
+    }
+    if (bytes == null) return; // an error was already forwarded above
+    final updatedHtml =
+        embedImageAsHero(target.latest.content, bytes, altText: prompt);
+    controller
+        .add(ArtifactUpdated(target.withNewVersion(updatedHtml, DateTime.now())));
+    controller.add(MessageDelta(
+        '\n\nDone — it\'s live in "${target.title}" as a new version.'));
+    controller.add(const MessageComplete());
   }
 
   Future<void> _runGeminiImage(

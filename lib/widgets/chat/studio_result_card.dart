@@ -10,8 +10,8 @@ import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import '../../models/studio_result.dart';
 import '../../services/audio_synth_service.dart';
 import '../../services/download_service.dart';
+import '../../services/procedural_art.dart';
 import '../../services/web_audio_player.dart';
-import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import 'procedural_painters.dart';
@@ -36,24 +36,6 @@ class StudioResultCard extends StatelessWidget {
       CodeResult r => _CodeResultView(result: r),
     };
   }
-}
-
-const _palette = [
-  AppColors.accent,
-  AppColors.systemPink,
-  AppColors.systemBlue,
-  AppColors.systemGreen,
-  AppColors.systemOrange,
-  AppColors.systemPurple,
-];
-
-List<Color> _paletteFromSeed(int seed) {
-  final start = seed % _palette.length;
-  return [
-    _palette[start],
-    _palette[(start + 2) % _palette.length],
-    _palette[(start + 4) % _palette.length],
-  ];
 }
 
 double _aspectRatioValue(String label) {
@@ -146,7 +128,7 @@ class _ImageResultViewState extends State<_ImageResultView> {
               child: CustomPaint(
                 painter: GradientArtPainter(
                   seed: result.seed,
-                  palette: _paletteFromSeed(result.seed),
+                  palette: paletteFromSeed(result.seed),
                 ),
               ),
             ),
@@ -239,7 +221,7 @@ class _VideoResultViewState extends State<_VideoResultView> {
               child: CustomPaint(
                 painter: GradientArtPainter(
                   seed: result.seed,
-                  palette: _paletteFromSeed(result.seed),
+                  palette: paletteFromSeed(result.seed),
                 ),
               ),
             ),

@@ -158,6 +158,17 @@ class StudioResponseBank {
     };
   }
 
+  /// Intro for a request that spans two studios in one turn — e.g. "add a
+  /// hero image to the website" — where Image Studio's output gets woven
+  /// into an artifact another studio already built.
+  static String compositionIntro(String artifactTitle) =>
+      'Routing this to Image Studio to generate the image, then adding it '
+      'into your "$artifactTitle" artifact.';
+
+  static String compositionFollowUp(String artifactTitle) =>
+      'Done — the new image is live in "$artifactTitle" as a new version. '
+      'Ask for a different image or position anytime.';
+
   static int seedFromString(String input) => input.codeUnits.fold<int>(
         7,
         (acc, c) => (acc * 31 + c) & 0x7fffffff,
