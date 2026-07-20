@@ -21,9 +21,7 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: GlassAppBar(
         title: const Text('Settings'),
-        leading: MediaQuery.sizeOf(context).width < 720
-            ? const HomeMenuButton()
-            : null,
+        leading: const HomeMenuButton(),
       ),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.lg),

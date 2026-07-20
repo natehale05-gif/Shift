@@ -18,6 +18,7 @@ import '../../state/project_store.dart';
 import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
+import '../common/liquid_glass.dart';
 
 const _uuid = Uuid();
 
@@ -62,7 +63,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
     final store = context.read<ConversationStore>();
     final project =
         projects.projectById(store.current?.projectId) ??
-            projects.activeProject;
+        projects.activeProject;
     return ChatOptions(
       modelPin: _modelPin,
       systemPrompt: assembleSystemPrompt(
@@ -103,13 +104,15 @@ class _ChatInputBarState extends State<ChatInputBar> {
     for (final file in files) {
       final bytes = await file.readAsBytes();
       final mimeType = file.mimeType ?? _mimeFromName(file.name);
-      _attachments.add(Attachment(
-        id: _uuid.v4(),
-        name: file.name,
-        mimeType: mimeType,
-        kind: AttachmentKind.fromMimeType(mimeType),
-        bytes: bytes,
-      ));
+      _attachments.add(
+        Attachment(
+          id: _uuid.v4(),
+          name: file.name,
+          mimeType: mimeType,
+          kind: AttachmentKind.fromMimeType(mimeType),
+          bytes: bytes,
+        ),
+      );
     }
     if (mounted) setState(() {});
   }
@@ -128,11 +131,14 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   void _toggleDictation() {
     if (!SpeechService.isSupported) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text(
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
             'Voice input isn\'t supported in this browser — try Chrome, '
-            'Edge, or Safari.'),
-      ));
+            'Edge, or Safari.',
+          ),
+        ),
+      );
       return;
     }
     if (_listening) {
@@ -140,8 +146,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
       setState(() => _listening = false);
       return;
     }
-    _textBeforeDictation =
-        _controller.text.isEmpty ? '' : '${_controller.text.trimRight()} ';
+    _textBeforeDictation = _controller.text.isEmpty
+        ? ''
+        : '${_controller.text.trimRight()} ';
     setState(() => _listening = true);
     _speechSubscription = SpeechService.listen().listen(
       (result) {
@@ -181,12 +188,20 @@ class _ChatInputBarState extends State<ChatInputBar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: colors.border),
-            ),
+          LiquidGlass(
+            borderRadius: BorderRadius.circular(24),
+            blurSigma: 30,
+            tintOpacity: 0.72,
+            border: Border.all(color: colors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(
+                  alpha: theme.brightness == Brightness.dark ? 0.35 : 0.06,
+                ),
+                blurRadius: 20,
+                offset: const Offset(0, 6),
+              ),
+            ],
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.sm,
               AppSpacing.xs,
@@ -210,17 +225,13 @@ class _ChatInputBarState extends State<ChatInputBar> {
                         children: [
                           for (final attachment in _attachments)
                             InputChip(
-                              avatar: Icon(
-                                switch (attachment.kind) {
-                                  AttachmentKind.image =>
-                                    Icons.image_outlined,
-                                  AttachmentKind.pdf =>
-                                    Icons.picture_as_pdf_outlined,
-                                  AttachmentKind.text =>
-                                    Icons.description_outlined,
-                                },
-                                size: 15,
-                              ),
+                              avatar: Icon(switch (attachment.kind) {
+                                AttachmentKind.image => Icons.image_outlined,
+                                AttachmentKind.pdf =>
+                                  Icons.picture_as_pdf_outlined,
+                                AttachmentKind.text =>
+                                  Icons.description_outlined,
+                              }, size: 15),
                               label: Text(
                                 attachment.name,
                                 style: theme.textTheme.labelSmall,
@@ -270,9 +281,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           ? 'Stop dictation'
                           : 'Dictate your message',
                       icon: Icon(
-                        _listening
-                            ? Icons.mic_rounded
-                            : Icons.mic_none_rounded,
+                        _listening ? Icons.mic_rounded : Icons.mic_none_rounded,
                         size: 20,
                       ),
                       color: _listening
@@ -280,27 +289,30 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           : colors.textSecondary,
                       onPressed: _toggleDictation,
                     ),
-                    Builder(builder: (context) {
-                      final keys = context.watch<ApiKeysStore>();
-                      final enabled = keys.hasGeminiKey &&
-                          LiveVoiceController.isSupported;
-                      return IconButton(
-                        tooltip: enabled
-                            ? 'Live voice conversation (experimental)'
-                            : 'Live voice (experimental) — needs a Google '
-                                'key in Settings',
-                        icon:
-                            const Icon(Icons.graphic_eq_rounded, size: 20),
-                        color: enabled
-                            ? theme.colorScheme.primary
-                            : colors.textSecondary
-                                .withValues(alpha: 0.5),
-                        onPressed: enabled
-                            ? () => showLiveVoiceOverlay(
-                                context, keys.geminiKey)
-                            : null,
-                      );
-                    }),
+                    Builder(
+                      builder: (context) {
+                        final keys = context.watch<ApiKeysStore>();
+                        final enabled =
+                            keys.hasGeminiKey &&
+                            LiveVoiceController.isSupported;
+                        return IconButton(
+                          tooltip: enabled
+                              ? 'Live voice conversation (experimental)'
+                              : 'Live voice (experimental) — needs a Google '
+                                    'key in Settings',
+                          icon: const Icon(Icons.graphic_eq_rounded, size: 20),
+                          color: enabled
+                              ? theme.colorScheme.primary
+                              : colors.textSecondary.withValues(alpha: 0.5),
+                          onPressed: enabled
+                              ? () => showLiveVoiceOverlay(
+                                  context,
+                                  keys.geminiKey,
+                                )
+                              : null,
+                        );
+                      },
+                    ),
                     const SizedBox(width: AppSpacing.xs),
                     _SendButton(enabled: _hasText, onPressed: _send),
                   ],
@@ -312,10 +324,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
           Text(
             context.watch<ApiKeysStore>().isLive
                 ? 'Live mode — SHIFT AI can make mistakes. Usage bills to '
-                    'your API key.'
+                      'your API key.'
                 : 'SHIFT AI is in demo mode — responses are simulated.',
-            style: theme.textTheme.labelSmall
-                ?.copyWith(color: colors.textSecondary),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -341,7 +354,8 @@ class _ModelChip extends StatelessWidget {
         : AnthropicApiConfig.displayName(modelPin!);
 
     return PopupMenuButton<String>(
-      tooltip: 'Choose a model — Auto lets the middleware AI route each '
+      tooltip:
+          'Choose a model — Auto lets the middleware AI route each '
           'request.',
       position: PopupMenuPosition.over,
       shape: RoundedRectangleBorder(
@@ -375,8 +389,9 @@ class _ModelChip extends StatelessWidget {
           children: [
             Text(
               label,
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(color: colors.textSecondary),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: colors.textSecondary,
+              ),
             ),
             const SizedBox(width: 2),
             Icon(

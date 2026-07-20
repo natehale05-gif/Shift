@@ -5,63 +5,30 @@ import '../../models/studio_type.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/artifact_panel_store.dart';
 import '../../state/conversation_store.dart';
-import '../../state/home_shell_controller.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_typography.dart';
 import '../../widgets/artifacts/artifact_panel.dart';
 import '../../widgets/chat/chat_input_bar.dart';
-import '../../widgets/chat/conversation_sidebar.dart';
 import '../../widgets/chat/message_view.dart';
 import '../../widgets/common/glass_app_bar.dart';
+import '../../widgets/common/home_menu_button.dart';
 
 /// The message column and composer share this width so the conversation
 /// reads as a single centered prose column, like the Claude app.
 const double _kProseColumnWidth = 760;
 
-class ChatScreen extends StatefulWidget {
+class ChatScreen extends StatelessWidget {
   const ChatScreen({super.key});
-
-  @override
-  State<ChatScreen> createState() => _ChatScreenState();
-}
-
-class _ChatScreenState extends State<ChatScreen> {
-  bool _sidebarOpen = true;
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wideLayout = constraints.maxWidth >= 900;
-        // Matches HomeShell's own breakpoint: below this, the app has no
-        // NavigationRail and everything (including chat history) lives in
-        // the shell's single hamburger drawer instead of a per-screen one.
-        final appWide = MediaQuery.sizeOf(context).width >= 720;
         return Scaffold(
           appBar: GlassAppBar(
             title: const _ChatTitle(),
-            leading: Builder(
-              builder: (context) => IconButton(
-                tooltip: wideLayout
-                    ? 'Toggle sidebar'
-                    : (appWide ? 'Chats' : 'Menu'),
-                icon: Icon(
-                  wideLayout
-                      ? Icons.view_sidebar_outlined
-                      : Icons.menu_rounded,
-                ),
-                onPressed: () {
-                  if (wideLayout) {
-                    setState(() => _sidebarOpen = !_sidebarOpen);
-                  } else if (appWide) {
-                    Scaffold.of(context).openDrawer();
-                  } else {
-                    context.read<HomeShellController>().openDrawer();
-                  }
-                },
-              ),
-            ),
+            leading: const HomeMenuButton(),
             actions: [
               IconButton(
                 tooltip: 'New chat',
@@ -72,34 +39,19 @@ class _ChatScreenState extends State<ChatScreen> {
               const SizedBox(width: AppSpacing.sm),
             ],
           ),
-          drawer: (!wideLayout && appWide)
-              ? const Drawer(child: ConversationSidebar())
-              : null,
           body: Consumer<ArtifactPanelStore>(
             builder: (context, panel, _) {
               // Side-by-side panel needs real width; below that the panel
               // covers the chat as a full overlay.
               final sideBySide = constraints.maxWidth >= 1100;
-              final panelWidth =
-                  (constraints.maxWidth * 0.42).clamp(380.0, 560.0);
+              final panelWidth = (constraints.maxWidth * 0.42).clamp(
+                380.0,
+                560.0,
+              );
               return Stack(
                 children: [
                   Row(
                     children: [
-                      if (wideLayout)
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 220),
-                          curve: Curves.easeOutCubic,
-                          width: _sidebarOpen ? 280 : 0,
-                          child: const ClipRect(
-                            child: OverflowBox(
-                              alignment: Alignment.centerLeft,
-                              minWidth: 280,
-                              maxWidth: 280,
-                              child: ConversationSidebar(),
-                            ),
-                          ),
-                        ),
                       const Expanded(child: _ChatBody()),
                       if (panel.isOpen && sideBySide)
                         SizedBox(
@@ -151,9 +103,7 @@ class _ChatTitle extends StatelessWidget {
             child: Text(
               live ? 'Live' : 'Simulated',
               style: theme.textTheme.labelSmall?.copyWith(
-                color: live
-                    ? theme.colorScheme.primary
-                    : colors.textSecondary,
+                color: live ? theme.colorScheme.primary : colors.textSecondary,
               ),
             ),
           ),
@@ -218,9 +168,9 @@ class _ChatBodyState extends State<_ChatBody> {
                         message: messages[index],
                         onOpenArtifact: (ref) =>
                             context.read<ArtifactPanelStore>().open(
-                                  ref.artifactId,
-                                  versionIndex: ref.versionIndex,
-                                ),
+                              ref.artifactId,
+                              versionIndex: ref.versionIndex,
+                            ),
                       ),
                     ),
                   ),

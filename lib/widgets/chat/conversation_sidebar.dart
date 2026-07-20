@@ -35,95 +35,90 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
     final starred = results.where((c) => c.starred).toList();
     final unstarred = results.where((c) => !c.starred).toList();
 
-    return Container(
-      width: 260,
-      decoration: BoxDecoration(
-        color: colors.surfaceAlt.withValues(alpha: 0.5),
-        border: Border(right: BorderSide(color: colors.border)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.md,
-              AppSpacing.md,
-              AppSpacing.md,
-              AppSpacing.xs,
-            ),
-            child: FilledButton.tonalIcon(
-              onPressed: () {
-                store.startNewConversation(
-                  projectId: projectStore.activeProjectId,
-                );
-                widget.onActivated?.call();
-              },
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('New chat'),
-            ),
+    // No outer sizing/background of its own — this is pure scrollable
+    // content, laid out inside the enclosing AppSidebar's glass panel (which
+    // owns the width, background, and border).
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.md,
+            AppSpacing.md,
+            AppSpacing.md,
+            AppSpacing.xs,
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.md,
-              vertical: AppSpacing.xs,
-            ),
-            child: TextField(
-              onChanged: (value) => setState(() => _query = value),
-              style: theme.textTheme.bodyMedium,
-              decoration: InputDecoration(
-                hintText: 'Search chats…',
-                hintStyle: theme.textTheme.bodyMedium
-                    ?.copyWith(color: colors.textSecondary),
-                prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.md,
-                  vertical: AppSpacing.sm,
-                ),
+          child: FilledButton.tonalIcon(
+            onPressed: () {
+              store.startNewConversation(
+                projectId: projectStore.activeProjectId,
+              );
+              widget.onActivated?.call();
+            },
+            icon: const Icon(Icons.add_rounded),
+            label: const Text('New chat'),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.xs,
+          ),
+          child: TextField(
+            onChanged: (value) => setState(() => _query = value),
+            style: theme.textTheme.bodyMedium,
+            decoration: InputDecoration(
+              hintText: 'Search chats…',
+              hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.textSecondary,
+              ),
+              prefixIcon: const Icon(Icons.search_rounded, size: 18),
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm,
               ),
             ),
           ),
-          Expanded(
-            child: ListView(
-              children: [
-                _ProjectsSection(projectStore: projectStore),
-                if (starred.isNotEmpty) ...[
-                  const _SectionHeader(label: 'Starred'),
-                  for (final conversation in starred)
-                    _ConversationTile(
-                      conversation: conversation,
-                      project:
-                          projectStore.projectById(conversation.projectId),
-                      selected: conversation.id == store.current?.id,
-                      onActivated: widget.onActivated,
-                    ),
-                ],
-                if (unstarred.isNotEmpty) ...[
-                  const _SectionHeader(label: 'Chats'),
-                  for (final conversation in unstarred)
-                    _ConversationTile(
-                      conversation: conversation,
-                      project:
-                          projectStore.projectById(conversation.projectId),
-                      selected: conversation.id == store.current?.id,
-                      onActivated: widget.onActivated,
-                    ),
-                ],
-                if (results.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
-                    child: Text(
-                      _query.isEmpty
-                          ? 'Your conversations will show up here.'
-                          : 'No chats match "$_query".',
-                      style: theme.textTheme.bodySmall,
-                    ),
+        ),
+        Expanded(
+          child: ListView(
+            children: [
+              _ProjectsSection(projectStore: projectStore),
+              if (starred.isNotEmpty) ...[
+                const _SectionHeader(label: 'Starred'),
+                for (final conversation in starred)
+                  _ConversationTile(
+                    conversation: conversation,
+                    project: projectStore.projectById(conversation.projectId),
+                    selected: conversation.id == store.current?.id,
+                    onActivated: widget.onActivated,
                   ),
               ],
-            ),
+              if (unstarred.isNotEmpty) ...[
+                const _SectionHeader(label: 'Chats'),
+                for (final conversation in unstarred)
+                  _ConversationTile(
+                    conversation: conversation,
+                    project: projectStore.projectById(conversation.projectId),
+                    selected: conversation.id == store.current?.id,
+                    onActivated: widget.onActivated,
+                  ),
+              ],
+              if (results.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  child: Text(
+                    _query.isEmpty
+                        ? 'Your conversations will show up here.'
+                        : 'No chats match "$_query".',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -172,8 +167,7 @@ class _ProjectsSection extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(controller.text),
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
             child: const Text('Create'),
           ),
         ],
@@ -287,8 +281,7 @@ class _ConversationTile extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            onPressed: () =>
-                Navigator.of(dialogContext).pop(controller.text),
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
             child: const Text('Rename'),
           ),
         ],
@@ -329,8 +322,10 @@ class _ConversationTile extends StatelessWidget {
     final theme = Theme.of(context);
     final store = context.read<ConversationStore>();
     return Container(
-      margin:
-          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      margin: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         color: selected
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)

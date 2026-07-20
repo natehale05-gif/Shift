@@ -1,10 +1,12 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 
-/// An [AppBar] with a frosted/vibrancy backdrop blur, matching the
-/// translucent toolbar look of macOS and iOS chrome (System Chrome
-/// Materials) rather than Material's flat, opaque app bar.
+import '../../theme/app_theme.dart';
+import 'liquid_glass.dart';
+
+/// An [AppBar] rendered as Liquid Glass — a blurred, translucent toolbar
+/// with a specular top highlight and a hairline bottom edge, matching the
+/// System Chrome Materials look of iOS/macOS/visionOS rather than
+/// Material's flat, opaque app bar.
 class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   final Widget title;
   final List<Widget>? actions;
@@ -20,23 +22,22 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => Size.fromHeight(
-        kToolbarHeight + (bottom?.preferredSize.height ?? 0),
-      );
+  Size get preferredSize =>
+      Size.fromHeight(kToolbarHeight + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
-        child: AppBar(
-          title: title,
-          leading: leading,
-          actions: actions,
-          bottom: bottom,
-          backgroundColor: theme.scaffoldBackgroundColor.withValues(alpha: 0.72),
-        ),
+    final colors = Theme.of(context).extension<AppSemanticColors>()!;
+    return LiquidGlass(
+      blurSigma: 28,
+      tintOpacity: 0.62,
+      border: Border(bottom: BorderSide(color: colors.border)),
+      child: AppBar(
+        title: title,
+        leading: leading,
+        actions: actions,
+        bottom: bottom,
+        backgroundColor: Colors.transparent,
       ),
     );
   }

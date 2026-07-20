@@ -3,19 +3,20 @@ import 'package:provider/provider.dart';
 
 import '../../state/home_shell_controller.dart';
 
-/// Leading hamburger for top-level screens that don't have a drawer of
-/// their own — opens the shell's unified navigation drawer. Callers should
-/// only use this below HomeShell's own 720px breakpoint; above that the
-/// NavigationRail already surfaces every destination.
+/// The one hamburger control every top-level screen uses to reach the
+/// shell's sidebar: on wide layouts it toggles the persistent collapsible
+/// panel in place; on narrow layouts it opens the same panel as a Drawer.
 class HomeMenuButton extends StatelessWidget {
   const HomeMenuButton({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final wide = MediaQuery.sizeOf(context).width >= 720;
+    final controller = context.read<HomeShellController>();
     return IconButton(
-      tooltip: 'Menu',
-      icon: const Icon(Icons.menu_rounded),
-      onPressed: () => context.read<HomeShellController>().openDrawer(),
+      tooltip: wide ? 'Toggle sidebar' : 'Menu',
+      icon: Icon(wide ? Icons.view_sidebar_outlined : Icons.menu_rounded),
+      onPressed: wide ? controller.toggleSidebar : controller.openDrawer,
     );
   }
 }

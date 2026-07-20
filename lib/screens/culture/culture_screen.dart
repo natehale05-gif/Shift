@@ -53,9 +53,7 @@ class CultureScreen extends StatelessWidget {
     return Scaffold(
       appBar: GlassAppBar(
         title: const Text('Culture'),
-        leading: MediaQuery.sizeOf(context).width < 720
-            ? const HomeMenuButton()
-            : null,
+        leading: const HomeMenuButton(),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.lg),

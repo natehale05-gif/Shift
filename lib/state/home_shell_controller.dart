@@ -1,11 +1,17 @@
 import 'package:flutter/foundation.dart';
 
 /// Lets a nested top-level screen (each has its own Scaffold) reach back to
-/// the app shell's navigation Drawer. `Scaffold.of(context)` inside a screen
-/// only finds that screen's own Scaffold, never the shell's outer one, so
-/// this is threaded down via Provider instead.
+/// the app shell's navigation — the collapsible sidebar, its narrow-layout
+/// drawer, and cross-section navigation (e.g. the profile menu jumping to
+/// Settings) all live one level up, in [HomeShell].
 class HomeShellController {
   final VoidCallback openDrawer;
+  final VoidCallback toggleSidebar;
+  final ValueChanged<int> navigateTo;
 
-  const HomeShellController({required this.openDrawer});
+  const HomeShellController({
+    required this.openDrawer,
+    required this.toggleSidebar,
+    required this.navigateTo,
+  });
 }

@@ -1,13 +1,10 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../state/conversation_store.dart';
 import '../state/home_shell_controller.dart';
-import '../theme/app_colors.dart';
-import '../widgets/common/app_nav_drawer.dart';
+import '../widgets/common/app_sidebar.dart';
 import '../widgets/common/command_palette.dart';
 import 'chat/chat_screen.dart';
 import 'culture/culture_screen.dart';
@@ -18,6 +15,10 @@ import 'settings/settings_screen.dart';
 /// state (an [IndexedStack] index) — the browser URL never changes, which
 /// sidesteps the classic "Flutter web + GitHub Pages" deep-link 404 problem
 /// entirely rather than working around it.
+///
+/// The sidebar (chat history + the profile button that reaches Membership,
+/// Culture, and Settings) lives here, one level above the four screens, so
+/// it persists across navigation instead of being rebuilt per screen.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -27,6 +28,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  bool _sidebarOpen = true;
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   static const _screens = [
@@ -56,15 +58,15 @@ class _HomeShellState extends State<HomeShell> {
             _openPalette,
         const SingleActivator(LogicalKeyboardKey.keyK, control: true):
             _openPalette,
-        const SingleActivator(LogicalKeyboardKey.keyO,
-            meta: true, shift: true): _newChat,
-        const SingleActivator(LogicalKeyboardKey.keyO,
-            control: true, shift: true): _newChat,
+        const SingleActivator(LogicalKeyboardKey.keyO, meta: true, shift: true):
+            _newChat,
+        const SingleActivator(
+          LogicalKeyboardKey.keyO,
+          control: true,
+          shift: true,
+        ): _newChat,
       },
-      child: FocusScope(
-        autofocus: true,
-        child: _buildShell(context),
-      ),
+      child: FocusScope(autofocus: true, child: _buildShell(context)),
     );
   }
 
@@ -75,33 +77,31 @@ class _HomeShellState extends State<HomeShell> {
         final body = IndexedStack(index: _index, children: _screens);
         final controller = HomeShellController(
           openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+          toggleSidebar: () => setState(() => _sidebarOpen = !_sidebarOpen),
+          navigateTo: (i) => setState(() => _index = i),
+        );
+        final sidebar = AppSidebar(
+          currentIndex: _index,
+          onNavigate: (i) => setState(() => _index = i),
         );
 
         if (isWide) {
-          // The rail already surfaces every destination, so no drawer is
-          // needed here.
           return Provider<HomeShellController>.value(
             value: controller,
             child: Scaffold(
               body: Row(
                 children: [
-                  _FrostedPanel(
-                    child: NavigationRail(
-                      backgroundColor: Colors.transparent,
-                      selectedIndex: _index,
-                      onDestinationSelected: (i) =>
-                          setState(() => _index = i),
-                      labelType: NavigationRailLabelType.all,
-                      leading: const _BrandMark(),
-                      indicatorShape: const StadiumBorder(),
-                      destinations: [
-                        for (final d in homeShellDestinations)
-                          NavigationRailDestination(
-                            icon: Icon(d.icon),
-                            selectedIcon: Icon(d.selectedIcon),
-                            label: Text(d.label),
-                          ),
-                      ],
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    curve: Curves.easeOutCubic,
+                    width: _sidebarOpen ? 280 : 0,
+                    child: ClipRect(
+                      child: OverflowBox(
+                        alignment: Alignment.centerLeft,
+                        minWidth: 280,
+                        maxWidth: 280,
+                        child: sidebar,
+                      ),
                     ),
                   ),
                   Expanded(child: body),
@@ -111,73 +111,24 @@ class _HomeShellState extends State<HomeShell> {
           );
         }
 
-        // Narrow layout: no bottom tab bar — every destination, plus chat
-        // history, lives in the one hamburger-triggered drawer instead.
+        // Narrow layout: the same sidebar, opened as a Drawer from the
+        // hamburger button each screen shows in its own app bar.
         return Provider<HomeShellController>.value(
           value: controller,
           child: Scaffold(
             key: _scaffoldKey,
-            drawer: AppNavDrawer(
-              currentIndex: _index,
-              onSelect: (i) => setState(() => _index = i),
+            drawer: Drawer(
+              width: 280,
+              child: AppSidebar(
+                currentIndex: _index,
+                onNavigate: (i) => setState(() => _index = i),
+                onActivated: () => Navigator.of(context).pop(),
+              ),
             ),
             body: body,
           ),
         );
       },
-    );
-  }
-}
-
-/// A translucent, blurred backdrop (macOS "sidebar material" vibrancy) with
-/// a hairline trailing edge, used behind the NavigationRail so content is
-/// faintly visible through it rather than a flat opaque panel.
-class _FrostedPanel extends StatelessWidget {
-  final Widget child;
-  const _FrostedPanel({required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final side = BorderSide(color: Theme.of(context).dividerColor);
-    return ClipRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.75),
-            border: Border(right: side),
-          ),
-          child: child,
-        ),
-      ),
-    );
-  }
-}
-
-class _BrandMark extends StatelessWidget {
-  const _BrandMark();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.accentDark, AppColors.accent],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 22),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -21,9 +21,7 @@ class MembershipScreen extends StatelessWidget {
       child: Scaffold(
         appBar: GlassAppBar(
           title: const Text('Membership & EcoPay'),
-          leading: MediaQuery.sizeOf(context).width < 720
-              ? const HomeMenuButton()
-              : null,
+          leading: const HomeMenuButton(),
           bottom: const TabBar(
             tabs: [
               Tab(text: 'Plans'),
