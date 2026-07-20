@@ -151,6 +151,16 @@ class RealChatService implements ChatService {
         return;
       }
 
+      // Media pairs: a talking avatar (portrait + voice) or scored narration
+      // (voice over a music bed). The portrait is real (Gemini) when a Google
+      // key exists; the voiceover script is real (Claude/Gemini); the audio
+      // itself is synthesized.
+      if (isMediaPair(plan.kind)) {
+        await _runMediaPair(controller, plan.kind, userInput);
+        await controller.close();
+        return;
+      }
+
       final route = options.modelPin != null
           ? ChatRoute.chat // an explicit model pin bypasses routing
           : pending != null
@@ -320,6 +330,41 @@ class RealChatService implements ChatService {
     controller.add(MessageDelta('$script\n\n'));
     controller.add(StudioResultReady(copyFedResult(kind, userInput, script)));
     final followUp = copyFedFollowUp(kind);
+    if (followUp.isNotEmpty) controller.add(MessageDelta(followUp));
+    controller.add(const MessageComplete());
+  }
+
+  /// Media pairs (live): a portrait from Gemini (else procedural) shown with
+  /// a synthesized voiceover whose script Claude/Gemini actually wrote; or a
+  /// narration-over-music-bed card. Voice/music audio is synthesized locally.
+  Future<void> _runMediaPair(
+    StreamController<ChatEvent> controller,
+    CompositionKind kind,
+    String userInput,
+  ) async {
+    controller.add(RoutingDetected(mediaPairHost(kind)));
+    controller.add(MessageDelta('${mediaPairIntro(kind)}\n\n'));
+
+    if (kind == CompositionKind.talkingAvatar) {
+      final images = keys.hasGeminiKey
+          ? await _generateGeminiPhotos('$userInput, portrait headshot', 1)
+          : await _generateProceduralPhotos(userInput, 1);
+      if (images.isNotEmpty) {
+        controller
+            .add(ImageGenerated(pngBytes: images.first, alt: 'Avatar portrait'));
+      }
+    }
+
+    var script = '';
+    try {
+      script = (await _writeText(scriptLlmPrompt(kind, userInput))).trim();
+    } catch (_) {
+      // Fall through to the template.
+    }
+    if (script.isEmpty) script = mockScript(kind, userInput);
+
+    controller.add(StudioResultReady(mediaPairAudio(kind, userInput, script)));
+    final followUp = mediaPairFollowUp(kind);
     if (followUp.isNotEmpty) controller.add(MessageDelta(followUp));
     controller.add(const MessageComplete());
   }

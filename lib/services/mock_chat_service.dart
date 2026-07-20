@@ -71,9 +71,11 @@ class MockChatService implements ChatService {
           ? StudioType.codeStudio
           : isCopyFed(plan.kind)
               ? copyFedHost(plan.kind)
-              : (structuredRequest?.studioType ??
-                  pending?.$1 ??
-                  StudioResponseBank.detectStudio(userInput));
+              : isMediaPair(plan.kind)
+                  ? mediaPairHost(plan.kind)
+                  : (structuredRequest?.studioType ??
+                      pending?.$1 ??
+                      StudioResponseBank.detectStudio(userInput));
       final effectiveInput =
           pending != null ? '${pending.$2} $userInput'.trim() : userInput;
 
@@ -110,6 +112,8 @@ class MockChatService implements ChatService {
         await _runWebSearch(controller, userInput);
       } else if (isCopyFed(plan.kind)) {
         await _runCopyFedMedia(controller, plan.kind, effectiveInput);
+      } else if (isMediaPair(plan.kind)) {
+        await _runMediaPair(controller, plan.kind, effectiveInput);
       } else {
         final composeTarget =
             plan.kind == CompositionKind.editArtifact ? plan.editTarget : null;
@@ -220,6 +224,32 @@ class MockChatService implements ChatService {
     await _streamText(controller, '\n\n$script');
     controller.add(StudioResultReady(copyFedResult(kind, userInput, script)));
     final followUp = copyFedFollowUp(kind);
+    if (followUp.isNotEmpty) {
+      await _streamText(controller, '\n\n$followUp');
+    }
+  }
+
+  /// Media pairs: talkingAvatar shows a generated portrait (an inline image
+  /// block) together with a voiceover card; scoredNarration shows a single
+  /// narration-over-a-music-bed card. Both lead with Voice & Avatar.
+  Future<void> _runMediaPair(
+    StreamController<ChatEvent> controller,
+    CompositionKind kind,
+    String userInput,
+  ) async {
+    await _streamText(controller, mediaPairIntro(kind));
+    await _delay(500, 1000);
+
+    if (kind == CompositionKind.talkingAvatar) {
+      final portrait = await rasterizeGradientArt(
+          seed: StudioResponseBank.seedFromString(userInput));
+      controller.add(ImageGenerated(pngBytes: portrait, alt: 'Avatar portrait'));
+    }
+
+    final script = mockScript(kind, userInput);
+    controller.add(StudioResultReady(mediaPairAudio(kind, userInput, script)));
+
+    final followUp = mediaPairFollowUp(kind);
     if (followUp.isNotEmpty) {
       await _streamText(controller, '\n\n$followUp');
     }

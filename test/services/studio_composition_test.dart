@@ -157,6 +157,54 @@ void main() {
           _convo(), 'write a website with a video clip');
       expect(plan.kind, CompositionKind.pageAssembly);
     });
+
+    test('"a talking avatar that says hello" is Image + Voice', () {
+      final plan =
+          planComposition(_convo(), 'make a talking avatar that says hello');
+      expect(plan.kind, CompositionKind.talkingAvatar);
+      expect(plan.host, StudioType.voiceAvatarStudio);
+      expect(plan.contributors, containsAll(
+          [StudioType.imageStudio, StudioType.voiceAvatarStudio]));
+    });
+
+    test('a portrait + voiceover request is also a talking avatar', () {
+      final plan = planComposition(
+          _convo(), 'generate a portrait with a voiceover');
+      expect(plan.kind, CompositionKind.talkingAvatar);
+    });
+
+    test('"narrate this over background music" is Voice + Music '
+        '(scoredNarration)', () {
+      final plan = planComposition(
+          _convo(), 'narrate this line over background music');
+      expect(plan.kind, CompositionKind.scoredNarration);
+      expect(plan.contributors, contains(StudioType.musicStudio));
+    });
+
+    test('copy-fed wins over a media pair when a write signal is present', () {
+      // "write and narrate ... with music" -> narratedScript, not
+      // scoredNarration (the write signal routes to Copy first).
+      final plan = planComposition(
+          _convo(), 'write and narrate a welcome message with background music');
+      expect(plan.kind, CompositionKind.narratedScript);
+    });
+  });
+
+  group('mediaPairAudio', () {
+    test('talkingAvatar is a voice card carrying the script', () {
+      final r = mediaPairAudio(
+          CompositionKind.talkingAvatar, 'hello avatar', 'Hi there!');
+      expect(r.kind, AudioKind.voice);
+      expect(r.transcript, 'Hi there!');
+    });
+
+    test('scoredNarration is a music bed with the narration as transcript',
+        () {
+      final r = mediaPairAudio(
+          CompositionKind.scoredNarration, 'a calm intro', 'Welcome in.');
+      expect(r.kind, AudioKind.music);
+      expect(r.transcript, 'Welcome in.');
+    });
   });
 
   group('copyFedResult', () {

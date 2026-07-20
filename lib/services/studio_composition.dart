@@ -180,8 +180,33 @@ CompositionPlan planComposition(Conversation conversation, String input) {
     }
   }
 
+  // 4. Media pairs. Talking avatar = an Image portrait shown with a Voice
+  //    narration; scored narration = Voice over a Music bed.
+  final hasImage = studios.contains(StudioType.imageStudio);
+  final hasVoice = studios.contains(StudioType.voiceAvatarStudio);
+  final hasMusic = studios.contains(StudioType.musicStudio);
+  if (_wantsAvatar(input) || (hasImage && hasVoice)) {
+    return const CompositionPlan(
+      kind: CompositionKind.talkingAvatar,
+      host: StudioType.voiceAvatarStudio,
+      contributors: {StudioType.imageStudio, StudioType.voiceAvatarStudio},
+    );
+  }
+  if (hasVoice && hasMusic) {
+    return const CompositionPlan(
+      kind: CompositionKind.scoredNarration,
+      host: StudioType.voiceAvatarStudio,
+      contributors: {StudioType.voiceAvatarStudio, StudioType.musicStudio},
+    );
+  }
+
   return CompositionPlan.none;
 }
+
+final _avatarSignal = RegExp(
+    r'\b(avatar|talking head|talking avatar|spokesperson|virtual presenter)\b');
+
+bool _wantsAvatar(String input) => _avatarSignal.hasMatch(input.toLowerCase());
 
 final _writtenSignal = RegExp(
     r'\b(write|writes|writing|written|draft|drafts|script|scripts|scripted|'
@@ -234,9 +259,11 @@ String copyFedFollowUp(CompositionKind kind) => switch (kind) {
     };
 
 /// The instruction handed to a live text model (Claude/Gemini) to write the
-/// script for a copy-fed turn.
+/// script for a copy-fed or media-pair turn.
 String scriptLlmPrompt(CompositionKind kind, String userInput) => switch (kind) {
-      CompositionKind.narratedScript =>
+      CompositionKind.narratedScript ||
+      CompositionKind.talkingAvatar ||
+      CompositionKind.scoredNarration =>
         'Write a short, warm spoken voiceover script (3-4 sentences) for: '
             '"$userInput". Output only the words to be spoken — no stage '
             'directions, no quotes.',
@@ -250,13 +277,72 @@ String scriptLlmPrompt(CompositionKind kind, String userInput) => switch (kind) 
 
 /// The mock's template script when no live text model wrote one.
 String mockScript(CompositionKind kind, String userInput) => switch (kind) {
-      CompositionKind.narratedScript =>
+      CompositionKind.narratedScript ||
+      CompositionKind.talkingAvatar ||
+      CompositionKind.scoredNarration =>
         StudioResponseBank.narrationScript(userInput),
       CompositionKind.scriptedVideo =>
         StudioResponseBank.videoScriptText(userInput),
       CompositionKind.jingle => StudioResponseBank.jingleHook(userInput).lyric,
       _ => '',
     };
+
+// --- Media pairs -----------------------------------------------------------
+
+bool isMediaPair(CompositionKind kind) =>
+    kind == CompositionKind.talkingAvatar ||
+    kind == CompositionKind.scoredNarration;
+
+/// Both media pairs lead with Voice & Avatar (the narration is the throughline).
+StudioType mediaPairHost(CompositionKind kind) => StudioType.voiceAvatarStudio;
+
+String mediaPairIntro(CompositionKind kind) => switch (kind) {
+      CompositionKind.talkingAvatar =>
+        'Routing this to Image Studio for the avatar portrait, then Voice & '
+            'Avatar Studio to give it a voice.',
+      CompositionKind.scoredNarration =>
+        'Routing this to Voice & Avatar to narrate, then Music Studio to lay '
+            'a bed underneath.',
+      _ => '',
+    };
+
+String mediaPairFollowUp(CompositionKind kind) => switch (kind) {
+      CompositionKind.talkingAvatar =>
+        'Portrait and voiceover are ready above. Want a different look or '
+            'voice?',
+      CompositionKind.scoredNarration =>
+        'Narration and music bed are ready above. Want a different mood or '
+            'tempo?',
+      _ => '',
+    };
+
+/// The audio card a media-pair turn attaches. talkingAvatar plays a
+/// speech-like voice; scoredNarration plays a music bed with the narration
+/// shown as the transcript (the synth renders one track, so the "mix" is
+/// represented as the bed plus the written narration).
+AudioResult mediaPairAudio(
+    CompositionKind kind, String userInput, String script) {
+  final seed = StudioResponseBank.seedFromString(userInput);
+  return switch (kind) {
+    CompositionKind.talkingAvatar => AudioResult(
+        kind: AudioKind.voice,
+        title: 'Avatar voice',
+        subtitle: 'Voiceover',
+        durationSec: max(4, (script.split(' ').length / 2.5).round()),
+        seed: seed,
+        transcript: script,
+      ),
+    CompositionKind.scoredNarration => AudioResult(
+        kind: AudioKind.music,
+        title: 'Narration over a music bed',
+        subtitle: 'Music bed · voiceover',
+        durationSec: 20,
+        seed: seed,
+        transcript: script,
+      ),
+    _ => throw ArgumentError('not a media pair: $kind'),
+  };
+}
 
 /// The media result a copy-fed turn attaches, carrying the written [script].
 StudioResult copyFedResult(
