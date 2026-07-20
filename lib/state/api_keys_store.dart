@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../services/persistence_service.dart';
 import '../services/providers/anthropic_client.dart';
+import '../services/providers/gemini_client.dart';
 
 enum KeyStatus { none, untested, testing, valid, invalid }
 
@@ -15,21 +16,28 @@ class ApiKeysStore extends ChangeNotifier {
 
   final PersistenceService persistence;
   final AnthropicClient _anthropicClient;
+  final GeminiClient _geminiClient;
 
   String _anthropicKey = '';
   String _geminiKey = '';
   KeyStatus _anthropicStatus = KeyStatus.none;
   KeyStatus _geminiStatus = KeyStatus.none;
   String? _anthropicError;
+  String? _geminiError;
 
-  ApiKeysStore({required this.persistence, AnthropicClient? anthropicClient})
-      : _anthropicClient = anthropicClient ?? AnthropicClient();
+  ApiKeysStore({
+    required this.persistence,
+    AnthropicClient? anthropicClient,
+    GeminiClient? geminiClient,
+  })  : _anthropicClient = anthropicClient ?? AnthropicClient(),
+        _geminiClient = geminiClient ?? GeminiClient();
 
   String get anthropicKey => _anthropicKey;
   String get geminiKey => _geminiKey;
   KeyStatus get anthropicStatus => _anthropicStatus;
   KeyStatus get geminiStatus => _geminiStatus;
   String? get anthropicError => _anthropicError;
+  String? get geminiError => _geminiError;
 
   /// Live mode: any Anthropic key present (validation refines error
   /// reporting but doesn't gate sending).
@@ -59,9 +67,21 @@ class ApiKeysStore extends ChangeNotifier {
   Future<void> setGeminiKey(String key) async {
     _geminiKey = key.trim();
     _geminiStatus = _geminiKey.isEmpty ? KeyStatus.none : KeyStatus.untested;
+    _geminiError = null;
     notifyListeners();
     await persistence.saveApiKey(
         _geminiKeyName, _geminiKey.isEmpty ? null : _geminiKey);
+  }
+
+  Future<void> testGeminiKey() async {
+    if (_geminiKey.isEmpty) return;
+    _geminiStatus = KeyStatus.testing;
+    _geminiError = null;
+    notifyListeners();
+    final problem = await _geminiClient.validateKey(_geminiKey);
+    _geminiStatus = problem == null ? KeyStatus.valid : KeyStatus.invalid;
+    _geminiError = problem;
+    notifyListeners();
   }
 
   Future<void> testAnthropicKey() async {

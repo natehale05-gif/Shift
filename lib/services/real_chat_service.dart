@@ -12,9 +12,35 @@ import 'mock_chat_service.dart';
 import 'providers/anthropic_api_config.dart';
 import 'providers/anthropic_client.dart';
 import 'providers/anthropic_tools.dart';
+import 'providers/gemini_client.dart';
 import 'router/model_router.dart';
 
 const _uuid = Uuid();
+
+/// Which backend serves a routed request.
+enum Executor { anthropic, gemini, mock }
+
+/// The degradation matrix: each route runs on the best available provider,
+/// falling back to the mock so every request still produces something.
+/// Pure — unit-tested across all key combinations.
+Executor chooseExecutor(
+  ChatRoute route, {
+  required bool hasAnthropic,
+  required bool hasGemini,
+}) {
+  return switch (route) {
+    // Image generation is a Gemini capability.
+    ChatRoute.imageGen => hasGemini ? Executor.gemini : Executor.mock,
+    // No live provider generates video/audio yet.
+    ChatRoute.video || ChatRoute.audio => Executor.mock,
+    // Text-shaped work prefers Claude, then Gemini, then the mock.
+    _ => hasAnthropic
+        ? Executor.anthropic
+        : hasGemini
+            ? Executor.gemini
+            : Executor.mock,
+  };
+}
 
 /// Live-mode middleware: routes each message (LLM classifier with keyword
 /// fallback), then executes on the best available provider. Routes no live
@@ -24,16 +50,23 @@ const _uuid = Uuid();
 class RealChatService implements ChatService {
   final ApiKeysStore keys;
   final AnthropicClient _anthropic;
+  final GeminiClient _gemini;
   final ModelRouter _router;
   final MockChatService _mockFallback;
 
   RealChatService({
     required this.keys,
     AnthropicClient? anthropicClient,
+    GeminiClient? geminiClient,
     ModelRouter? router,
     MockChatService? mockFallback,
   })  : _anthropic = anthropicClient ?? AnthropicClient(),
-        _router = router ?? ModelRouter(client: anthropicClient),
+        _gemini = geminiClient ?? GeminiClient(),
+        _router = router ??
+            ModelRouter(
+              client: anthropicClient,
+              geminiClient: geminiClient,
+            ),
         _mockFallback = mockFallback ?? MockChatService();
 
   @override
@@ -59,11 +92,21 @@ class RealChatService implements ChatService {
     ChatOptions options,
   ) async {
     try {
-      // Structured studio forms and deep research keep their existing
+      // A structured Image Studio form runs real generation when a Google
+      // key exists; other structured forms and deep research keep their
       // simulated flows until their live executors ship.
-      if (structuredRequest != null || options.deepResearch) {
+      if (structuredRequest != null) {
+        if (structuredRequest is ImageRequest && keys.hasGeminiKey) {
+          await _runGeminiImage(controller, structuredRequest.prompt);
+          return;
+        }
         await _delegateToMock(controller, conversation, userInput,
             structuredRequest, attachments, options);
+        return;
+      }
+      if (options.deepResearch) {
+        await _delegateToMock(
+            controller, conversation, userInput, null, attachments, options);
         return;
       }
 
@@ -72,18 +115,28 @@ class RealChatService implements ChatService {
           : await _router.route(
               input: userInput,
               anthropicKey: keys.anthropicKey,
+              geminiKey: keys.geminiKey,
             );
 
-      switch (route) {
-        case ChatRoute.chat ||
-              ChatRoute.code ||
-              ChatRoute.writing ||
-              ChatRoute.webSearch ||
-              ChatRoute.deepResearch:
+      final executor = chooseExecutor(
+        route,
+        hasAnthropic: keys.hasAnthropicKey,
+        hasGemini: keys.hasGeminiKey,
+      );
+
+      switch (executor) {
+        case Executor.anthropic:
           await _runAnthropicChat(
               controller, conversation, userInput, attachments, options, route);
-        case ChatRoute.imageGen || ChatRoute.video || ChatRoute.audio:
-          // No live provider for these yet — simulate, and say so.
+        case Executor.gemini:
+          if (route == ChatRoute.imageGen) {
+            controller.add(RoutingDetected(route.studioType));
+            await _runGeminiImage(controller, userInput, close: false);
+          } else {
+            await _runGeminiChat(controller, conversation, userInput,
+                attachments, options, route);
+          }
+        case Executor.mock:
           await _delegateToMock(controller, conversation, userInput, null,
               attachments, options);
           return;
@@ -93,6 +146,42 @@ class RealChatService implements ChatService {
       controller.add(MessageError(e.toString()));
       await controller.close();
     }
+  }
+
+  Future<void> _runGeminiChat(
+    StreamController<ChatEvent> controller,
+    Conversation conversation,
+    String userInput,
+    List<Attachment> attachments,
+    ChatOptions options,
+    ChatRoute route,
+  ) async {
+    controller.add(RoutingDetected(route.studioType));
+    final events = _gemini.streamChat(
+      apiKey: keys.geminiKey,
+      conversation: conversation,
+      userInput: userInput,
+      attachments: attachments,
+      systemPrompt: options.systemPrompt,
+      grounding: options.webSearch || route == ChatRoute.webSearch,
+    );
+    await controller.addStream(events);
+  }
+
+  Future<void> _runGeminiImage(
+    StreamController<ChatEvent> controller,
+    String prompt, {
+    bool close = true,
+  }) async {
+    if (close) {
+      controller.add(RoutingDetected(ChatRoute.imageGen.studioType));
+    }
+    controller.add(const MessageDelta(
+        'Routing this to Image Studio — generating with Gemini…\n\n'));
+    await controller.addStream(
+      _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt),
+    );
+    if (close) await controller.close();
   }
 
   Future<void> _delegateToMock(
@@ -205,7 +294,7 @@ class ChatServiceSelector implements ChatService {
     List<Attachment> attachments = const [],
     ChatOptions options = ChatOptions.none,
   }) {
-    final service = keys.hasAnthropicKey ? real : mock;
+    final service = keys.isLive ? real : mock;
     return service.sendMessage(
       conversation: conversation,
       userInput: userInput,

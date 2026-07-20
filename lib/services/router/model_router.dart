@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../models/studio_type.dart';
 import '../providers/anthropic_api_config.dart';
 import '../providers/anthropic_client.dart';
+import '../providers/gemini_client.dart';
 import '../studio_response_bank.dart';
 
 /// What kind of executor a prompt needs — the middleware AI's routing
@@ -76,30 +77,42 @@ const _routerSystemPrompt =
     'in-depth multi-source research; video/audio = wants those media '
     'generated; chat = everything else.';
 
-/// The middleware routing brain: a small fast LLM classification with one
-/// retry, falling back to the keyword tables.
+/// The middleware routing brain: a small fast LLM classification (Haiku
+/// when an Anthropic key exists, Gemini Flash when only a Google key does)
+/// with one retry, always falling back to the keyword tables.
 class ModelRouter {
   final AnthropicClient _client;
+  final GeminiClient _gemini;
 
-  ModelRouter({AnthropicClient? client})
-      : _client = client ?? AnthropicClient();
+  ModelRouter({AnthropicClient? client, GeminiClient? geminiClient})
+      : _client = client ?? AnthropicClient(),
+        _gemini = geminiClient ?? GeminiClient();
 
   Future<ChatRoute> route({
     required String input,
     String? anthropicKey,
+    String? geminiKey,
   }) async {
-    if (anthropicKey == null || anthropicKey.isEmpty) {
+    final hasAnthropic = anthropicKey != null && anthropicKey.isNotEmpty;
+    final hasGemini = geminiKey != null && geminiKey.isNotEmpty;
+    if (!hasAnthropic && !hasGemini) {
       return keywordRoute(input);
     }
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
-        final reply = await _client.complete(
-          apiKey: anthropicKey,
-          model: AnthropicApiConfig.haikuModel,
-          systemPrompt: _routerSystemPrompt,
-          prompt: input,
-          maxTokens: 60,
-        );
+        final reply = hasAnthropic
+            ? await _client.complete(
+                apiKey: anthropicKey,
+                model: AnthropicApiConfig.haikuModel,
+                systemPrompt: _routerSystemPrompt,
+                prompt: input,
+                maxTokens: 60,
+              )
+            : await _gemini.complete(
+                apiKey: geminiKey!,
+                systemPrompt: _routerSystemPrompt,
+                prompt: input,
+              );
         final route = parseRouteJson(reply);
         if (route != null) return route;
       } catch (_) {

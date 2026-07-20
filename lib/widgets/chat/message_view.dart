@@ -8,6 +8,7 @@ import '../../models/chat_message.dart';
 import '../../models/citation.dart';
 import '../../models/message_block.dart';
 import '../../models/studio_type.dart';
+import '../../services/download_service.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
@@ -390,12 +391,27 @@ class _ImageBlockView extends StatelessWidget {
 
   const _ImageBlockView({required this.block});
 
-  Widget _image(Uint8List bytes) => ClipRRect(
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Image.memory(bytes, fit: BoxFit.contain),
-        ),
+  Widget _image(Uint8List bytes) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Image.memory(bytes, fit: BoxFit.contain),
+            ),
+          ),
+          TextButton.icon(
+            onPressed: () => DownloadService.downloadBytes(
+              bytes,
+              '${DownloadService.slugify(block.alt, fallback: 'image')}.png',
+              mimeType: 'image/png',
+            ),
+            icon: const Icon(Icons.download_rounded, size: 16),
+            label: const Text('Download'),
+          ),
+        ],
       );
 
   Widget _placeholder(BuildContext context, String label) {

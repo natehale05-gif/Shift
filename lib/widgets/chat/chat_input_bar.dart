@@ -299,7 +299,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            context.watch<ApiKeysStore>().hasAnthropicKey
+            context.watch<ApiKeysStore>().isLive
                 ? 'Live mode — SHIFT AI can make mistakes. Usage bills to '
                     'your API key.'
                 : 'SHIFT AI is in demo mode — responses are simulated.',

@@ -117,7 +117,7 @@ class _ChatTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
-    final live = context.watch<ApiKeysStore>().hasAnthropicKey;
+    final live = context.watch<ApiKeysStore>().isLive;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [

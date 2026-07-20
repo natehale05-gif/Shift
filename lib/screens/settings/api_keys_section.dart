@@ -125,26 +125,56 @@ class _ApiKeysSectionState extends State<ApiKeysSection> {
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'Will power image generation, grounded search, and realtime voice '
-          'as those live integrations ship. Free-tier keys are available at '
-          'aistudio.google.com — no purchase required.',
+          'Powers live image generation, Gemini chat, and Google-grounded '
+          'search. Free-tier keys are available at aistudio.google.com — '
+          'no purchase required.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: AppSpacing.sm),
-        TextField(
-          controller: _geminiController,
-          obscureText: !_showGemini,
-          decoration: InputDecoration(
-            hintText: 'AIza…',
-            suffixIcon: IconButton(
-              icon: Icon(_showGemini
-                  ? Icons.visibility_off_outlined
-                  : Icons.visibility_outlined),
-              onPressed: () => setState(() => _showGemini = !_showGemini),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _geminiController,
+                obscureText: !_showGemini,
+                decoration: InputDecoration(
+                  hintText: 'AIza…',
+                  suffixIcon: IconButton(
+                    icon: Icon(_showGemini
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined),
+                    onPressed: () =>
+                        setState(() => _showGemini = !_showGemini),
+                  ),
+                ),
+                onChanged: keys.setGeminiKey,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            FilledButton.tonal(
+              onPressed: keys.geminiKey.isEmpty ||
+                      keys.geminiStatus == KeyStatus.testing
+                  ? null
+                  : keys.testGeminiKey,
+              child: keys.geminiStatus == KeyStatus.testing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 1.6),
+                    )
+                  : const Text('Test key'),
+            ),
+          ],
+        ),
+        if (keys.geminiError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text(
+              keys.geminiError!,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
             ),
           ),
-          onChanged: keys.setGeminiKey,
-        ),
         const SizedBox(height: AppSpacing.md),
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
