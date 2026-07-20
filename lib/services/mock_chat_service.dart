@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 
@@ -11,6 +12,7 @@ import '../models/studio_result.dart';
 import '../models/studio_type.dart';
 import '../models/usage_report.dart';
 import 'artifact_composition.dart';
+import 'audio_synth_service.dart';
 import 'chat_service.dart';
 import 'procedural_art.dart';
 import 'studio_clarification.dart';
@@ -115,7 +117,7 @@ class MockChatService implements ChatService {
           structuredRequest,
           pending != null,
           composeTarget,
-          wantsBoth ? photoCountHint(userInput) : null,
+          wantsBoth ? plan.contributors : const <StudioType>{},
         );
       }
 
@@ -140,11 +142,13 @@ class MockChatService implements ChatService {
     StudioRequest? structuredRequest,
     bool isAnsweringClarification,
     Artifact? composeTarget,
-    int? embedPhotoCount,
+    Set<StudioType> pageContributors,
   ) async {
-    if (embedPhotoCount != null) {
-      await _streamText(
-          controller, StudioResponseBank.codeAndImageIntro(userInput));
+    final contributorNames =
+        pageContributors.map((s) => s.displayName).toList();
+    if (pageContributors.isNotEmpty) {
+      await _streamText(controller,
+          StudioResponseBank.pageAssemblyIntro(userInput, contributorNames));
     } else if (composeTarget != null) {
       await _streamText(
           controller, StudioResponseBank.compositionIntro(composeTarget.title));
@@ -182,19 +186,70 @@ class MockChatService implements ChatService {
       // Code output ships as an artifact (side panel), not an inline card —
       // the artifact IS the deliverable, with copy/download/versions there.
       await _emitCodeArtifact(controller, conversation, userInput, result,
-          embedPhotoCount: embedPhotoCount);
+          pageContributors: pageContributors);
     } else {
       controller.add(StudioResultReady(result));
     }
 
-    final followUp = embedPhotoCount != null
-        ? StudioResponseBank.codeAndImageFollowUp(embedPhotoCount)
+    final followUp = pageContributors.isNotEmpty
+        ? StudioResponseBank.pageAssemblyFollowUp(contributorNames)
         : composeTarget != null
             ? StudioResponseBank.compositionFollowUp(composeTarget.title)
             : StudioResponseBank.studioFollowUp(studio);
     if (followUp.isNotEmpty) {
       await _streamText(controller, '\n\n$followUp');
     }
+  }
+
+  /// Builds the base HTML page, then weaves in each contributor studio's
+  /// output procedurally — photos, real copy, an audio player, a video
+  /// block — so the whole page arrives assembled in one artifact version.
+  Future<String> _assembleMockPage(
+    String prompt,
+    Set<StudioType> contributors,
+  ) async {
+    final seed = StudioResponseBank.seedFromString(prompt);
+    final base = StudioResponseBank.htmlArtifactContent(prompt);
+
+    var images = const <Uint8List>[];
+    if (contributors.contains(StudioType.imageStudio)) {
+      final count = photoCountHint(prompt);
+      images = await Future.wait([
+        for (var i = 0; i < count; i++) rasterizeGradientArt(seed: seed + i),
+      ]);
+    }
+
+    final copy = contributors.contains(StudioType.copyScriptsStudio)
+        ? StudioResponseBank.pageCopy(prompt)
+        : null;
+
+    Uint8List? audioWav;
+    var audioLabel = 'Soundtrack';
+    if (contributors.contains(StudioType.musicStudio)) {
+      audioWav = AudioSynthService.synthesizeWav(
+          seed: seed, durationSec: 20, bpm: 100, speechLike: false);
+      audioLabel = 'Soundtrack';
+    } else if (contributors.contains(StudioType.voiceAvatarStudio)) {
+      audioWav = AudioSynthService.synthesizeWav(
+          seed: seed, durationSec: 8, bpm: 100, speechLike: true);
+      audioLabel = 'Voiceover';
+    }
+
+    Uint8List? videoPoster;
+    if (contributors.contains(StudioType.videoStudio)) {
+      videoPoster = await rasterizeGradientArt(seed: seed + 100);
+    }
+
+    return assemblePage(
+      base,
+      images: images,
+      copy: copy,
+      audioWav: audioWav,
+      audioLabel: audioLabel,
+      videoPoster: videoPoster,
+      videoLabel: prompt,
+      altText: prompt,
+    );
   }
 
   /// Rasterizes the generated image to real PNG bytes and splices it into
@@ -215,15 +270,16 @@ class MockChatService implements ChatService {
   /// page-shaped prompts, otherwise the generated code file. A follow-up
   /// code prompt in a conversation that already has an artifact revises it
   /// (new version) instead of creating a fresh one — the artifacts model.
-  /// [embedPhotoCount] set means Image Studio ran alongside Code Studio on
-  /// this same request — its photos are woven into the page before the
-  /// artifact is even created, rather than added in a later turn.
+  /// A non-empty [pageContributors] means other studios ran alongside Code
+  /// Studio on this same request — their outputs (photos, copy, an audio
+  /// player, a video block) are woven into the page before the artifact is
+  /// even created, rather than added in later turns.
   Future<void> _emitCodeArtifact(
     StreamController<ChatEvent> controller,
     Conversation conversation,
     String userInput,
     StudioResult result, {
-    int? embedPhotoCount,
+    Set<StudioType> pageContributors = const {},
   }) async {
     final wantsHtml = StudioResponseBank.wantsHtmlArtifact(userInput);
     final now = DateTime.now();
@@ -241,13 +297,8 @@ class MockChatService implements ChatService {
 
     if (wantsHtml) {
       var content = StudioResponseBank.htmlArtifactContent(userInput);
-      if (embedPhotoCount != null) {
-        final seed = StudioResponseBank.seedFromString(userInput);
-        final images = await Future.wait([
-          for (var i = 0; i < embedPhotoCount; i++)
-            rasterizeGradientArt(seed: seed + i),
-        ]);
-        content = embedImageGallery(content, images, altText: userInput);
+      if (pageContributors.isNotEmpty) {
+        content = await _assembleMockPage(userInput, pageContributors);
       }
       controller.add(ArtifactCreated(Artifact(
         id: _uuid.v4(),

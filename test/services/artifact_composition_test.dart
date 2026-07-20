@@ -107,54 +107,17 @@ void main() {
     });
   });
 
-  group('wantsCodeAndImageStudios', () {
-    final noArtifacts = _withArtifacts(const []);
-    final withArtifact = _withArtifacts([_htmlArtifact()]);
-
-    test('a fresh page request that also wants photos wants both studios',
-        () {
-      expect(
-        wantsCodeAndImageStudios(
-            noArtifacts, 'build me a dog treat website with several photos'),
-        isTrue,
-      );
+  group('referencesExistingArtifact', () {
+    test('true for "…to the website" / "…on the page" wording', () {
+      expect(referencesExistingArtifact('add a hero image to the website'),
+          isTrue);
+      expect(referencesExistingArtifact('put a photo on the page'), isTrue);
     });
 
-    test('a plain page request without any visual keyword wants only code',
-        () {
+    test('false for a fresh build description', () {
       expect(
-        wantsCodeAndImageStudios(
-            noArtifacts, 'build me a landing page for my bakery'),
-        isFalse,
-      );
-    });
-
-    test('a standalone image request without a page keyword wants only '
-        'image', () {
-      expect(wantsCodeAndImageStudios(noArtifacts, 'make me a logo'), isFalse);
-    });
-
-    test('a non-page, non-image request wants neither', () {
-      expect(
-        wantsCodeAndImageStudios(noArtifacts, 'write a python function'),
-        isFalse,
-      );
-    });
-
-    test('stays false once an HTML artifact already exists — that\'s an '
-        'edit, handled by findArtifactCompositionTarget instead', () {
-      expect(
-        wantsCodeAndImageStudios(
-            withArtifact, 'build me a dog treat website with several photos'),
-        isFalse,
-      );
-    });
-
-    test('stays false for "add a hero image to the website" even with no '
-        'artifact yet — the wording refers to an existing site, not a new '
-        'build', () {
-      expect(
-        wantsCodeAndImageStudios(noArtifacts, 'add a hero image to the website'),
+        referencesExistingArtifact(
+            'build me a dog treat website with several photos'),
         isFalse,
       );
     });

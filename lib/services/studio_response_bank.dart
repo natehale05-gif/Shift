@@ -169,17 +169,50 @@ class StudioResponseBank {
       'Done — the new image is live in "$artifactTitle" as a new version. '
       'Ask for a different image or position anytime.';
 
-  /// Intro for a fresh request that spans Code and Image Studio in one
-  /// turn — e.g. "build me a dog treat website with several photos" —
-  /// rather than one studio now and a follow-up composition later.
-  static String codeAndImageIntro(String input) =>
-      'Routing this to Code Studio to build "$input" — and to Image '
-      'Studio for the photos to fill it in.';
+  /// Intro for a fresh page that several studios build together in one
+  /// turn — e.g. "build me a dog treat website with several photos and a
+  /// soundtrack" — naming the contributor studios pulled in.
+  static String pageAssemblyIntro(String input, List<String> contributors) {
+    final names = _joinNames(contributors);
+    return 'Routing this to Code Studio to build "$input" — and pulling in '
+        '$names to fill it in.';
+  }
 
-  static String codeAndImageFollowUp(int photoCount) =>
-      'Here\'s a first pass below, with $photoCount '
-      '${photoCount == 1 ? 'photo' : 'photos'} from Image Studio already '
-      'in place. Ask for different visuals or copy anytime.';
+  static String pageAssemblyFollowUp(List<String> contributors) {
+    final n = contributors.length;
+    return 'Here\'s a first pass below, assembled with Code Studio and '
+        '$n other ${n == 1 ? 'studio' : 'studios'} '
+        '(${_joinNames(contributors)}) already in place. Ask for different '
+        'visuals, copy, or audio anytime.';
+  }
+
+  static String _joinNames(List<String> names) {
+    if (names.isEmpty) return 'the right studios';
+    if (names.length == 1) return names.single;
+    if (names.length == 2) return '${names[0]} and ${names[1]}';
+    return '${names.sublist(0, names.length - 1).join(', ')}, and ${names.last}';
+  }
+
+  /// Deterministic landing-page copy (headline / body / CTA) for the mock's
+  /// Copy & Scripts contributor. Structural record type so it's assignable to
+  /// `PageCopy` without importing studio_composition (which would cycle).
+  static ({String headline, String body, String cta}) pageCopy(String prompt) {
+    final subject = prompt.trim().isEmpty ? 'Your brand' : prompt.trim();
+    final seed = seedFromString(subject);
+    const headlines = [
+      'Made for the way you live.',
+      'The upgrade you didn\'t know you needed.',
+      'Simple, honest, and yours.',
+      'Everything you love, nothing you don\'t.',
+    ];
+    const ctas = ['Get started', 'Shop now', 'Join today', 'Learn more'];
+    return (
+      headline: headlines[seed % headlines.length],
+      body: '$subject — crafted with care and ready when you are. '
+          'Thousands already made the shift; you\'re next.',
+      cta: ctas[(seed ~/ 7) % ctas.length],
+    );
+  }
 
   static int seedFromString(String input) => input.codeUnits.fold<int>(
         7,

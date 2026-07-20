@@ -12,6 +12,7 @@ import '../models/studio_request.dart';
 import '../models/studio_type.dart';
 import '../state/api_keys_store.dart';
 import 'artifact_composition.dart';
+import 'audio_synth_service.dart';
 import 'chat_service.dart';
 import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
@@ -159,10 +160,14 @@ class RealChatService implements ChatService {
         hasGemini: keys.hasGeminiKey,
       );
 
+      final pageContributors = plan.kind == CompositionKind.pageAssembly
+          ? plan.contributors
+          : const <StudioType>{};
+
       switch (executor) {
         case Executor.anthropic:
           await _runAnthropicChat(controller, conversation, userInput,
-              attachments, options, route, wantsBoth);
+              attachments, options, route, pageContributors);
         case Executor.gemini:
           if (route == ChatRoute.imageGen) {
             await _runGeminiImageWithClarification(
@@ -415,7 +420,7 @@ class RealChatService implements ChatService {
     List<Attachment> attachments,
     ChatOptions options,
     ChatRoute route,
-    bool wantsCodeAndImage,
+    Set<StudioType> pageContributors,
   ) async {
     controller.add(RoutingDetected(route.studioType));
 
@@ -451,11 +456,14 @@ class RealChatService implements ChatService {
           var artifact =
               extractCodeArtifact(buffer.toString(), conversation.id);
           if (artifact != null) {
-            if (wantsCodeAndImage && artifact.kind == ArtifactKind.html) {
-              // Claude built the page; now Image Studio supplies the
-              // photos for it, woven in before the artifact ever reaches
-              // the UI — both studios contributing to the one turn.
-              artifact = await _embedPhotosIntoArtifact(artifact, userInput);
+            if (pageContributors.isNotEmpty &&
+                artifact.kind == ArtifactKind.html) {
+              // Claude built the page; now the other studios supply its
+              // photos, soundtrack/voiceover, and video — woven in before
+              // the artifact ever reaches the UI, all contributing to the
+              // one turn. (Copy is already Claude's own on the page.)
+              artifact = await _assembleContributions(
+                  artifact, userInput, pageContributors);
             }
             controller.add(ArtifactCreated(artifact));
           }
@@ -465,21 +473,49 @@ class RealChatService implements ChatService {
     }
   }
 
-  /// Fills a freshly built HTML artifact with generated photos: real
-  /// Gemini images when a Google key exists, otherwise the same
-  /// procedurally rasterized art the mock uses, so the page is never left
-  /// without visuals just because only an Anthropic key was configured.
-  Future<Artifact> _embedPhotosIntoArtifact(
+  /// Weaves each contributor studio's output into a freshly built HTML page:
+  /// photos (real Gemini when a Google key exists, else the same procedural
+  /// art the mock uses, so the page is never left without visuals), a
+  /// synthesized soundtrack/voiceover player, and a video block. Copy is not
+  /// embedded here — the live model wrote the page's own copy. Inserted in
+  /// reverse display order so the page reads gallery -> audio -> video.
+  Future<Artifact> _assembleContributions(
     Artifact artifact,
     String userInput,
+    Set<StudioType> contributors,
   ) async {
-    final count = photoCountHint(userInput);
-    final images = keys.hasGeminiKey
-        ? await _generateGeminiPhotos(userInput, count)
-        : await _generateProceduralPhotos(userInput, count);
-    if (images.isEmpty) return artifact;
-    final html =
-        embedImageGallery(artifact.latest.content, images, altText: userInput);
+    final seed = StudioResponseBank.seedFromString(userInput);
+    var html = artifact.latest.content;
+
+    if (contributors.contains(StudioType.videoStudio)) {
+      final poster = await rasterizeGradientArt(seed: seed + 100);
+      html = embedVideoBlock(html, poster, label: userInput);
+    }
+    if (contributors.contains(StudioType.musicStudio)) {
+      html = embedAudioPlayer(
+        html,
+        AudioSynthService.synthesizeWav(
+            seed: seed, durationSec: 20, bpm: 100, speechLike: false),
+        label: 'Soundtrack',
+      );
+    } else if (contributors.contains(StudioType.voiceAvatarStudio)) {
+      html = embedAudioPlayer(
+        html,
+        AudioSynthService.synthesizeWav(
+            seed: seed, durationSec: 8, bpm: 100, speechLike: true),
+        label: 'Voiceover',
+      );
+    }
+    if (contributors.contains(StudioType.imageStudio)) {
+      final count = photoCountHint(userInput);
+      final images = keys.hasGeminiKey
+          ? await _generateGeminiPhotos(userInput, count)
+          : await _generateProceduralPhotos(userInput, count);
+      if (images.isNotEmpty) {
+        html = embedImageGallery(html, images, altText: userInput);
+      }
+    }
+
     return Artifact(
       id: artifact.id,
       conversationId: artifact.conversationId,

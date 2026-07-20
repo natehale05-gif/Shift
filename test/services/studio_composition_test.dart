@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/models/artifact.dart';
 import 'package:shift_ai/models/conversation.dart';
@@ -97,6 +100,109 @@ void main() {
         'add more photos to the website',
       );
       expect(plan.kind, CompositionKind.editArtifact);
+    });
+
+    test('a page request that names a non-image contributor is page '
+        'assembly too', () {
+      final plan = planComposition(
+        _convo(),
+        'build me a bakery website with a soundtrack and a headline',
+      );
+      expect(plan.kind, CompositionKind.pageAssembly);
+      expect(plan.contributors, contains(StudioType.musicStudio));
+      expect(plan.contributors, contains(StudioType.copyScriptsStudio));
+      expect(plan.contributors, isNot(contains(StudioType.videoStudio)));
+    });
+
+    test('"add a hero image to the website" with no artifact yet is NOT a '
+        'fresh page build — the wording refers to an existing site', () {
+      final plan =
+          planComposition(_convo(), 'add a hero image to the website');
+      expect(plan.kind, CompositionKind.none);
+    });
+  });
+
+  group('embedCopyIntoPage', () {
+    const template = '<!DOCTYPE html><html><body><main class="hero">'
+        '<h1>Old Title</h1><p>Old body copy here.</p>'
+        '<a class="cta" href="#">Get started</a></main></body></html>';
+
+    test('replaces hero headline, body, and CTA text', () {
+      final out = embedCopyIntoPage(template,
+          headline: 'Fresh Bakes Daily',
+          body: 'Northbound Bakery, reimagined.',
+          cta: 'Order now');
+      expect(out, contains('<h1>Fresh Bakes Daily</h1>'));
+      expect(out, contains('<p>Northbound Bakery, reimagined.</p>'));
+      expect(out, contains('>Order now</a>'));
+      expect(out, isNot(contains('Old Title')));
+      expect(out, isNot(contains('Old body copy')));
+    });
+
+    test('is a no-op when the piece is not present (a page with no hero)', () {
+      const fragment = '<body><section>hi</section></body>';
+      expect(embedCopyIntoPage(fragment, headline: 'x'), fragment);
+    });
+
+    test('escapes HTML in the copy', () {
+      final out = embedCopyIntoPage(template, headline: 'Tom & <Jerry>');
+      expect(out, contains('Tom &amp; &lt;Jerry&gt;'));
+    });
+  });
+
+  group('embedAudioPlayer / embedVideoBlock', () {
+    final bytes = Uint8List.fromList([1, 2, 3, 4]);
+    const html = '<!DOCTYPE html><html><body><h1>Hi</h1></body></html>';
+
+    test('audio player embeds a controllable WAV data URI', () {
+      final out = embedAudioPlayer(html, bytes, label: 'Bakery theme');
+      expect(out, contains('<audio controls'));
+      expect(out, contains('data:audio/wav;base64,${base64Encode(bytes)}'));
+      expect(out, contains('Bakery theme'));
+      // Inserted right after <body>, before the existing content.
+      expect(out.indexOf('<audio'), lessThan(out.indexOf('<h1>')));
+    });
+
+    test('video block embeds a poster image + simulated-video caption', () {
+      final out = embedVideoBlock(html, bytes, label: 'Promo');
+      expect(out, contains('data:image/png;base64,${base64Encode(bytes)}'));
+      expect(out, contains('Simulated video · Promo'));
+      expect(out.indexOf('<figure'), lessThan(out.indexOf('<h1>')));
+    });
+  });
+
+  group('assemblePage', () {
+    const template = '<!DOCTYPE html><html><body><main class="hero">'
+        '<h1>Old</h1><p>Old.</p><a class="cta" href="#">Go</a>'
+        '</main></body></html>';
+    final img = Uint8List.fromList([9, 9]);
+    final wav = Uint8List.fromList([8, 8]);
+    final poster = Uint8List.fromList([7, 7]);
+
+    test('weaves every contributor into one page, gallery on top', () {
+      final out = assemblePage(
+        template,
+        images: [img, img],
+        copy: (headline: 'New Title', body: 'New body.', cta: 'Buy'),
+        audioWav: wav,
+        videoPoster: poster,
+      );
+      expect(out, contains('<h1>New Title</h1>'));
+      expect(out, contains('<audio controls'));
+      expect(out, contains('Simulated video'));
+      expect('<img'.allMatches(out).length, 3); // 2 gallery + 1 video poster
+      // Display order after <body>: gallery, audio, video.
+      expect(out.indexOf('grid-template-columns'),
+          lessThan(out.indexOf('<audio')));
+      expect(out.indexOf('<audio'), lessThan(out.indexOf('Simulated video')));
+    });
+
+    test('embeds only the contributors provided', () {
+      final out = assemblePage(template, audioWav: wav);
+      expect(out, contains('<audio controls'));
+      expect(out.contains('<img'), isFalse);
+      expect(out.contains('Simulated video'), isFalse);
+      expect(out, contains('<h1>Old</h1>')); // copy untouched
     });
   });
 }

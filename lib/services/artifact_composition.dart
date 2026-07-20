@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import '../models/artifact.dart';
 import '../models/conversation.dart';
-import 'studio_response_bank.dart';
 
 const _imageKeywords = [
   'image', 'photo', 'picture', 'logo', 'graphic', 'illustration',
@@ -66,24 +65,13 @@ String embedImageAsHero(
   return '${html.substring(0, insertAt)}\n$imgTag${html.substring(insertAt)}';
 }
 
-/// Detects "build me a dog treat website with several photos" style
-/// requests: a fresh prompt that wants Code Studio to build a page AND
-/// Image Studio to supply visuals for it, in the same turn — two studios
-/// working the request together rather than one studio, then a follow-up
-/// asking for the other.
-///
-/// Deliberately mutually exclusive with [findArtifactCompositionTarget]:
-/// once an HTML artifact already exists, or the prompt reads as referring
-/// to one ("add a hero image to the website"), this returns false and that
-/// edit-into-an-existing-artifact path handles it instead — otherwise both
-/// would fire on the same "website" + "image" wording.
-bool wantsCodeAndImageStudios(Conversation conversation, String input) {
-  if (latestHtmlArtifact(conversation) != null) return false;
+/// Whether the prompt reads as referring to an artifact that already exists
+/// ("add a hero image **to the website**"), as opposed to describing a fresh
+/// build. Used to keep the edit path and the fresh page-assembly path
+/// mutually exclusive on the same "website" + "image" wording.
+bool referencesExistingArtifact(String input) {
   final lower = input.toLowerCase();
-  if (_artifactReferenceKeywords.any(lower.contains)) return false;
-  final wantsPage = StudioResponseBank.wantsHtmlArtifact(input);
-  final wantsImages = _imageKeywords.any(lower.contains);
-  return wantsPage && wantsImages;
+  return _artifactReferenceKeywords.any(lower.contains);
 }
 
 /// How many images a combined build request wants: an explicit count
