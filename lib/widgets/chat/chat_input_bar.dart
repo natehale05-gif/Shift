@@ -4,7 +4,6 @@ import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../models/attachment.dart';
-import '../../models/studio_type.dart';
 import 'dart:async';
 
 import '../../screens/chat/live_voice_overlay.dart';
@@ -19,13 +18,12 @@ import '../../state/project_store.dart';
 import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
-import 'studio_request_sheets.dart';
 
 const _uuid = Uuid();
 
 /// Claude-style composer: a single rounded card holding the text field with
-/// a row of controls beneath it — studios behind the "+" menu, a model chip,
-/// and a circular purple send button.
+/// a row of controls beneath it — an attach button, a model chip, and a
+/// circular purple send button.
 class ChatInputBar extends StatefulWidget {
   const ChatInputBar({super.key});
 
@@ -41,22 +39,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   /// Exact model id pinned from the model chip; null = auto-route.
   String? _modelPin;
-  bool _webSearchEnabled = false;
-  bool _codeExecutionEnabled = false;
-  bool _deepResearchEnabled = false;
 
   bool _listening = false;
   StreamSubscription<SpeechResult>? _speechSubscription;
   String _textBeforeDictation = '';
-
-  static const _studios = [
-    StudioType.imageStudio,
-    StudioType.videoStudio,
-    StudioType.voiceAvatarStudio,
-    StudioType.musicStudio,
-    StudioType.copyScriptsStudio,
-    StudioType.codeStudio,
-  ];
 
   @override
   void initState() {
@@ -79,9 +65,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
             projects.activeProject;
     return ChatOptions(
       modelPin: _modelPin,
-      webSearch: _webSearchEnabled,
-      codeExecution: _codeExecutionEnabled,
-      deepResearch: _deepResearchEnabled,
       systemPrompt: assembleSystemPrompt(
         nickname: prefs.nickname,
         responseStyle: prefs.responseStyle,
@@ -141,14 +124,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
       'pdf' => 'application/pdf',
       _ => 'text/plain',
     };
-  }
-
-  Future<void> _openStudioSheet(StudioType studioType) async {
-    final request = await showStudioRequestSheet(context, studioType);
-    if (request == null || !mounted) return;
-    context
-        .read<ConversationStore>()
-        .sendMessage('', structuredRequest: request);
   }
 
   void _toggleDictation() {
@@ -278,60 +253,11 @@ class _ChatInputBarState extends State<ChatInputBar> {
                 ),
                 Row(
                   children: [
-                    _StudioMenuButton(onSelected: _openStudioSheet),
                     IconButton(
                       tooltip: 'Attach images, PDFs, or text files',
                       icon: const Icon(Icons.attach_file_rounded, size: 20),
                       color: colors.textSecondary,
                       onPressed: _pickFiles,
-                    ),
-                    PopupMenuButton<String>(
-                      tooltip: 'Tools',
-                      position: PopupMenuPosition.over,
-                      shape: RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(AppSpacing.radiusMd),
-                      ),
-                      icon: Icon(
-                        Icons.tune_rounded,
-                        size: 20,
-                        color: _webSearchEnabled || _codeExecutionEnabled
-                            ? theme.colorScheme.primary
-                            : colors.textSecondary,
-                      ),
-                      onSelected: (value) => setState(() {
-                        if (value == 'web') {
-                          _webSearchEnabled = !_webSearchEnabled;
-                        } else if (value == 'code') {
-                          _codeExecutionEnabled = !_codeExecutionEnabled;
-                        }
-                      }),
-                      itemBuilder: (context) => [
-                        CheckedPopupMenuItem(
-                          value: 'web',
-                          checked: _webSearchEnabled,
-                          child: const Text('Web search'),
-                        ),
-                        CheckedPopupMenuItem(
-                          value: 'code',
-                          checked: _codeExecutionEnabled,
-                          child: const Text('Run code (server)'),
-                        ),
-                      ],
-                    ),
-                    IconButton(
-                      tooltip: _deepResearchEnabled
-                          ? 'Deep Research is on for the next message'
-                          : 'Deep Research: multi-round searched, cited '
-                              'report (simulated until a key is added)',
-                      icon: const Icon(Icons.travel_explore_rounded,
-                          size: 20),
-                      color: _deepResearchEnabled
-                          ? theme.colorScheme.primary
-                          : colors.textSecondary,
-                      onPressed: () => setState(
-                        () => _deepResearchEnabled = !_deepResearchEnabled,
-                      ),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     _ModelChip(
@@ -393,41 +319,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// The "+" menu: structured studio requests (attachments join this menu in a
-/// later phase, matching the Claude composer's plus menu).
-class _StudioMenuButton extends StatelessWidget {
-  final ValueChanged<StudioType> onSelected;
-
-  const _StudioMenuButton({required this.onSelected});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppSemanticColors>()!;
-    return PopupMenuButton<StudioType>(
-      tooltip: 'Studios',
-      position: PopupMenuPosition.over,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
-      ),
-      icon: Icon(Icons.add_rounded, color: colors.textSecondary),
-      onSelected: onSelected,
-      itemBuilder: (context) => [
-        for (final studio in _ChatInputBarState._studios)
-          PopupMenuItem(
-            value: studio,
-            child: Row(
-              children: [
-                Icon(studio.icon, size: 18, color: studio.accent),
-                const SizedBox(width: AppSpacing.md),
-                Text(studio.shortName),
-              ],
-            ),
-          ),
-      ],
     );
   }
 }

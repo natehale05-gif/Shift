@@ -268,8 +268,7 @@ class _EmptyState extends StatelessWidget {
               const SizedBox(height: AppSpacing.sm),
               Text(
                 'Talk to SHIFT AI like you would a person — it routes your '
-                'request to the right specialized studio automatically, or '
-                'pick a studio from the + menu below.',
+                'request to the right specialized studio automatically.',
                 style: theme.textTheme.bodyMedium,
                 textAlign: TextAlign.center,
               ),
