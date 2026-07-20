@@ -15,6 +15,7 @@ import 'artifact_composition.dart';
 import 'chat_service.dart';
 import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
+import 'procedural_art.dart';
 import 'providers/anthropic_api_config.dart';
 import 'providers/anthropic_client.dart';
 import 'providers/anthropic_tools.dart';
@@ -129,15 +130,24 @@ class RealChatService implements ChatService {
       // mock or a live provider (both end their questions with '?').
       final pending = findPendingClarification(conversation);
 
+      // "Build me a dog treat website with several photos": force Code
+      // Studio directly rather than trusting the classifier/keyword
+      // fallback to prefer it over the image keywords in the same prompt —
+      // _runAnthropicChat below embeds the photos once the page exists.
+      final wantsBoth =
+          pending == null && wantsCodeAndImageStudios(conversation, userInput);
+
       final route = options.modelPin != null
           ? ChatRoute.chat // an explicit model pin bypasses routing
           : pending != null
               ? routeForStudio(pending.$1)
-              : await _router.route(
-                  input: userInput,
-                  anthropicKey: keys.anthropicKey,
-                  geminiKey: keys.geminiKey,
-                );
+              : wantsBoth
+                  ? ChatRoute.code
+                  : await _router.route(
+                      input: userInput,
+                      anthropicKey: keys.anthropicKey,
+                      geminiKey: keys.geminiKey,
+                    );
 
       final executor = chooseExecutor(
         route,
@@ -147,8 +157,8 @@ class RealChatService implements ChatService {
 
       switch (executor) {
         case Executor.anthropic:
-          await _runAnthropicChat(
-              controller, conversation, userInput, attachments, options, route);
+          await _runAnthropicChat(controller, conversation, userInput,
+              attachments, options, route, wantsBoth);
         case Executor.gemini:
           if (route == ChatRoute.imageGen) {
             await _runGeminiImageWithClarification(
@@ -401,6 +411,7 @@ class RealChatService implements ChatService {
     List<Attachment> attachments,
     ChatOptions options,
     ChatRoute route,
+    bool wantsCodeAndImage,
   ) async {
     controller.add(RoutingDetected(route.studioType));
 
@@ -433,13 +444,66 @@ class RealChatService implements ChatService {
         // Code-routed replies whose fenced block is substantial also become
         // an artifact, mirroring the mock's behavior.
         if (route == ChatRoute.code) {
-          final artifact =
+          var artifact =
               extractCodeArtifact(buffer.toString(), conversation.id);
-          if (artifact != null) controller.add(ArtifactCreated(artifact));
+          if (artifact != null) {
+            if (wantsCodeAndImage && artifact.kind == ArtifactKind.html) {
+              // Claude built the page; now Image Studio supplies the
+              // photos for it, woven in before the artifact ever reaches
+              // the UI — both studios contributing to the one turn.
+              artifact = await _embedPhotosIntoArtifact(artifact, userInput);
+            }
+            controller.add(ArtifactCreated(artifact));
+          }
         }
       }
       controller.add(event);
     }
+  }
+
+  /// Fills a freshly built HTML artifact with generated photos: real
+  /// Gemini images when a Google key exists, otherwise the same
+  /// procedurally rasterized art the mock uses, so the page is never left
+  /// without visuals just because only an Anthropic key was configured.
+  Future<Artifact> _embedPhotosIntoArtifact(
+    Artifact artifact,
+    String userInput,
+  ) async {
+    final count = photoCountHint(userInput);
+    final images = keys.hasGeminiKey
+        ? await _generateGeminiPhotos(userInput, count)
+        : await _generateProceduralPhotos(userInput, count);
+    if (images.isEmpty) return artifact;
+    final html =
+        embedImageGallery(artifact.latest.content, images, altText: userInput);
+    return Artifact(
+      id: artifact.id,
+      conversationId: artifact.conversationId,
+      title: artifact.title,
+      kind: artifact.kind,
+      language: artifact.language,
+      versions: [ArtifactVersion(content: html, createdAt: DateTime.now())],
+    );
+  }
+
+  Future<List<Uint8List>> _generateGeminiPhotos(
+      String prompt, int count) async {
+    final images = <Uint8List>[];
+    for (var i = 0; i < count; i++) {
+      await for (final event
+          in _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt)) {
+        if (event is ImageGenerated) images.add(event.pngBytes);
+      }
+    }
+    return images;
+  }
+
+  Future<List<Uint8List>> _generateProceduralPhotos(
+      String prompt, int count) async {
+    final seed = StudioResponseBank.seedFromString(prompt);
+    return Future.wait([
+      for (var i = 0; i < count; i++) rasterizeGradientArt(seed: seed + i),
+    ]);
   }
 
   /// Pulls the first substantial fenced code block out of a completed reply

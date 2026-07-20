@@ -169,6 +169,18 @@ class StudioResponseBank {
       'Done — the new image is live in "$artifactTitle" as a new version. '
       'Ask for a different image or position anytime.';
 
+  /// Intro for a fresh request that spans Code and Image Studio in one
+  /// turn — e.g. "build me a dog treat website with several photos" —
+  /// rather than one studio now and a follow-up composition later.
+  static String codeAndImageIntro(String input) =>
+      'Routing this to Code Studio to build "$input" — and to Image '
+      'Studio for the photos to fill it in.';
+
+  static String codeAndImageFollowUp(int photoCount) =>
+      'Here\'s a first pass below, with $photoCount '
+      '${photoCount == 1 ? 'photo' : 'photos'} from Image Studio already '
+      'in place. Ask for different visuals or copy anytime.';
+
   static int seedFromString(String input) => input.codeUnits.fold<int>(
         7,
         (acc, c) => (acc * 31 + c) & 0x7fffffff,

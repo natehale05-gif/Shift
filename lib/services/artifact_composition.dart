@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../models/artifact.dart';
 import '../models/conversation.dart';
+import 'studio_response_bank.dart';
 
 const _imageKeywords = [
   'image', 'photo', 'picture', 'logo', 'graphic', 'illustration',
@@ -63,4 +64,70 @@ String embedImageAsHero(
   }
   final insertAt = bodyMatch.end;
   return '${html.substring(0, insertAt)}\n$imgTag${html.substring(insertAt)}';
+}
+
+/// Detects "build me a dog treat website with several photos" style
+/// requests: a fresh prompt that wants Code Studio to build a page AND
+/// Image Studio to supply visuals for it, in the same turn — two studios
+/// working the request together rather than one studio, then a follow-up
+/// asking for the other.
+///
+/// Deliberately mutually exclusive with [findArtifactCompositionTarget]:
+/// once an HTML artifact already exists, or the prompt reads as referring
+/// to one ("add a hero image to the website"), this returns false and that
+/// edit-into-an-existing-artifact path handles it instead — otherwise both
+/// would fire on the same "website" + "image" wording.
+bool wantsCodeAndImageStudios(Conversation conversation, String input) {
+  if (latestHtmlArtifact(conversation) != null) return false;
+  final lower = input.toLowerCase();
+  if (_artifactReferenceKeywords.any(lower.contains)) return false;
+  final wantsPage = StudioResponseBank.wantsHtmlArtifact(input);
+  final wantsImages = _imageKeywords.any(lower.contains);
+  return wantsPage && wantsImages;
+}
+
+/// How many images a combined build request wants: an explicit count
+/// ("3 photos") wins; vague plurals ("several", "photos") default to a
+/// small gallery; a singular mention ("a logo") wants just one.
+int photoCountHint(String input) {
+  final lower = input.toLowerCase();
+  final numMatch = RegExp(r'\b(\d+)\s*(photos?|images?|pictures?|logos?)\b')
+      .firstMatch(lower);
+  if (numMatch != null) {
+    return int.parse(numMatch.group(1)!).clamp(1, 6);
+  }
+  if (RegExp(r'\b(several|multiple|many)\b').hasMatch(lower)) return 3;
+  if (RegExp(r'\b(a few|couple)\b').hasMatch(lower)) return 2;
+  if (RegExp(r'\b(photos|images|pictures|logos)\b').hasMatch(lower)) return 3;
+  return 1;
+}
+
+/// Splices multiple generated images into an HTML artifact as a simple
+/// responsive gallery grid, right after the opening `<body>` tag — the
+/// multi-image counterpart to [embedImageAsHero] (which this delegates to
+/// for a single image, so both share one insertion point).
+String embedImageGallery(
+  String html,
+  List<Uint8List> images, {
+  String altText = 'Generated image',
+}) {
+  if (images.length == 1) {
+    return embedImageAsHero(html, images.single, altText: altText);
+  }
+  final safeAlt = altText.replaceAll('"', "'");
+  final tiles = images
+      .map((bytes) =>
+          '<img src="data:image/png;base64,${base64Encode(bytes)}" '
+          'alt="$safeAlt" style="width:100%;aspect-ratio:1;object-fit:cover;'
+          'border-radius:12px;" />')
+      .join();
+  final galleryHtml = '<div style="display:grid;'
+      'grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));'
+      'gap:16px;max-width:960px;margin:0 auto 24px;padding:0 24px;">'
+      '$tiles</div>';
+  final bodyMatch =
+      RegExp(r'<body[^>]*>', caseSensitive: false).firstMatch(html);
+  if (bodyMatch == null) return '$galleryHtml\n$html';
+  final insertAt = bodyMatch.end;
+  return '${html.substring(0, insertAt)}\n$galleryHtml${html.substring(insertAt)}';
 }

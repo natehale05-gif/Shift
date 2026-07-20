@@ -56,9 +56,17 @@ class MockChatService implements ChatService {
       final pending = structuredRequest == null
           ? findPendingClarification(conversation)
           : null;
-      final studio = structuredRequest?.studioType ??
-          pending?.$1 ??
-          StudioResponseBank.detectStudio(userInput);
+      // "Build me a dog treat website with several photos": a fresh
+      // request that wants Code Studio and Image Studio working together
+      // in one turn, not one studio now and a follow-up composition later.
+      final wantsBoth = structuredRequest == null &&
+          pending == null &&
+          wantsCodeAndImageStudios(conversation, userInput);
+      final studio = wantsBoth
+          ? StudioType.codeStudio
+          : (structuredRequest?.studioType ??
+              pending?.$1 ??
+              StudioResponseBank.detectStudio(userInput));
       final effectiveInput =
           pending != null ? '${pending.$2} $userInput'.trim() : userInput;
 
@@ -98,8 +106,16 @@ class MockChatService implements ChatService {
                 studio == StudioType.imageStudio
             ? findArtifactCompositionTarget(conversation, effectiveInput)
             : null;
-        await _runStudioFlow(controller, conversation, studio, effectiveInput,
-            structuredRequest, pending != null, composeTarget);
+        await _runStudioFlow(
+          controller,
+          conversation,
+          studio,
+          effectiveInput,
+          structuredRequest,
+          pending != null,
+          composeTarget,
+          wantsBoth ? photoCountHint(userInput) : null,
+        );
       }
 
       controller.add(UsageReported(UsageReport(
@@ -123,8 +139,12 @@ class MockChatService implements ChatService {
     StudioRequest? structuredRequest,
     bool isAnsweringClarification,
     Artifact? composeTarget,
+    int? embedPhotoCount,
   ) async {
-    if (composeTarget != null) {
+    if (embedPhotoCount != null) {
+      await _streamText(
+          controller, StudioResponseBank.codeAndImageIntro(userInput));
+    } else if (composeTarget != null) {
       await _streamText(
           controller, StudioResponseBank.compositionIntro(composeTarget.title));
     } else if (studio != StudioType.middleware && isAnsweringClarification) {
@@ -160,14 +180,17 @@ class MockChatService implements ChatService {
     } else if (studio == StudioType.codeStudio) {
       // Code output ships as an artifact (side panel), not an inline card —
       // the artifact IS the deliverable, with copy/download/versions there.
-      _emitCodeArtifact(controller, conversation, userInput, result);
+      await _emitCodeArtifact(controller, conversation, userInput, result,
+          embedPhotoCount: embedPhotoCount);
     } else {
       controller.add(StudioResultReady(result));
     }
 
-    final followUp = composeTarget != null
-        ? StudioResponseBank.compositionFollowUp(composeTarget.title)
-        : StudioResponseBank.studioFollowUp(studio);
+    final followUp = embedPhotoCount != null
+        ? StudioResponseBank.codeAndImageFollowUp(embedPhotoCount)
+        : composeTarget != null
+            ? StudioResponseBank.compositionFollowUp(composeTarget.title)
+            : StudioResponseBank.studioFollowUp(studio);
     if (followUp.isNotEmpty) {
       await _streamText(controller, '\n\n$followUp');
     }
@@ -191,12 +214,16 @@ class MockChatService implements ChatService {
   /// page-shaped prompts, otherwise the generated code file. A follow-up
   /// code prompt in a conversation that already has an artifact revises it
   /// (new version) instead of creating a fresh one — the artifacts model.
-  void _emitCodeArtifact(
+  /// [embedPhotoCount] set means Image Studio ran alongside Code Studio on
+  /// this same request — its photos are woven into the page before the
+  /// artifact is even created, rather than added in a later turn.
+  Future<void> _emitCodeArtifact(
     StreamController<ChatEvent> controller,
     Conversation conversation,
     String userInput,
-    StudioResult result,
-  ) {
+    StudioResult result, {
+    int? embedPhotoCount,
+  }) async {
     final wantsHtml = StudioResponseBank.wantsHtmlArtifact(userInput);
     final now = DateTime.now();
 
@@ -212,16 +239,22 @@ class MockChatService implements ChatService {
     }
 
     if (wantsHtml) {
+      var content = StudioResponseBank.htmlArtifactContent(userInput);
+      if (embedPhotoCount != null) {
+        final seed = StudioResponseBank.seedFromString(userInput);
+        final images = await Future.wait([
+          for (var i = 0; i < embedPhotoCount; i++)
+            rasterizeGradientArt(seed: seed + i),
+        ]);
+        content = embedImageGallery(content, images, altText: userInput);
+      }
       controller.add(ArtifactCreated(Artifact(
         id: _uuid.v4(),
         conversationId: conversation.id,
         title: userInput.trim(),
         kind: ArtifactKind.html,
         versions: [
-          ArtifactVersion(
-            content: StudioResponseBank.htmlArtifactContent(userInput),
-            createdAt: now,
-          ),
+          ArtifactVersion(content: content, createdAt: now),
         ],
       )));
     } else if (result is CodeResult) {

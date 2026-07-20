@@ -106,4 +106,123 @@ void main() {
       expect(result, contains("a 'quoted' alt"));
     });
   });
+
+  group('wantsCodeAndImageStudios', () {
+    final noArtifacts = _withArtifacts(const []);
+    final withArtifact = _withArtifacts([_htmlArtifact()]);
+
+    test('a fresh page request that also wants photos wants both studios',
+        () {
+      expect(
+        wantsCodeAndImageStudios(
+            noArtifacts, 'build me a dog treat website with several photos'),
+        isTrue,
+      );
+    });
+
+    test('a plain page request without any visual keyword wants only code',
+        () {
+      expect(
+        wantsCodeAndImageStudios(
+            noArtifacts, 'build me a landing page for my bakery'),
+        isFalse,
+      );
+    });
+
+    test('a standalone image request without a page keyword wants only '
+        'image', () {
+      expect(wantsCodeAndImageStudios(noArtifacts, 'make me a logo'), isFalse);
+    });
+
+    test('a non-page, non-image request wants neither', () {
+      expect(
+        wantsCodeAndImageStudios(noArtifacts, 'write a python function'),
+        isFalse,
+      );
+    });
+
+    test('stays false once an HTML artifact already exists — that\'s an '
+        'edit, handled by findArtifactCompositionTarget instead', () {
+      expect(
+        wantsCodeAndImageStudios(
+            withArtifact, 'build me a dog treat website with several photos'),
+        isFalse,
+      );
+    });
+
+    test('stays false for "add a hero image to the website" even with no '
+        'artifact yet — the wording refers to an existing site, not a new '
+        'build', () {
+      expect(
+        wantsCodeAndImageStudios(noArtifacts, 'add a hero image to the website'),
+        isFalse,
+      );
+    });
+  });
+
+  group('photoCountHint', () {
+    test('an explicit count wins', () {
+      expect(photoCountHint('a website with 5 photos'), 5);
+    });
+
+    test('clamps an absurd explicit count', () {
+      expect(photoCountHint('a website with 99 photos'), 6);
+    });
+
+    test('"several"/"multiple"/"many" default to a small gallery', () {
+      expect(photoCountHint('a website with several photos'), 3);
+      expect(photoCountHint('a website with multiple images'), 3);
+    });
+
+    test('"a few"/"couple" default to two', () {
+      expect(photoCountHint('a website with a few photos'), 2);
+      expect(photoCountHint('a website with a couple pictures'), 2);
+    });
+
+    test('a bare plural with no qualifier defaults to a small gallery', () {
+      expect(photoCountHint('a website with photos'), 3);
+    });
+
+    test('a singular mention wants just one', () {
+      expect(photoCountHint('a website with a logo'), 1);
+      expect(photoCountHint('add a hero image'), 1);
+    });
+  });
+
+  group('embedImageGallery', () {
+    final images = [
+      Uint8List.fromList([1, 2]),
+      Uint8List.fromList([3, 4]),
+      Uint8List.fromList([5, 6]),
+    ];
+
+    test('delegates to embedImageAsHero for a single image', () {
+      const html = '<body><h1>Hi</h1></body>';
+      final gallery = embedImageGallery(html, [images.first], altText: 'x');
+      final hero = embedImageAsHero(html, images.first, altText: 'x');
+      expect(gallery, hero);
+    });
+
+    test('embeds one <img> per photo for multiple images', () {
+      const html = '<!DOCTYPE html><html><body><h1>Treats</h1></body></html>';
+      final result = embedImageGallery(html, images, altText: 'Dog treats');
+      expect('<img'.allMatches(result).length, images.length);
+      for (final bytes in images) {
+        expect(
+          result,
+          contains('data:image/png;base64,${base64Encode(bytes)}'),
+        );
+      }
+    });
+
+    test('inserts the gallery before existing body content', () {
+      const html = '<body><h1>Treats</h1></body>';
+      final result = embedImageGallery(html, images, altText: 'x');
+      final bodyIndex = result.indexOf('<body>');
+      final galleryIndex = result.indexOf('<div');
+      final h1Index = result.indexOf('<h1>');
+      expect(galleryIndex, greaterThan(bodyIndex));
+      expect(galleryIndex, lessThan(h1Index));
+    });
+  });
 }
