@@ -23,7 +23,7 @@ void main() {
     final events = await _send('make a talking avatar that says hello');
 
     expect(events.whereType<RoutingDetected>().single.studioType,
-        StudioType.voiceAvatarStudio);
+        StudioType.avatarStudio);
 
     // The portrait renders as an inline image (ImageGenerated -> ImageBlock).
     final image = events.whereType<ImageGenerated>().single;

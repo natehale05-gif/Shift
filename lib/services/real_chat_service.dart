@@ -275,6 +275,16 @@ class RealChatService implements ChatService {
         return;
       }
 
+      // Avatar = a talking-head video: a real Heygen render when a Heygen key
+      // exists, else a portrait + synthesized voiceover. Reuses the
+      // talking-avatar media-pair path, attributed to the Avatar studio.
+      if (route == ChatRoute.avatar) {
+        await _runMediaPair(controller, CompositionKind.talkingAvatar, userInput,
+            studio: StudioType.avatarStudio);
+        await controller.close();
+        return;
+      }
+
       // Auto: pick the best available provider for the route's capability.
       final providerId =
           chooseProvider(route, registry: _registry, hasKey: keys.hasKey);
@@ -488,9 +498,10 @@ class RealChatService implements ChatService {
   Future<void> _runMediaPair(
     StreamController<ChatEvent> controller,
     CompositionKind kind,
-    String userInput,
-  ) async {
-    controller.add(RoutingDetected(mediaPairHost(kind)));
+    String userInput, {
+    StudioType? studio,
+  }) async {
+    controller.add(RoutingDetected(studio ?? mediaPairHost(kind)));
     controller.add(MessageDelta('${mediaPairIntro(kind)}\n\n'));
 
     // The voiceover script is written first (real) — both the Heygen render

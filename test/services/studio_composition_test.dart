@@ -185,9 +185,9 @@ void main() {
       final plan =
           planComposition(_convo(), 'make a talking avatar that says hello');
       expect(plan.kind, CompositionKind.talkingAvatar);
-      expect(plan.host, StudioType.voiceAvatarStudio);
+      expect(plan.host, StudioType.avatarStudio);
       expect(plan.contributors, containsAll(
-          [StudioType.imageStudio, StudioType.voiceAvatarStudio]));
+          [StudioType.imageStudio, StudioType.voiceStudio]));
     });
 
     test('a portrait + voiceover request is also a talking avatar', () {

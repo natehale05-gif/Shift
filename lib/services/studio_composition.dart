@@ -200,15 +200,15 @@ CompositionPlan planComposition(Conversation conversation, String input) {
   if (_wantsAvatar(input) || (hasImage && hasVoice)) {
     return const CompositionPlan(
       kind: CompositionKind.talkingAvatar,
-      host: StudioType.voiceAvatarStudio,
-      contributors: {StudioType.imageStudio, StudioType.voiceAvatarStudio},
+      host: StudioType.avatarStudio,
+      contributors: {StudioType.imageStudio, StudioType.voiceStudio},
     );
   }
   if (hasVoice && hasMusic) {
     return const CompositionPlan(
       kind: CompositionKind.scoredNarration,
-      host: StudioType.voiceAvatarStudio,
-      contributors: {StudioType.voiceAvatarStudio, StudioType.musicStudio},
+      host: StudioType.voiceStudio,
+      contributors: {StudioType.voiceStudio, StudioType.musicStudio},
     );
   }
 
@@ -305,8 +305,12 @@ bool isMediaPair(CompositionKind kind) =>
     kind == CompositionKind.talkingAvatar ||
     kind == CompositionKind.scoredNarration;
 
-/// Both media pairs lead with Voice & Avatar (the narration is the throughline).
-StudioType mediaPairHost(CompositionKind kind) => StudioType.voiceAvatarStudio;
+/// Talking-avatar leads with the Avatar studio; scored narration leads with
+/// Voice (the narration is the throughline).
+StudioType mediaPairHost(CompositionKind kind) => switch (kind) {
+      CompositionKind.talkingAvatar => StudioType.avatarStudio,
+      _ => StudioType.voiceStudio,
+    };
 
 String mediaPairIntro(CompositionKind kind) => switch (kind) {
       CompositionKind.talkingAvatar =>

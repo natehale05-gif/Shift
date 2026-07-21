@@ -114,6 +114,11 @@ class MockChatService implements ChatService {
         await _runCopyFedMedia(controller, plan.kind, effectiveInput);
       } else if (isMediaPair(plan.kind)) {
         await _runMediaPair(controller, plan.kind, effectiveInput);
+      } else if (studio == StudioType.avatarStudio) {
+        // The Avatar studio is a talking-head: a portrait + a voiceover card
+        // (a real Heygen video takes a key, wired in the live service).
+        await _runMediaPair(
+            controller, CompositionKind.talkingAvatar, effectiveInput);
       } else {
         final composeTarget =
             plan.kind == CompositionKind.editArtifact ? plan.editTarget : null;
