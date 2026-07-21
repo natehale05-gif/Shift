@@ -16,6 +16,7 @@ import '../../services/speech/speech_service.dart';
 import '../../services/web/file_intake.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/conversation_store.dart';
+import '../../state/memory_store.dart';
 import '../../state/project_store.dart';
 import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
@@ -112,6 +113,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
     final prefs = context.read<UserPrefsStore>();
     final projects = context.read<ProjectStore>();
     final store = context.read<ConversationStore>();
+    final memory = context.read<MemoryStore>();
     final project =
         projects.projectById(store.current?.projectId) ??
         projects.activeProject;
@@ -128,6 +130,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
         responseStyle: _styleOverride ?? prefs.responseStyle,
         customInstructions: prefs.customInstructions,
         project: project,
+        memories: memory.activeTexts,
       ),
     );
   }

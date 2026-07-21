@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/memory_entry.dart';
 import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
+import '../../state/memory_store.dart';
 import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
 import 'api_keys_section.dart';
@@ -45,6 +47,8 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           const _PersonalizationCard(),
+          const SizedBox(height: AppSpacing.lg),
+          const _MemoryCard(),
           const SizedBox(height: AppSpacing.lg),
           _SectionCard(
             title: 'Data',
@@ -212,6 +216,116 @@ class _PersonalizationCardState extends State<_PersonalizationCard> {
             ),
             onChanged: prefs.setCustomInstructions,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Cross-chat memory: a master switch plus the list of remembered facts, each
+/// toggleable, editable, and removable (Claude's Memory settings).
+class _MemoryCard extends StatelessWidget {
+  const _MemoryCard();
+
+  Future<void> _edit(BuildContext context, MemoryEntry entry) async {
+    final store = context.read<MemoryStore>();
+    final controller = TextEditingController(text: entry.text);
+    final text = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit memory'),
+        content: TextField(controller: controller, autofocus: true),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (text != null && text.trim().isNotEmpty) {
+      store.editEntry(entry.id, text.trim());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final memory = context.watch<MemoryStore>();
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    return _SectionCard(
+      title: 'Memory',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'SHIFT AI remembers useful facts about you across chats and '
+                  'brings them into future replies.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              Switch(value: memory.enabled, onChanged: memory.setEnabled),
+            ],
+          ),
+          if (memory.entries.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.sm),
+              child: Text(
+                'Nothing remembered yet. Tell SHIFT AI something about '
+                'yourself — like your name, where you live, or what you do — '
+                'and it\'ll appear here.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+          for (final entry in memory.entries)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Checkbox(
+                value: entry.enabled,
+                onChanged: (_) => memory.toggleEntry(entry.id),
+              ),
+              title: Text(
+                entry.text,
+                style: entry.enabled
+                    ? theme.textTheme.bodyMedium
+                    : theme.textTheme.bodyMedium
+                        ?.copyWith(color: colors.textSecondary),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Edit',
+                    iconSize: 16,
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => _edit(context, entry),
+                  ),
+                  IconButton(
+                    tooltip: 'Forget',
+                    iconSize: 16,
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => memory.removeEntry(entry.id),
+                  ),
+                ],
+              ),
+            ),
+          if (memory.entries.isNotEmpty)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: memory.clearAll,
+                icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+                label: const Text('Clear all'),
+              ),
+            ),
         ],
       ),
     );

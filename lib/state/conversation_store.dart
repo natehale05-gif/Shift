@@ -26,6 +26,10 @@ class ConversationStore extends ChangeNotifier {
   /// click anything.
   void Function(String artifactId)? onArtifactCreated;
 
+  /// Called with the user's text after a genuine user turn finishes, so the
+  /// app can extract durable facts into cross-chat memory.
+  void Function(String userText)? onUserTurnComplete;
+
   List<Conversation> _conversations = [];
   String? _currentId;
   bool _isLoaded = false;
@@ -344,6 +348,7 @@ class ConversationStore extends ChangeNotifier {
       structuredRequest: structuredRequest,
       attachments: attachments,
       options: options,
+      extractMemory: true,
     );
   }
 
@@ -357,6 +362,7 @@ class ConversationStore extends ChangeNotifier {
     StudioRequest? structuredRequest,
     List<Attachment> attachments = const [],
     ChatOptions options = ChatOptions.none,
+    bool extractMemory = false,
   }) async {
     // Cancel any prior in-flight generation before starting a new one.
     await _activeSub?.cancel();
@@ -376,6 +382,7 @@ class ConversationStore extends ChangeNotifier {
       _activeSub = null;
       _streamingConversationId = null;
       _streamingMessageId = null;
+      if (extractMemory) onUserTurnComplete?.call(userInput);
       notifyListeners();
       if (!completer.isCompleted) completer.complete();
     }

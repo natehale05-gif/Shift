@@ -21,6 +21,7 @@ class PersistenceService {
   static const _selectedTierKey = 'shift_ai.selected_tier.v1';
   static const _projectsKey = 'shift_ai.projects.v1';
   static const _activeProjectKey = 'shift_ai.active_project.v1';
+  static const _memoryKey = 'shift_ai.memory.v1';
   static const _userPrefsKey = 'shift_ai.user_prefs.v1';
   static const _migratedFlagKey = 'shift_ai.migrated_to_idb.v1';
   static const maxStoredConversations = 50;
@@ -183,6 +184,20 @@ class PersistenceService {
         _projectsKey,
         jsonEncode(projects.map((p) => p.toJson()).toList()),
       );
+
+  /// Memory blob: `{enabled: bool, entries: [...]}`.
+  Future<Map<String, dynamic>> loadMemory() async {
+    final raw = await _getKv(_memoryKey);
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  Future<void> saveMemory(Map<String, dynamic> value) =>
+      _putKv(_memoryKey, jsonEncode(value));
 
   Future<String?> loadActiveProject() => _getKv(_activeProjectKey);
 

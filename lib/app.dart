@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'screens/home_shell.dart';
+import 'services/memory_service.dart';
 import 'services/mock_chat_service.dart';
 import 'services/persistence_service.dart';
 import 'services/real_chat_service.dart';
@@ -9,6 +10,7 @@ import 'state/api_keys_store.dart';
 import 'state/app_settings_store.dart';
 import 'state/artifact_panel_store.dart';
 import 'state/conversation_store.dart';
+import 'state/memory_store.dart';
 import 'state/ecopay_calculator_store.dart';
 import 'state/project_store.dart';
 import 'state/user_prefs_store.dart';
@@ -29,6 +31,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
   late final ProjectStore _projectStore;
   late final UserPrefsStore _userPrefsStore;
   late final ArtifactPanelStore _artifactPanelStore;
+  late final MemoryStore _memoryStore;
 
   @override
   void initState() {
@@ -44,11 +47,18 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
       mock: MockChatService(),
     );
     _artifactPanelStore = ArtifactPanelStore();
+    _memoryStore = MemoryStore(persistence: _persistence)..load();
     _conversationStore = ConversationStore(
       chatService: chatService,
       persistence: _persistence,
     )
       ..onArtifactCreated = _artifactPanelStore.open
+      // Extract durable facts from each user turn into cross-chat memory.
+      ..onUserTurnComplete = ((userText) {
+        for (final fact in MemoryService.extractFacts(userText)) {
+          _memoryStore.addFact(fact);
+        }
+      })
       ..load();
     _appSettingsStore = AppSettingsStore(persistence: _persistence)..load();
     _projectStore = ProjectStore(persistence: _persistence)..load();
@@ -65,6 +75,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
         ChangeNotifierProvider.value(value: _artifactPanelStore),
         ChangeNotifierProvider.value(value: _projectStore),
         ChangeNotifierProvider.value(value: _userPrefsStore),
+        ChangeNotifierProvider.value(value: _memoryStore),
         ChangeNotifierProvider.value(value: _apiKeysStore),
       ],
       child: Consumer<AppSettingsStore>(
