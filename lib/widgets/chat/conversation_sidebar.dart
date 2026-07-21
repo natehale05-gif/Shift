@@ -23,6 +23,21 @@ class ConversationSidebar extends StatefulWidget {
 
 class _ConversationSidebarState extends State<ConversationSidebar> {
   String _query = '';
+  bool _showArchived = false;
+
+  /// Buckets a conversation by how recently it was last touched, matching
+  /// Claude's Today / Yesterday / Previous-N-days grouping.
+  static String _dateBucket(DateTime updated) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final d = DateTime(updated.year, updated.month, updated.day);
+    final diff = today.difference(d).inDays;
+    if (diff <= 0) return 'Today';
+    if (diff == 1) return 'Yesterday';
+    if (diff <= 7) return 'Previous 7 days';
+    if (diff <= 30) return 'Previous 30 days';
+    return 'Older';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,8 +47,32 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
     final colors = theme.extension<AppSemanticColors>()!;
 
     final results = store.search(_query);
-    final starred = results.where((c) => c.starred).toList();
-    final unstarred = results.where((c) => !c.starred).toList();
+    final visible = results.where((c) => !c.archived).toList();
+    final archived = results.where((c) => c.archived).toList();
+    final pinned = visible.where((c) => c.pinned).toList();
+    final starred =
+        visible.where((c) => c.starred && !c.pinned).toList();
+    final rest =
+        visible.where((c) => !c.pinned && !c.starred).toList();
+
+    _ConversationTile tileFor(Conversation c) => _ConversationTile(
+          conversation: c,
+          project: projectStore.projectById(c.projectId),
+          selected: c.id == store.current?.id,
+          onActivated: widget.onActivated,
+        );
+
+    // Build the date-grouped "recents" with a header before each new bucket.
+    final grouped = <Widget>[];
+    String? lastBucket;
+    for (final c in rest) {
+      final bucket = _dateBucket(c.updatedAt);
+      if (bucket != lastBucket) {
+        grouped.add(_SectionHeader(label: bucket));
+        lastBucket = bucket;
+      }
+      grouped.add(tileFor(c));
+    }
 
     // No outer sizing/background of its own — this is pure scrollable
     // content, laid out inside the enclosing AppSidebar's glass panel (which
@@ -85,25 +124,45 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
           child: ListView(
             children: [
               _ProjectsSection(projectStore: projectStore),
+              if (pinned.isNotEmpty) ...[
+                const _SectionHeader(label: 'Pinned'),
+                for (final conversation in pinned) tileFor(conversation),
+              ],
               if (starred.isNotEmpty) ...[
                 const _SectionHeader(label: 'Starred'),
-                for (final conversation in starred)
-                  _ConversationTile(
-                    conversation: conversation,
-                    project: projectStore.projectById(conversation.projectId),
-                    selected: conversation.id == store.current?.id,
-                    onActivated: widget.onActivated,
-                  ),
+                for (final conversation in starred) tileFor(conversation),
               ],
-              if (unstarred.isNotEmpty) ...[
-                const _SectionHeader(label: 'Chats'),
-                for (final conversation in unstarred)
-                  _ConversationTile(
-                    conversation: conversation,
-                    project: projectStore.projectById(conversation.projectId),
-                    selected: conversation.id == store.current?.id,
-                    onActivated: widget.onActivated,
+              ...grouped,
+              if (archived.isNotEmpty) ...[
+                InkWell(
+                  onTap: () => setState(() => _showArchived = !_showArchived),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.lg,
+                      AppSpacing.md,
+                      AppSpacing.lg,
+                      AppSpacing.xs,
+                    ),
+                    child: Row(
+                      children: [
+                        Text(
+                          'Archived (${archived.length})',
+                          style: theme.textTheme.labelSmall,
+                        ),
+                        const Spacer(),
+                        Icon(
+                          _showArchived
+                              ? Icons.expand_less_rounded
+                              : Icons.expand_more_rounded,
+                          size: 16,
+                          color: colors.textSecondary,
+                        ),
+                      ],
+                    ),
                   ),
+                ),
+                if (_showArchived)
+                  for (final conversation in archived) tileFor(conversation),
               ],
               if (results.isEmpty)
                 Padding(
@@ -367,8 +426,12 @@ class _ConversationTile extends StatelessWidget {
             switch (action) {
               case 'rename':
                 _rename(context);
+              case 'pin':
+                store.togglePin(conversation.id);
               case 'star':
                 store.toggleStar(conversation.id);
+              case 'archive':
+                store.toggleArchive(conversation.id);
               case 'project':
                 _moveToProject(context);
               case 'export_md':
@@ -382,8 +445,16 @@ class _ConversationTile extends StatelessWidget {
           itemBuilder: (context) => [
             const PopupMenuItem(value: 'rename', child: Text('Rename')),
             PopupMenuItem(
+              value: 'pin',
+              child: Text(conversation.pinned ? 'Unpin' : 'Pin'),
+            ),
+            PopupMenuItem(
               value: 'star',
               child: Text(conversation.starred ? 'Unstar' : 'Star'),
+            ),
+            PopupMenuItem(
+              value: 'archive',
+              child: Text(conversation.archived ? 'Unarchive' : 'Archive'),
             ),
             const PopupMenuItem(
               value: 'project',

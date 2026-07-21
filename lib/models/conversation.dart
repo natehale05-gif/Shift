@@ -8,6 +8,8 @@ class Conversation {
   final DateTime updatedAt;
   final List<ChatMessage> messages;
   final bool starred;
+  final bool pinned;
+  final bool archived;
 
   /// Project this conversation belongs to (null = unfiled).
   final String? projectId;
@@ -24,6 +26,8 @@ class Conversation {
     required this.updatedAt,
     this.messages = const [],
     this.starred = false,
+    this.pinned = false,
+    this.archived = false,
     this.projectId,
     this.artifacts = const [],
   });
@@ -40,6 +44,8 @@ class Conversation {
     DateTime? updatedAt,
     List<ChatMessage>? messages,
     bool? starred,
+    bool? pinned,
+    bool? archived,
     Object? projectId = _unset,
     List<Artifact>? artifacts,
   }) {
@@ -50,6 +56,8 @@ class Conversation {
       updatedAt: updatedAt ?? this.updatedAt,
       messages: messages ?? this.messages,
       starred: starred ?? this.starred,
+      pinned: pinned ?? this.pinned,
+      archived: archived ?? this.archived,
       projectId:
           projectId == _unset ? this.projectId : projectId as String?,
       artifacts: artifacts ?? this.artifacts,
@@ -67,6 +75,8 @@ class Conversation {
             .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
             .toList(),
         starred: json['starred'] as bool? ?? false,
+        pinned: json['pinned'] as bool? ?? false,
+        archived: json['archived'] as bool? ?? false,
         projectId: json['projectId'] as String?,
         artifacts: (json['artifacts'] as List<dynamic>? ?? const [])
             .map((e) => Artifact.fromJson(e as Map<String, dynamic>))
@@ -80,6 +90,8 @@ class Conversation {
         'updatedAt': updatedAt.toIso8601String(),
         'messages': messages.map((e) => e.toJson()).toList(),
         'starred': starred,
+        'pinned': pinned,
+        'archived': archived,
         'projectId': projectId,
         'artifacts': artifacts.map((e) => e.toJson()).toList(),
       };

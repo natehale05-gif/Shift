@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/conversation.dart';
 import '../../models/studio_type.dart';
+import '../../services/conversation_export.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/artifact_panel_store.dart';
 import '../../state/conversation_store.dart';
@@ -30,6 +33,7 @@ class ChatScreen extends StatelessWidget {
             title: const _ChatTitle(),
             leading: const HomeMenuButton(),
             actions: [
+              const _ChatHeaderMenu(),
               IconButton(
                 tooltip: 'New chat',
                 icon: const Icon(Icons.add_comment_outlined),
@@ -80,10 +84,20 @@ class _ChatTitle extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
     final live = context.watch<ApiKeysStore>().isLive;
+    final convo = context.watch<ConversationStore>().current;
+    // Show the conversation's title once it has a name; the brand shows on the
+    // empty/new state.
+    final showTitle =
+        convo != null && convo.messages.isNotEmpty && convo.title != 'New chat';
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text('SHIFT AI'),
+        Flexible(
+          child: Text(
+            showTitle ? convo.title : 'SHIFT AI',
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
         const SizedBox(width: AppSpacing.sm),
         Tooltip(
           message: live
@@ -107,6 +121,114 @@ class _ChatTitle extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Header Share button + overflow menu for the current conversation
+/// (rename / star / pin / archive / export / delete). Hidden on an empty chat.
+class _ChatHeaderMenu extends StatelessWidget {
+  const _ChatHeaderMenu();
+
+  Future<void> _rename(BuildContext context, Conversation convo) async {
+    final store = context.read<ConversationStore>();
+    final controller = TextEditingController(text: convo.title);
+    final title = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rename chat'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    );
+    if (title != null) store.renameConversation(convo.id, title);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<ConversationStore>();
+    final convo = store.current;
+    if (convo == null || convo.messages.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'Share — copies the transcript',
+          icon: const Icon(Icons.ios_share_rounded),
+          onPressed: () {
+            Clipboard.setData(
+              ClipboardData(text: ConversationExport.toMarkdown(convo)),
+            );
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Conversation copied to clipboard as Markdown.'),
+              ),
+            );
+          },
+        ),
+        PopupMenuButton<String>(
+          tooltip: 'Chat options',
+          icon: const Icon(Icons.more_horiz_rounded),
+          onSelected: (action) {
+            switch (action) {
+              case 'rename':
+                _rename(context, convo);
+              case 'pin':
+                store.togglePin(convo.id);
+              case 'star':
+                store.toggleStar(convo.id);
+              case 'archive':
+                store.toggleArchive(convo.id);
+              case 'export_md':
+                ConversationExport.downloadMarkdown(convo);
+              case 'export_json':
+                ConversationExport.downloadJson(convo);
+              case 'delete':
+                store.deleteConversation(convo.id);
+            }
+          },
+          itemBuilder: (context) => [
+            const PopupMenuItem(value: 'rename', child: Text('Rename')),
+            PopupMenuItem(
+              value: 'pin',
+              child: Text(convo.pinned ? 'Unpin' : 'Pin'),
+            ),
+            PopupMenuItem(
+              value: 'star',
+              child: Text(convo.starred ? 'Unstar' : 'Star'),
+            ),
+            PopupMenuItem(
+              value: 'archive',
+              child: Text(convo.archived ? 'Unarchive' : 'Archive'),
+            ),
+            const PopupMenuItem(
+              value: 'export_md',
+              child: Text('Export as Markdown'),
+            ),
+            const PopupMenuItem(
+              value: 'export_json',
+              child: Text('Export as JSON'),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem(value: 'delete', child: Text('Delete')),
+          ],
         ),
       ],
     );

@@ -118,6 +118,23 @@ class ConversationStore extends ChangeNotifier {
     _persistConversation(id);
   }
 
+  void togglePin(String id) {
+    _mutateConversation(id, (c) => c.copyWith(pinned: !c.pinned));
+    _persistConversation(id);
+  }
+
+  /// Archives (or unarchives) a conversation. Archiving the current chat
+  /// moves selection to the next visible one.
+  void toggleArchive(String id) {
+    _mutateConversation(id, (c) => c.copyWith(archived: !c.archived));
+    _persistConversation(id);
+    if (_currentId == id && (current?.archived ?? false)) {
+      final next = conversations.where((c) => !c.archived).toList();
+      _currentId = next.isNotEmpty ? next.first.id : null;
+      notifyListeners();
+    }
+  }
+
   void setConversationProject(String id, String? projectId) {
     _mutateConversation(id, (c) => c.copyWith(projectId: projectId));
     _persistConversation(id);

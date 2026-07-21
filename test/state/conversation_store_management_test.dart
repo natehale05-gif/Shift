@@ -62,6 +62,26 @@ void main() {
     expect(store.current!.starred, isFalse);
   });
 
+  test('pin and archive toggle on the conversation; archiving the current '
+      'chat moves selection away', () async {
+    final (store, _) = await _makeStore();
+    store.startNewConversation();
+    await store.sendMessage('first');
+    final first = store.current!.id;
+    store.startNewConversation();
+    await store.sendMessage('second');
+    final second = store.current!.id;
+
+    store.togglePin(second);
+    expect(store.current!.pinned, isTrue);
+
+    // Archiving the current chat selects the next visible one.
+    store.toggleArchive(second);
+    expect(store.conversations.firstWhere((c) => c.id == second).archived,
+        isTrue);
+    expect(store.current!.id, first);
+  });
+
   test('search matches titles and message text case-insensitively',
       () async {
     final (store, _) = await _makeStore();
