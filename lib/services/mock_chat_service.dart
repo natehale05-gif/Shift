@@ -117,6 +117,8 @@ class MockChatService implements ChatService {
       } else {
         final composeTarget =
             plan.kind == CompositionKind.editArtifact ? plan.editTarget : null;
+        final composeKind =
+            plan.kind == CompositionKind.editArtifact ? plan.editKind : null;
         await _runStudioFlow(
           controller,
           conversation,
@@ -125,6 +127,7 @@ class MockChatService implements ChatService {
           structuredRequest,
           pending != null,
           composeTarget,
+          composeKind,
           wantsBoth ? plan.contributors : const <StudioType>{},
         );
       }
@@ -150,6 +153,7 @@ class MockChatService implements ChatService {
     StudioRequest? structuredRequest,
     bool isAnsweringClarification,
     Artifact? composeTarget,
+    ArtifactMediaKind? composeKind,
     Set<StudioType> pageContributors,
   ) async {
     final contributorNames =
@@ -159,7 +163,9 @@ class MockChatService implements ChatService {
           StudioResponseBank.pageAssemblyIntro(userInput, contributorNames));
     } else if (composeTarget != null) {
       await _streamText(
-          controller, StudioResponseBank.compositionIntro(composeTarget.title));
+          controller,
+          StudioResponseBank.compositionIntro(composeTarget.title,
+              composeKind ?? ArtifactMediaKind.image));
     } else if (studio != StudioType.middleware && isAnsweringClarification) {
       await _streamText(controller, StudioResponseBank.clarificationAck(studio));
     } else {
@@ -173,7 +179,11 @@ class MockChatService implements ChatService {
 
     // Ask before guessing, like Claude does — but only once per request;
     // a reply to our own question always proceeds straight to generating.
-    if (structuredRequest == null && !isAnsweringClarification) {
+    // A compose-into-artifact request ("add a video to the website") already
+    // carries enough intent, so it skips the question and embeds directly.
+    if (structuredRequest == null &&
+        !isAnsweringClarification &&
+        composeTarget == null) {
       final question = StudioResponseBank.clarifyingQuestion(studio, userInput);
       if (question != null) {
         await _streamText(controller, '\n\n$question');
@@ -187,9 +197,17 @@ class MockChatService implements ChatService {
         : StudioResponseBank.buildResultFromFreeform(studio, userInput);
 
     if (composeTarget != null) {
-      // Two studios in one turn: Image Studio's output gets woven into the
+      // Two studios in one turn: a studio's output gets woven into the
       // artifact another studio already built, instead of standing alone.
-      await _composeImageIntoArtifact(controller, composeTarget, result as ImageResult);
+      switch (composeKind ?? ArtifactMediaKind.image) {
+        case ArtifactMediaKind.image:
+          await _composeImageIntoArtifact(
+              controller, composeTarget, result as ImageResult);
+        case ArtifactMediaKind.audio:
+          await _composeAudioIntoArtifact(controller, composeTarget, userInput);
+        case ArtifactMediaKind.video:
+          await _composeVideoIntoArtifact(controller, composeTarget, userInput);
+      }
     } else if (studio == StudioType.codeStudio) {
       // Code output ships as an artifact (side panel), not an inline card —
       // the artifact IS the deliverable, with copy/download/versions there.
@@ -202,7 +220,8 @@ class MockChatService implements ChatService {
     final followUp = pageContributors.isNotEmpty
         ? StudioResponseBank.pageAssemblyFollowUp(contributorNames)
         : composeTarget != null
-            ? StudioResponseBank.compositionFollowUp(composeTarget.title)
+            ? StudioResponseBank.compositionFollowUp(composeTarget.title,
+                composeKind ?? ArtifactMediaKind.image)
             : StudioResponseBank.studioFollowUp(studio);
     if (followUp.isNotEmpty) {
       await _streamText(controller, '\n\n$followUp');
@@ -318,6 +337,48 @@ class MockChatService implements ChatService {
         embedImageAsHero(target.latest.content, pngBytes, altText: result.prompt);
     controller.add(
         ArtifactUpdated(target.withNewVersion(updatedHtml, DateTime.now())));
+  }
+
+  /// Synthesizes a WAV and splices a playable `<audio>` player into the target
+  /// HTML artifact as a new version — the page's embedded soundtrack.
+  Future<void> _composeAudioIntoArtifact(
+    StreamController<ChatEvent> controller,
+    Artifact target,
+    String userInput,
+  ) async {
+    final wav = AudioSynthService.synthesizeWav(
+      seed: StudioResponseBank.seedFromString(userInput),
+      durationSec: 20,
+      bpm: 100,
+      speechLike: _wantsSpokenAudio(userInput),
+    );
+    final updatedHtml = embedAudioPlayer(target.latest.content, wav,
+        label: _wantsSpokenAudio(userInput) ? 'Voiceover' : 'Soundtrack');
+    controller.add(
+        ArtifactUpdated(target.withNewVersion(updatedHtml, DateTime.now())));
+  }
+
+  /// Rasterizes a poster and splices a video block (poster + play badge +
+  /// "Simulated video" caption) into the target HTML artifact as a new version.
+  Future<void> _composeVideoIntoArtifact(
+    StreamController<ChatEvent> controller,
+    Artifact target,
+    String userInput,
+  ) async {
+    final poster = await rasterizeGradientArt(
+        seed: StudioResponseBank.seedFromString(userInput) + 100);
+    final updatedHtml =
+        embedVideoBlock(target.latest.content, poster, label: userInput);
+    controller.add(
+        ArtifactUpdated(target.withNewVersion(updatedHtml, DateTime.now())));
+  }
+
+  static bool _wantsSpokenAudio(String input) {
+    final lower = input.toLowerCase();
+    return lower.contains('voiceover') ||
+        lower.contains('voice over') ||
+        lower.contains('voice-over') ||
+        lower.contains('narrat');
   }
 
   /// Code-routed turns also produce an artifact: a runnable HTML page for

@@ -190,6 +190,17 @@ class RealChatService implements ChatService {
         return;
       }
 
+      // "Add background music / a video to the website": audio and video are
+      // always synthesized (no live provider), so the mock performs the embed
+      // into the existing artifact. Image edits keep the live image path
+      // below (Gemini/Flux, or the mock when no image key exists).
+      if (plan.kind == CompositionKind.editArtifact &&
+          plan.editKind != ArtifactMediaKind.image) {
+        await _delegateToMock(
+            controller, conversation, userInput, null, attachments, options);
+        return;
+      }
+
       // An explicit model pin bypasses routing entirely and dispatches to the
       // pinned model's provider (as long as the user has that key). Claude
       // pins fall through to the existing Anthropic path below, which already

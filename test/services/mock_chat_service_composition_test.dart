@@ -82,4 +82,39 @@ void main() {
     expect(events.whereType<StudioResultReady>(), hasLength(1));
     expect(events.whereType<ArtifactUpdated>(), isEmpty);
   }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('adding background music to an existing site embeds an audio player, '
+      'not a standalone audio card', () async {
+    final events = await MockChatService()
+        .sendMessage(
+          conversation: _withHtmlArtifact(),
+          userInput: 'add background music to the website',
+        )
+        .toList();
+
+    final updated = events.whereType<ArtifactUpdated>().single.artifact;
+    expect(updated.id, 'art1');
+    expect(updated.versions, hasLength(2));
+    expect(updated.latest.content, contains('<audio controls'));
+    expect(updated.latest.content, contains('data:audio/wav;base64,'));
+    // Woven into the page, not shown as its own card.
+    expect(events.whereType<StudioResultReady>(), isEmpty);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('adding a video to an existing site embeds a video block, not a '
+      'standalone video card', () async {
+    final events = await MockChatService()
+        .sendMessage(
+          conversation: _withHtmlArtifact(),
+          userInput: 'add a video to the website',
+        )
+        .toList();
+
+    final updated = events.whereType<ArtifactUpdated>().single.artifact;
+    expect(updated.id, 'art1');
+    expect(updated.versions, hasLength(2));
+    expect(updated.latest.content, contains('Simulated video'));
+    expect(updated.latest.content, contains('data:image/png;base64,'));
+    expect(events.whereType<StudioResultReady>(), isEmpty);
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

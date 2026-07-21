@@ -6,6 +6,7 @@ import 'package:shift_ai/models/artifact.dart';
 import 'package:shift_ai/models/conversation.dart';
 import 'package:shift_ai/models/studio_result.dart';
 import 'package:shift_ai/models/studio_type.dart';
+import 'package:shift_ai/services/artifact_composition.dart';
 import 'package:shift_ai/services/studio_composition.dart';
 
 Artifact _htmlArtifact() => Artifact(
@@ -70,6 +71,28 @@ void main() {
       expect(plan.kind, CompositionKind.editArtifact);
       expect(plan.host, StudioType.imageStudio);
       expect(plan.editTarget?.id, 'art1');
+      expect(plan.editKind, ArtifactMediaKind.image);
+    });
+
+    test('adding audio to an existing site is an audio edit (Music host)', () {
+      final plan = planComposition(
+        _convo(artifacts: [_htmlArtifact()]),
+        'add background music to the website',
+      );
+      expect(plan.kind, CompositionKind.editArtifact);
+      expect(plan.host, StudioType.musicStudio);
+      expect(plan.editKind, ArtifactMediaKind.audio);
+      expect(plan.editTarget?.id, 'art1');
+    });
+
+    test('adding a video to an existing site is a video edit (Video host)', () {
+      final plan = planComposition(
+        _convo(artifacts: [_htmlArtifact()]),
+        'add a video to the website',
+      );
+      expect(plan.kind, CompositionKind.editArtifact);
+      expect(plan.host, StudioType.videoStudio);
+      expect(plan.editKind, ArtifactMediaKind.video);
     });
 
     test('a fresh page + photos request is a page assembly', () {

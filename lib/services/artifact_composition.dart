@@ -9,6 +9,27 @@ const _imageKeywords = [
   'banner', 'thumbnail', 'icon',
 ];
 
+const _audioKeywords = [
+  'music', 'soundtrack', 'song', 'audio', 'sound', 'jingle', 'voiceover',
+  'voice-over', 'voice over', 'narration', 'track', 'theme song',
+  'background music', 'audio bed',
+];
+
+const _videoKeywords = [
+  'video', 'clip', 'reel', 'footage', 'animation', 'trailer', 'movie',
+];
+
+/// The kind of media an artifact-edit request wants woven into the page.
+enum ArtifactMediaKind { image, audio, video }
+
+/// An "add X to the website" request: the artifact to splice into, and which
+/// kind of media block to embed.
+class ArtifactEdit {
+  final Artifact target;
+  final ArtifactMediaKind kind;
+  const ArtifactEdit(this.target, this.kind);
+}
+
 const _artifactReferenceKeywords = [
   'to the website', 'to the page', 'to the site', 'to my website',
   'to my page', 'to my site', 'on the website', 'on the page',
@@ -31,17 +52,38 @@ Artifact? latestHtmlArtifact(Conversation conversation) {
 /// standalone image. This is how two studios compose within a single turn —
 /// Image Studio generates the asset, then it's spliced into Code Studio's
 /// output — without the user managing that handoff themselves.
-Artifact? findArtifactCompositionTarget(
+ArtifactEdit? findArtifactEdit(
   Conversation conversation,
   String userInput,
 ) {
   final target = latestHtmlArtifact(conversation);
   if (target == null) return null;
   final lower = userInput.toLowerCase();
-  final mentionsImage = _imageKeywords.any(lower.contains);
-  final mentionsArtifact = _artifactReferenceKeywords.any(lower.contains);
-  if (!mentionsImage || !mentionsArtifact) return null;
-  return target;
+  if (!_artifactReferenceKeywords.any(lower.contains)) return null;
+  // Priority image -> video -> audio, so "add a hero image" stays an image
+  // edit even if it also mentions, say, a "background".
+  if (_imageKeywords.any(lower.contains)) {
+    return ArtifactEdit(target, ArtifactMediaKind.image);
+  }
+  if (_videoKeywords.any(lower.contains)) {
+    return ArtifactEdit(target, ArtifactMediaKind.video);
+  }
+  if (_audioKeywords.any(lower.contains)) {
+    return ArtifactEdit(target, ArtifactMediaKind.audio);
+  }
+  return null;
+}
+
+/// Image-only view of [findArtifactEdit], kept for callers/tests that only
+/// care about the "splice an image into the page" case.
+Artifact? findArtifactCompositionTarget(
+  Conversation conversation,
+  String userInput,
+) {
+  final edit = findArtifactEdit(conversation, userInput);
+  return (edit != null && edit.kind == ArtifactMediaKind.image)
+      ? edit.target
+      : null;
 }
 
 /// Splices a generated image into an HTML artifact as a base64 data URI,

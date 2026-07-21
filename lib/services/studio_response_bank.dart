@@ -4,6 +4,7 @@ import '../models/citation.dart';
 import '../models/studio_result.dart';
 import '../models/studio_request.dart';
 import '../models/studio_type.dart';
+import 'artifact_composition.dart';
 import 'download_service.dart';
 
 /// Canned templates and keyword tables backing [MockChatService]. Every
@@ -159,15 +160,28 @@ class StudioResponseBank {
   }
 
   /// Intro for a request that spans two studios in one turn — e.g. "add a
-  /// hero image to the website" — where Image Studio's output gets woven
-  /// into an artifact another studio already built.
-  static String compositionIntro(String artifactTitle) =>
-      'Routing this to Image Studio to generate the image, then adding it '
-      'into your "$artifactTitle" artifact.';
+  /// hero image / a video / background music to the website" — where one
+  /// studio's output gets woven into an artifact another studio already built.
+  static String compositionIntro(String artifactTitle,
+      [ArtifactMediaKind kind = ArtifactMediaKind.image]) {
+    final (studio, noun) = _composeWords(kind);
+    return 'Routing this to $studio to generate the $noun, then adding it '
+        'into your "$artifactTitle" artifact.';
+  }
 
-  static String compositionFollowUp(String artifactTitle) =>
-      'Done — the new image is live in "$artifactTitle" as a new version. '
-      'Ask for a different image or position anytime.';
+  static String compositionFollowUp(String artifactTitle,
+      [ArtifactMediaKind kind = ArtifactMediaKind.image]) {
+    final (_, noun) = _composeWords(kind);
+    return 'Done — the new $noun is live in "$artifactTitle" as a new '
+        'version. Ask for a different $noun or position anytime.';
+  }
+
+  static (String, String) _composeWords(ArtifactMediaKind kind) =>
+      switch (kind) {
+        ArtifactMediaKind.image => ('Image Studio', 'image'),
+        ArtifactMediaKind.audio => ('Music Studio', 'soundtrack'),
+        ArtifactMediaKind.video => ('Video Studio', 'video'),
+      };
 
   /// Intro for a fresh page that several studios build together in one
   /// turn — e.g. "build me a dog treat website with several photos and a

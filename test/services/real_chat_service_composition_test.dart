@@ -141,4 +141,35 @@ void main() {
     expect(events.whereType<ImageGenerated>(), hasLength(1));
     expect(events.whereType<ArtifactUpdated>(), isEmpty);
   });
+
+  test('a live user adding background music to the site embeds an audio '
+      'player into the artifact (synthesized via the mock)', () async {
+    final keys = await _liveGeminiKeys();
+    final service = RealChatService(keys: keys, geminiClient: _RecordingGeminiClient());
+
+    const prompt = 'add background music to the website';
+    final events = await service
+        .sendMessage(conversation: _withHtmlArtifact(prompt), userInput: prompt)
+        .toList();
+
+    final updated = events.whereType<ArtifactUpdated>().single.artifact;
+    expect(updated.id, 'art1');
+    expect(updated.latest.content, contains('<audio controls'));
+    expect(events.whereType<StudioResultReady>(), isEmpty);
+  });
+
+  test('a live user adding a video to the site embeds a video block into the '
+      'artifact', () async {
+    final keys = await _liveGeminiKeys();
+    final service = RealChatService(keys: keys, geminiClient: _RecordingGeminiClient());
+
+    const prompt = 'add a video to the website';
+    final events = await service
+        .sendMessage(conversation: _withHtmlArtifact(prompt), userInput: prompt)
+        .toList();
+
+    final updated = events.whereType<ArtifactUpdated>().single.artifact;
+    expect(updated.latest.content, contains('Simulated video'));
+    expect(events.whereType<StudioResultReady>(), isEmpty);
+  });
 }

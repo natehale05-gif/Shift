@@ -51,15 +51,20 @@ class CompositionPlan {
   /// Studios feeding the host (may include the host itself).
   final Set<StudioType> contributors;
 
-  /// For [CompositionKind.editArtifact]: the artifact the image is spliced
+  /// For [CompositionKind.editArtifact]: the artifact the media is spliced
   /// into. Null for every other kind.
   final Artifact? editTarget;
+
+  /// For [CompositionKind.editArtifact]: which kind of media block to embed
+  /// (image, audio, or video). Null for every other kind.
+  final ArtifactMediaKind? editKind;
 
   const CompositionPlan({
     required this.kind,
     required this.host,
     this.contributors = const {},
     this.editTarget,
+    this.editKind,
   });
 
   static const none = CompositionPlan(
@@ -132,16 +137,23 @@ const _pageContributors = {
 /// ([none], [editArtifact], [pageAssembly]) are returned today; the
 /// remaining kinds are added as their handlers ship.
 CompositionPlan planComposition(Conversation conversation, String input) {
-  // 1. Splice an image into an artifact that already exists. Highest
-  //    priority so "add a hero image to the website" never reads as a fresh
-  //    multi-studio build.
-  final editTarget = findArtifactCompositionTarget(conversation, input);
-  if (editTarget != null) {
+  // 1. Splice a generated asset (image, audio, or video) into an artifact
+  //    that already exists. Highest priority so "add a hero image / a video /
+  //    background music to the website" never reads as a fresh multi-studio
+  //    build.
+  final edit = findArtifactEdit(conversation, input);
+  if (edit != null) {
+    final host = switch (edit.kind) {
+      ArtifactMediaKind.image => StudioType.imageStudio,
+      ArtifactMediaKind.audio => StudioType.musicStudio,
+      ArtifactMediaKind.video => StudioType.videoStudio,
+    };
     return CompositionPlan(
       kind: CompositionKind.editArtifact,
-      host: StudioType.imageStudio,
-      contributors: const {StudioType.imageStudio},
-      editTarget: editTarget,
+      host: host,
+      contributors: {host},
+      editTarget: edit.target,
+      editKind: edit.kind,
     );
   }
 

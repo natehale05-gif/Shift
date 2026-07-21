@@ -75,6 +75,58 @@ void main() {
         isNull,
       );
     });
+
+    test('stays null for an audio/video request (image-only wrapper)', () {
+      final convo = _withArtifacts([_htmlArtifact()]);
+      expect(
+          findArtifactCompositionTarget(
+              convo, 'add background music to the website'),
+          isNull);
+      expect(
+          findArtifactCompositionTarget(convo, 'add a video to the website'),
+          isNull);
+    });
+  });
+
+  group('findArtifactEdit', () {
+    final convo = _withArtifacts([_htmlArtifact()]);
+
+    test('classifies image / audio / video edits by keyword', () {
+      expect(findArtifactEdit(convo, 'add a hero image to the website')?.kind,
+          ArtifactMediaKind.image);
+      expect(findArtifactEdit(convo, 'add background music to the website')?.kind,
+          ArtifactMediaKind.audio);
+      expect(findArtifactEdit(convo, 'add a soundtrack to my site')?.kind,
+          ArtifactMediaKind.audio);
+      expect(findArtifactEdit(convo, 'add a video to the website')?.kind,
+          ArtifactMediaKind.video);
+      expect(findArtifactEdit(convo, 'add a video clip to the page')?.kind,
+          ArtifactMediaKind.video);
+    });
+
+    test('returns the target artifact', () {
+      expect(findArtifactEdit(convo, 'add a video to the website')?.target.id,
+          'art1');
+    });
+
+    test('image wins when several media words appear', () {
+      // "background image" is an image reference even though "background" could
+      // read as audio.
+      expect(
+          findArtifactEdit(convo, 'add a background image to the website')?.kind,
+          ArtifactMediaKind.image);
+    });
+
+    test('stays null without an artifact-reference phrase', () {
+      expect(findArtifactEdit(convo, 'make a separate music track'), isNull);
+    });
+
+    test('stays null with no artifact in the conversation', () {
+      expect(
+          findArtifactEdit(
+              _withArtifacts(const []), 'add a video to the website'),
+          isNull);
+    });
   });
 
   group('embedImageAsHero', () {
