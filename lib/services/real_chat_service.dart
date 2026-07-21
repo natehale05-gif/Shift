@@ -21,6 +21,7 @@ import 'studio_composition.dart';
 import 'providers/anthropic_api_config.dart';
 import 'providers/anthropic_client.dart';
 import 'providers/anthropic_tools.dart';
+import 'providers/flux_client.dart';
 import 'providers/gemini_api_config.dart';
 import 'providers/gemini_client.dart';
 import 'providers/openai_compatible_client.dart';
@@ -71,6 +72,7 @@ class RealChatService implements ChatService {
   final AnthropicClient _anthropic;
   final GeminiClient _gemini;
   final OpenAiCompatibleClient _openAi;
+  final FluxClient _flux;
   final ProviderRegistry _registry;
   final ModelRouter _router;
   final MockChatService _mockFallback;
@@ -80,12 +82,14 @@ class RealChatService implements ChatService {
     AnthropicClient? anthropicClient,
     GeminiClient? geminiClient,
     OpenAiCompatibleClient? openAiClient,
+    FluxClient? fluxClient,
     ProviderRegistry? registry,
     ModelRouter? router,
     MockChatService? mockFallback,
   })  : _anthropic = anthropicClient ?? AnthropicClient(),
         _gemini = geminiClient ?? GeminiClient(),
         _openAi = openAiClient ?? OpenAiCompatibleClient(),
+        _flux = fluxClient ?? FluxClient(),
         _registry = registry ?? ProviderRegistry.defaults(),
         _router = router ??
             ModelRouter(
@@ -124,9 +128,13 @@ class RealChatService implements ChatService {
       // key exists; other structured forms and deep research keep their
       // simulated flows until their live executors ship.
       if (structuredRequest != null) {
-        if (structuredRequest is ImageRequest && keys.hasGeminiKey) {
-          await _runGeminiImage(controller, structuredRequest.prompt);
-          return;
+        if (structuredRequest is ImageRequest) {
+          final imageId = chooseProvider(ChatRoute.imageGen,
+              registry: _registry, hasKey: keys.hasKey);
+          if (imageId != null) {
+            await _runImage(controller, imageId, structuredRequest.prompt);
+            return;
+          }
         }
         await _delegateToMock(controller, conversation, userInput,
             structuredRequest, attachments, options);
@@ -228,12 +236,17 @@ class RealChatService implements ChatService {
               attachments, options, route, pageContributors);
         case ProviderClientKind.gemini:
           if (route == ChatRoute.imageGen) {
-            await _runGeminiImageWithClarification(
-                controller, conversation, userInput, pending);
+            await _runImageWithClarification(
+                controller, conversation, userInput, pending, 'gemini');
           } else {
             await _runGeminiChat(controller, conversation, userInput,
                 attachments, options, route);
           }
+        case ProviderClientKind.flux:
+          // Flux only serves the image capability, so this is always the
+          // image route.
+          await _runImageWithClarification(
+              controller, conversation, userInput, pending, 'flux');
         case ProviderClientKind.openAiCompatible:
           await _runOpenAiChat(controller, conversation, userInput, attachments,
               options, provider!, model: _autoModelFor(provider, route));
@@ -514,14 +527,28 @@ class RealChatService implements ChatService {
         provider.models.first.id;
   }
 
+  /// The image stream for the chosen image provider (Gemini or Flux). Both map
+  /// onto the same ImageGenerated → ImageBlock path.
+  Stream<ChatEvent> _imageStream(String providerId, String prompt) {
+    if (providerId == 'flux') {
+      return _flux.generateImage(apiKey: keys.keyFor('flux'), prompt: prompt);
+    }
+    return _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt);
+  }
+
+  String _imageProviderName(String providerId) =>
+      providerId == 'flux' ? 'Flux' : 'Gemini';
+
   /// Freeform image prompts get the same "ask before guessing" gate as the
-  /// mock — Gemini's image endpoint is one-shot (no conversation), so this
-  /// is the only chance to ask before spending a real generation call.
-  Future<void> _runGeminiImageWithClarification(
+  /// mock — the image endpoints are one-shot (no conversation), so this is the
+  /// only chance to ask before spending a real generation call. Works for any
+  /// image provider ([providerId] = 'gemini' or 'flux').
+  Future<void> _runImageWithClarification(
     StreamController<ChatEvent> controller,
     Conversation conversation,
     String userInput,
     (StudioType, String)? pending,
+    String providerId,
   ) async {
     controller.add(const RoutingDetected(StudioType.imageStudio));
     if (pending == null) {
@@ -536,34 +563,34 @@ class RealChatService implements ChatService {
     final effectiveInput =
         pending != null ? '${pending.$2} $userInput'.trim() : userInput;
 
-    // "Add a hero image to the website": Gemini generates the asset, then
-    // it's spliced into the artifact Claude (or a prior turn) already
-    // built — two studios composing within one turn.
+    // "Add a hero image to the website": the image provider generates the
+    // asset, then it's spliced into the artifact a prior turn already built —
+    // two studios composing within one turn.
     final composeTarget =
         findArtifactCompositionTarget(conversation, effectiveInput);
     if (composeTarget != null) {
-      await _composeGeminiImageIntoArtifact(
-          controller, composeTarget, effectiveInput);
+      await _composeImageIntoArtifact(
+          controller, providerId, composeTarget, effectiveInput);
       return;
     }
 
-    await _runGeminiImage(controller, effectiveInput, close: false);
+    await _runImage(controller, providerId, effectiveInput, close: false);
   }
 
-  /// Generates the image with the real Gemini endpoint, then splices the
-  /// bytes into [target]'s HTML as a new artifact version instead of
-  /// showing them as a separate inline image.
-  Future<void> _composeGeminiImageIntoArtifact(
+  /// Generates the image with the chosen provider, then splices the bytes into
+  /// [target]'s HTML as a new artifact version instead of showing them as a
+  /// separate inline image.
+  Future<void> _composeImageIntoArtifact(
     StreamController<ChatEvent> controller,
+    String providerId,
     Artifact target,
     String prompt,
   ) async {
     controller.add(MessageDelta(
-        'Generating the image with Gemini, then adding it into '
-        '"${target.title}"…\n\n'));
+        'Generating the image with ${_imageProviderName(providerId)}, then '
+        'adding it into "${target.title}"…\n\n'));
     Uint8List? bytes;
-    await for (final event
-        in _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt)) {
+    await for (final event in _imageStream(providerId, prompt)) {
       switch (event) {
         case ImageGenerated(:final pngBytes):
           bytes = pngBytes;
@@ -583,19 +610,19 @@ class RealChatService implements ChatService {
     controller.add(const MessageComplete());
   }
 
-  Future<void> _runGeminiImage(
+  Future<void> _runImage(
     StreamController<ChatEvent> controller,
+    String providerId,
     String prompt, {
     bool close = true,
   }) async {
     if (close) {
       controller.add(RoutingDetected(ChatRoute.imageGen.studioType));
     }
-    controller.add(const MessageDelta(
-        'Routing this to Image Studio — generating with Gemini…\n\n'));
-    await controller.addStream(
-      _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt),
-    );
+    controller.add(MessageDelta(
+        'Routing this to Image Studio — generating with '
+        '${_imageProviderName(providerId)}…\n\n'));
+    await controller.addStream(_imageStream(providerId, prompt));
     if (close) await controller.close();
   }
 

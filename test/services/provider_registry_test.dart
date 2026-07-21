@@ -67,9 +67,10 @@ void main() {
           noGemini);
     });
 
-    test('image prefers Gemini (LLM providers do not advertise image)', () {
+    test('image prefers Gemini, then Flux (LLM providers do not advertise '
+        'image)', () {
       expect(registry.providersFor(ProviderCapability.image).map((d) => d.id),
-          ['gemini']);
+          ['gemini', 'flux']);
     });
 
     test('search prefers Anthropic, then Gemini', () {
@@ -130,18 +131,18 @@ void main() {
 
     test('returns a problem string when no client is wired for a kind', () async {
       final clients = ClientRegistry();
-      // Flux has no client yet in Phase 0.
-      expect(clients.validatorFor(ProviderClientKind.flux), isNull);
-      const fluxish = ProviderDescriptor(
-        id: 'flux',
-        displayName: 'Flux',
-        persistenceKeyName: 'shift_ai.flux_key.v1',
+      // Heygen has no client wired yet (ships in Phase 6).
+      expect(clients.validatorFor(ProviderClientKind.heygen), isNull);
+      const heygenish = ProviderDescriptor(
+        id: 'heygen',
+        displayName: 'Heygen',
+        persistenceKeyName: 'shift_ai.heygen_key.v1',
         authScheme: AuthScheme.header,
-        clientKind: ProviderClientKind.flux,
-        capabilities: {ProviderCapability.image},
+        clientKind: ProviderClientKind.heygen,
+        capabilities: {ProviderCapability.avatar},
         models: [],
       );
-      final problem = await clients.validateKey(fluxish, 'x');
+      final problem = await clients.validateKey(heygenish, 'x');
       expect(problem, isNotNull);
     });
 

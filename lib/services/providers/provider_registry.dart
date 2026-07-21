@@ -1,5 +1,7 @@
 import 'anthropic_api_config.dart';
 import 'anthropic_client.dart';
+import 'flux_api_config.dart';
+import 'flux_client.dart';
 import 'gemini_api_config.dart';
 import 'gemini_client.dart';
 import 'openai_compatible_client.dart';
@@ -231,6 +233,40 @@ final openrouterDescriptor = ProviderDescriptor(
   consoleUrl: 'openrouter.ai/keys',
 );
 
+/// Black Forest Labs (FLUX) — high-quality image generation via an async
+/// submit/poll API. Browser-direct calls may be blocked by CORS, hence the
+/// caution line.
+final fluxDescriptor = ProviderDescriptor(
+  id: 'flux',
+  displayName: 'Black Forest Labs (FLUX)',
+  persistenceKeyName: 'shift_ai.flux_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.flux,
+  baseUrl: FluxApiConfig.base,
+  capabilities: const {ProviderCapability.image},
+  models: const [
+    ProviderModel(
+      id: FluxApiConfig.proModel,
+      displayName: 'FLUX 1.1 Pro',
+      capabilities: {ProviderCapability.image},
+    ),
+    ProviderModel(
+      id: FluxApiConfig.devModel,
+      displayName: 'FLUX.1 dev',
+      capabilities: {ProviderCapability.image},
+    ),
+  ],
+  // Gemini leads on image; Flux is the next choice.
+  preferenceRanks: const {ProviderCapability.image: 1},
+  hintPrefix: '',
+  guidanceText:
+      'High-quality image generation with FLUX. Stored only in this browser.',
+  consoleUrl: 'dashboard.bfl.ai',
+  browserWarning:
+      'FLUX may block direct browser calls (CORS). If a key test or generation '
+      'fails with a network/CORS error, it likely needs a proxy.',
+);
+
 /// The set of providers the app knows about, plus lookups over them. Pure
 /// data — no network, no state — so it is trivially unit-testable and safe to
 /// construct anywhere.
@@ -248,6 +284,7 @@ class ProviderRegistry {
         groqDescriptor,
         mistralDescriptor,
         openrouterDescriptor,
+        fluxDescriptor,
       ]);
 
   ProviderDescriptor? byId(String id) {
@@ -315,6 +352,7 @@ class ClientRegistry {
   })  : _factories = {
           ProviderClientKind.anthropic: () => AnthropicClient(),
           ProviderClientKind.gemini: () => GeminiClient(),
+          ProviderClientKind.flux: () => FluxClient(),
           ...?factories,
         },
         _openAiFactory = openAiClient ?? (() => OpenAiCompatibleClient());
