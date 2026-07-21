@@ -1,39 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../services/providers/provider_descriptor.dart';
 import '../../state/api_keys_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 
-/// BYOK key management. Adding an Anthropic key flips chat from Simulated
-/// to Live; removing it falls straight back to the mock.
-class ApiKeysSection extends StatefulWidget {
+/// BYOK key management. Adding any provider key flips chat from Simulated to
+/// Live; removing the last one falls straight back to the mock. The list of
+/// providers is driven entirely off [ApiKeysStore.registry], so new providers
+/// appear here automatically with no change to this file.
+class ApiKeysSection extends StatelessWidget {
   const ApiKeysSection({super.key});
-
-  @override
-  State<ApiKeysSection> createState() => _ApiKeysSectionState();
-}
-
-class _ApiKeysSectionState extends State<ApiKeysSection> {
-  late final TextEditingController _anthropicController;
-  late final TextEditingController _geminiController;
-  bool _showAnthropic = false;
-  bool _showGemini = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final keys = context.read<ApiKeysStore>();
-    _anthropicController = TextEditingController(text: keys.anthropicKey);
-    _geminiController = TextEditingController(text: keys.geminiKey);
-  }
-
-  @override
-  void dispose() {
-    _anthropicController.dispose();
-    _geminiController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -52,130 +30,10 @@ class _ApiKeysSectionState extends State<ApiKeysSection> {
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: AppSpacing.lg),
-
-        // --- Anthropic ---
-        Row(
-          children: [
-            Text('Anthropic (Claude)', style: theme.textTheme.titleSmall),
-            const SizedBox(width: AppSpacing.sm),
-            _StatusBadge(status: keys.anthropicStatus),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Powers live chat, coding, writing, and routing. Create a key at '
-          'console.anthropic.com (API keys) — new accounts may need a small '
-          'credit purchase first.',
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _anthropicController,
-                obscureText: !_showAnthropic,
-                decoration: InputDecoration(
-                  hintText: 'sk-ant-…',
-                  suffixIcon: IconButton(
-                    icon: Icon(_showAnthropic
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined),
-                    onPressed: () =>
-                        setState(() => _showAnthropic = !_showAnthropic),
-                  ),
-                ),
-                onChanged: keys.setAnthropicKey,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            FilledButton.tonal(
-              onPressed: keys.anthropicKey.isEmpty ||
-                      keys.anthropicStatus == KeyStatus.testing
-                  ? null
-                  : keys.testAnthropicKey,
-              child: keys.anthropicStatus == KeyStatus.testing
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 1.6),
-                    )
-                  : const Text('Test key'),
-            ),
-          ],
-        ),
-        if (keys.anthropicError != null)
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpacing.xs),
-            child: Text(
-              keys.anthropicError!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            ),
-          ),
-        const SizedBox(height: AppSpacing.lg),
-
-        // --- Google ---
-        Row(
-          children: [
-            Text('Google (Gemini)', style: theme.textTheme.titleSmall),
-            const SizedBox(width: AppSpacing.sm),
-            _StatusBadge(status: keys.geminiStatus),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          'Powers live image generation, Gemini chat, and Google-grounded '
-          'search. Free-tier keys are available at aistudio.google.com — '
-          'no purchase required.',
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _geminiController,
-                obscureText: !_showGemini,
-                decoration: InputDecoration(
-                  hintText: 'AIza…',
-                  suffixIcon: IconButton(
-                    icon: Icon(_showGemini
-                        ? Icons.visibility_off_outlined
-                        : Icons.visibility_outlined),
-                    onPressed: () =>
-                        setState(() => _showGemini = !_showGemini),
-                  ),
-                ),
-                onChanged: keys.setGeminiKey,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            FilledButton.tonal(
-              onPressed: keys.geminiKey.isEmpty ||
-                      keys.geminiStatus == KeyStatus.testing
-                  ? null
-                  : keys.testGeminiKey,
-              child: keys.geminiStatus == KeyStatus.testing
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 1.6),
-                    )
-                  : const Text('Test key'),
-            ),
-          ],
-        ),
-        if (keys.geminiError != null)
-          Padding(
-            padding: const EdgeInsets.only(top: AppSpacing.xs),
-            child: Text(
-              keys.geminiError!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.error),
-            ),
-          ),
-        const SizedBox(height: AppSpacing.md),
+        for (final descriptor in keys.registry.all) ...[
+          _ProviderKeyRow(descriptor: descriptor),
+          const SizedBox(height: AppSpacing.lg),
+        ],
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
@@ -185,12 +43,136 @@ class _ApiKeysSectionState extends State<ApiKeysSection> {
           child: Text(
             keys.isLive
                 ? 'Live mode is on — chat now calls the real API with your '
-                    'key. Clear the key to return to simulated demos.'
+                    'key. Clear every key to return to simulated demos.'
                 : 'No keys yet — everything runs in simulated demo mode, '
                     'free and offline-friendly.',
             style: theme.textTheme.bodySmall,
           ),
         ),
+      ],
+    );
+  }
+}
+
+/// One provider's key field, status badge, test button, guidance, and — for
+/// CORS-risky providers — a browser caution line. Manages its own text
+/// controller and show/hide toggle.
+class _ProviderKeyRow extends StatefulWidget {
+  final ProviderDescriptor descriptor;
+
+  const _ProviderKeyRow({required this.descriptor});
+
+  @override
+  State<_ProviderKeyRow> createState() => _ProviderKeyRowState();
+}
+
+class _ProviderKeyRowState extends State<_ProviderKeyRow> {
+  late final TextEditingController _controller;
+  bool _show = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final keys = context.read<ApiKeysStore>();
+    _controller =
+        TextEditingController(text: keys.keyFor(widget.descriptor.id));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final descriptor = widget.descriptor;
+    final keys = context.watch<ApiKeysStore>();
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+
+    final status = keys.statusFor(descriptor.id);
+    final error = keys.errorFor(descriptor.id);
+    final hasKey = keys.hasKey(descriptor.id);
+    final hint =
+        descriptor.hintPrefix.isEmpty ? 'API key' : '${descriptor.hintPrefix}…';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(descriptor.displayName, style: theme.textTheme.titleSmall),
+            const SizedBox(width: AppSpacing.sm),
+            _StatusBadge(status: status),
+          ],
+        ),
+        if (descriptor.guidanceText.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.xs),
+          Text(descriptor.guidanceText, style: theme.textTheme.bodySmall),
+        ],
+        const SizedBox(height: AppSpacing.sm),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                obscureText: !_show,
+                decoration: InputDecoration(
+                  hintText: hint,
+                  suffixIcon: IconButton(
+                    icon: Icon(_show
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined),
+                    onPressed: () => setState(() => _show = !_show),
+                  ),
+                ),
+                onChanged: (value) => keys.setKey(descriptor.id, value),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            FilledButton.tonal(
+              onPressed: !hasKey || status == KeyStatus.testing
+                  ? null
+                  : () => keys.testKey(descriptor.id),
+              child: status == KeyStatus.testing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 1.6),
+                    )
+                  : const Text('Test key'),
+            ),
+          ],
+        ),
+        if (descriptor.browserWarning != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline,
+                    size: 14, color: colors.textSecondary),
+                const SizedBox(width: AppSpacing.xs),
+                Expanded(
+                  child: Text(
+                    descriptor.browserWarning!,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: colors.textSecondary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.xs),
+            child: Text(
+              error,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.error),
+            ),
+          ),
       ],
     );
   }
