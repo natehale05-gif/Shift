@@ -14,17 +14,41 @@ class StudioResponseBank {
   StudioResponseBank._();
 
   static const Map<StudioType, List<String>> _keywords = {
+    // The new deliverable/specific studios are checked first so they win over
+    // the broader Image/Video/Music keywords.
+    StudioType.translateStudio: [
+      'translate', 'translation', 'translated', 'localize', 'localise',
+      'localization', 'localisation',
+    ],
+    StudioType.deckStudio: [
+      'slide deck', 'slides', 'powerpoint', 'power point', 'pptx', 'keynote',
+      'pitch deck', 'presentation', 'deck',
+    ],
+    StudioType.brandPackStudio: [
+      'brand pack', 'brand kit', 'brand bundle', 'brand assets',
+      'brand identity', 'brand guidelines', 'logo pack', 'style guide',
+      'brand book',
+    ],
+    StudioType.shortReelsStudio: [
+      'shortreels', 'short reels', 'reels pack', 'short-form', 'short form',
+      'shorts', 'tiktok', 'tiktoks', 'batch of reels', 'reels for',
+    ],
+    StudioType.avatarStudio: [
+      'avatar', 'talking head', 'talking-head', 'spokesperson',
+      'presenter video', 'digital human',
+    ],
+    StudioType.voiceStudio: [
+      'voiceover', 'voice over', 'voice-over', 'narrate', 'narration',
+      'read aloud', 'text to speech', 'text-to-speech', 'tts',
+      'clone my voice', 'dub', 'voice',
+    ],
     StudioType.imageStudio: [
       'image', 'photo', 'picture', 'logo', 'product shot', 'ad creative',
       'poster', 'graphic', 'illustration', 'thumbnail', 'banner',
     ],
     StudioType.videoStudio: [
-      'video', 'clip', 'reel', 'shortreel', 'movie', 'trailer', 'ad video',
+      'video', 'clip', 'reel', 'movie', 'trailer', 'ad video',
       'commercial', 'footage',
-    ],
-    StudioType.voiceAvatarStudio: [
-      'voice', 'avatar', 'narrate', 'narration', 'clone my voice', 'dub',
-      'talking head', 'voiceover',
     ],
     StudioType.musicStudio: [
       'music', 'song', 'beat', 'soundtrack', 'jingle', 'track', 'audio bed',
@@ -86,6 +110,7 @@ class StudioResponseBank {
       StudioType.codeStudio =>
         "Routing this to Code Studio to build \"$input\".",
       StudioType.middleware => middlewareReply(input),
+      _ => 'Routing this to ${studio.displayName} for "$input".',
     };
   }
 
@@ -97,6 +122,12 @@ class StudioResponseBank {
       StudioType.musicStudio => 'Track is scored and ready. Want a different mood or tempo?',
       StudioType.copyScriptsStudio => 'Copy is drafted below — tell me the tone or platform to tighten it.',
       StudioType.codeStudio => 'Here\'s a first pass below — downloadable as its own file. Tell me the language or a bug to fix and I\'ll revise it.',
+      StudioType.voiceStudio => 'Voiceover is ready to play and download below. Want a different tone, pace, or voice?',
+      StudioType.avatarStudio => 'Your talking-head video is ready below. I can change the avatar, script, or voice on request.',
+      StudioType.translateStudio => 'Translation is ready below and downloadable. Tell me another language or a tone to match.',
+      StudioType.deckStudio => 'Your deck is drafted below — downloadable as a .pptx. Ask for more slides, a different structure, or a restyle.',
+      StudioType.shortReelsStudio => 'Your short-form pack is ready below — download the bundle. Want more variations or a different hook?',
+      StudioType.brandPackStudio => 'Your brand pack is bundled below — download the kit. Ask for a different logo direction or palette.',
       StudioType.middleware => '',
     };
   }
@@ -140,6 +171,30 @@ class StudioResponseBank {
           ? 'Happy to build that — which language should I use, and can '
               'you say a bit more about what it should do?'
           : null,
+      StudioType.translateStudio => words < 4
+          ? 'Happy to translate that — what should I translate, and into '
+              'which language?'
+          : null,
+      StudioType.deckStudio => words < 5
+          ? 'Happy to build that deck — what\'s the topic, and roughly how '
+              'many slides do you want?'
+          : null,
+      StudioType.voiceStudio => words < 6
+          ? 'I can do that — what should the voiceover say, and is there a '
+              'tone or voice you have in mind?'
+          : null,
+      StudioType.avatarStudio => words < 6
+          ? 'Happy to make that — what should the avatar say, and any look '
+              'or voice preference?'
+          : null,
+      StudioType.shortReelsStudio => words < 5
+          ? 'Love it — what\'s the topic or product, and how many reels do '
+              'you want in the pack?'
+          : null,
+      StudioType.brandPackStudio => words < 5
+          ? 'Happy to build that — what\'s the brand name, and any vibe or '
+              'colors you\'re going for?'
+          : null,
       StudioType.middleware => null,
     };
   }
@@ -156,6 +211,7 @@ class StudioResponseBank {
       StudioType.copyScriptsStudio => 'Got it, drafting that now.',
       StudioType.codeStudio => 'Got it, building that now.',
       StudioType.middleware => '',
+      _ => 'Got it, generating that now.',
     };
   }
 
@@ -467,6 +523,52 @@ class StudioResponseBank {
           language: 'Python',
           filename: _codeFilename('Python', input),
           code: _codeSnippet(language: 'Python', prompt: input, includeComments: true),
+        ),
+      // Voice is a real synthesized-and-downloadable voiceover already.
+      StudioType.voiceStudio => AudioResult(
+          kind: AudioKind.voice,
+          title: 'Aria · Friendly',
+          subtitle: 'Voiceover',
+          durationSec: max(4, (input.split(' ').length / 2.5).round()),
+          seed: seed,
+          transcript: input.trim().isEmpty ? narrationScript(input) : input,
+        ),
+      // Interim results until each studio's real deliverable ships (S2–S6):
+      // Avatar → a voiceover card (Heygen video wired in S6); ShortReels → a
+      // clip; Brand Pack → a logo image; Translate/Deck → text.
+      StudioType.avatarStudio => AudioResult(
+          kind: AudioKind.voice,
+          title: 'Avatar · Presenter',
+          subtitle: 'Talking-head voiceover',
+          durationSec: max(4, (input.split(' ').length / 2.5).round()),
+          seed: seed,
+          transcript: input.trim().isEmpty ? narrationScript(input) : input,
+        ),
+      StudioType.shortReelsStudio => VideoResult(
+          prompt: input,
+          durationSec: 15,
+          aspectRatio: '9:16',
+          identityLock: false,
+          seed: seed,
+        ),
+      StudioType.brandPackStudio => ImageResult(
+          prompt: input.trim().isEmpty ? 'brand logo' : '$input logo',
+          aspectRatio: '1:1',
+          stylePreset: 'Logo',
+          count: 1,
+          seed: seed,
+        ),
+      StudioType.translateStudio => CopyResult(
+          contentType: 'Translation',
+          tone: 'Faithful',
+          text: input.trim().isEmpty
+              ? 'Tell me what to translate and into which language.'
+              : input.trim(),
+        ),
+      StudioType.deckStudio => CopyResult(
+          contentType: 'Deck outline',
+          tone: 'Clear',
+          text: input.trim().isEmpty ? 'What should the deck cover?' : input.trim(),
         ),
       StudioType.middleware => throw ArgumentError('No studio result for middleware'),
     };

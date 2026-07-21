@@ -12,7 +12,22 @@ import '../studio_response_bank.dart';
 
 /// What kind of executor a prompt needs — the middleware AI's routing
 /// decision, independent of which provider ends up serving it.
-enum ChatRoute { chat, code, writing, imageGen, webSearch, deepResearch, video, audio }
+enum ChatRoute {
+  chat,
+  code,
+  writing,
+  imageGen,
+  webSearch,
+  deepResearch,
+  video,
+  audio,
+  voice,
+  avatar,
+  translate,
+  deck,
+  shortReels,
+  brandPack,
+}
 
 extension ChatRouteStudio on ChatRoute {
   /// The studio identity shown on the routing chip.
@@ -25,6 +40,12 @@ extension ChatRouteStudio on ChatRoute {
         ChatRoute.deepResearch => StudioType.middleware,
         ChatRoute.video => StudioType.videoStudio,
         ChatRoute.audio => StudioType.musicStudio,
+        ChatRoute.voice => StudioType.voiceStudio,
+        ChatRoute.avatar => StudioType.avatarStudio,
+        ChatRoute.translate => StudioType.translateStudio,
+        ChatRoute.deck => StudioType.deckStudio,
+        ChatRoute.shortReels => StudioType.shortReelsStudio,
+        ChatRoute.brandPack => StudioType.brandPackStudio,
       };
 }
 
@@ -47,6 +68,12 @@ ChatRoute? parseRouteJson(String text) {
       'deep_research' => ChatRoute.deepResearch,
       'video' => ChatRoute.video,
       'audio' => ChatRoute.audio,
+      'voice' => ChatRoute.voice,
+      'avatar' => ChatRoute.avatar,
+      'translate' => ChatRoute.translate,
+      'deck' => ChatRoute.deck,
+      'short_reels' => ChatRoute.shortReels,
+      'brand_pack' => ChatRoute.brandPack,
       _ => null,
     };
   } catch (_) {
@@ -65,6 +92,12 @@ ChatRoute routeForStudio(StudioType studio) => switch (studio) {
       StudioType.copyScriptsStudio => ChatRoute.writing,
       StudioType.codeStudio => ChatRoute.code,
       StudioType.middleware => ChatRoute.chat,
+      StudioType.voiceStudio => ChatRoute.voice,
+      StudioType.avatarStudio => ChatRoute.avatar,
+      StudioType.translateStudio => ChatRoute.translate,
+      StudioType.deckStudio => ChatRoute.deck,
+      StudioType.shortReelsStudio => ChatRoute.shortReels,
+      StudioType.brandPackStudio => ChatRoute.brandPack,
     };
 
 /// Maps the existing keyword tables onto routes — the no-key (and

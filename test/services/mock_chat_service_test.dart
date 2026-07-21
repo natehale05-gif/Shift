@@ -10,13 +10,29 @@ void main() {
     });
 
     test('routes video keywords to Video Studio', () {
-      expect(StudioResponseBank.detectStudio('cut a short reel for TikTok'), StudioType.videoStudio);
+      expect(StudioResponseBank.detectStudio('cut a 30-second video ad'), StudioType.videoStudio);
       expect(StudioResponseBank.detectStudio('I need a trailer'), StudioType.videoStudio);
     });
 
-    test('routes voice/avatar keywords to Voice & Avatar Studio', () {
-      expect(StudioResponseBank.detectStudio('clone my voice for this'), StudioType.voiceAvatarStudio);
-      expect(StudioResponseBank.detectStudio('narrate this script'), StudioType.voiceAvatarStudio);
+    test('routes short-form keywords to ShortReels Studio', () {
+      expect(StudioResponseBank.detectStudio('cut a short reel for TikTok'), StudioType.shortReelsStudio);
+      expect(StudioResponseBank.detectStudio('a pack of shorts for launch'), StudioType.shortReelsStudio);
+    });
+
+    test('routes voice keywords to Voice Studio', () {
+      expect(StudioResponseBank.detectStudio('clone my voice for this'), StudioType.voiceStudio);
+      expect(StudioResponseBank.detectStudio('narrate this script'), StudioType.voiceStudio);
+    });
+
+    test('routes avatar keywords to Avatar Studio', () {
+      expect(StudioResponseBank.detectStudio('a talking head avatar of me'), StudioType.avatarStudio);
+      expect(StudioResponseBank.detectStudio('make a spokesperson video'), StudioType.avatarStudio);
+    });
+
+    test('routes translate/deck/brand keywords to their studios', () {
+      expect(StudioResponseBank.detectStudio('translate this to Spanish'), StudioType.translateStudio);
+      expect(StudioResponseBank.detectStudio('make me a slide deck'), StudioType.deckStudio);
+      expect(StudioResponseBank.detectStudio('build a brand pack'), StudioType.brandPackStudio);
     });
 
     test('routes music keywords to Music Studio', () {

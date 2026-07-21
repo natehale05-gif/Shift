@@ -14,6 +14,15 @@ ProviderCapability capabilityForRoute(ChatRoute route) => switch (route) {
       ChatRoute.deepResearch => ProviderCapability.search,
       ChatRoute.video => ProviderCapability.video,
       ChatRoute.audio => ProviderCapability.voice,
+      // Voiceover uses a voice provider; a talking-head avatar its own.
+      ChatRoute.voice => ProviderCapability.voice,
+      ChatRoute.avatar => ProviderCapability.avatar,
+      // Translate and Deck are text tasks (best text provider writes them).
+      ChatRoute.translate => ProviderCapability.writing,
+      ChatRoute.deck => ProviderCapability.writing,
+      // A short-form pack leans on video; a brand pack on image.
+      ChatRoute.shortReels => ProviderCapability.video,
+      ChatRoute.brandPack => ProviderCapability.image,
     };
 
 /// The best available provider for [route]: the first provider in the

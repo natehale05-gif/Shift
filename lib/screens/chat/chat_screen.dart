@@ -230,10 +230,14 @@ class _EmptyState extends StatelessWidget {
                 children: [
                   for (final studio in const [
                     StudioType.imageStudio,
+                    StudioType.voiceStudio,
+                    StudioType.avatarStudio,
+                    StudioType.translateStudio,
                     StudioType.videoStudio,
-                    StudioType.voiceAvatarStudio,
+                    StudioType.deckStudio,
+                    StudioType.shortReelsStudio,
                     StudioType.musicStudio,
-                    StudioType.copyScriptsStudio,
+                    StudioType.brandPackStudio,
                     StudioType.codeStudio,
                   ])
                     Chip(

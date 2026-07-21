@@ -17,11 +17,16 @@ Future<StudioRequest?> showStudioRequestSheet(
     builder: (context) => switch (studioType) {
       StudioType.imageStudio => const _ImageRequestSheet(),
       StudioType.videoStudio => const _VideoRequestSheet(),
-      StudioType.voiceAvatarStudio => const _VoiceAvatarRequestSheet(),
+      StudioType.voiceAvatarStudio ||
+      StudioType.voiceStudio ||
+      StudioType.avatarStudio =>
+        const _VoiceAvatarRequestSheet(),
       StudioType.musicStudio => const _MusicRequestSheet(),
       StudioType.copyScriptsStudio => const _CopyScriptsRequestSheet(),
       StudioType.codeStudio => const _CodeRequestSheet(),
-      StudioType.middleware => throw ArgumentError('No sheet for middleware'),
+      // Translate/Deck/ShortReels/Brand Pack are driven from chat (no
+      // structured form), so no sheet.
+      _ => throw ArgumentError('No sheet for $studioType'),
     },
   );
 }
