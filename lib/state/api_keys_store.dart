@@ -1,97 +1,107 @@
 import 'package:flutter/foundation.dart';
 
 import '../services/persistence_service.dart';
-import '../services/providers/anthropic_client.dart';
-import '../services/providers/gemini_client.dart';
+import '../services/providers/provider_registry.dart';
 
 enum KeyStatus { none, untested, testing, valid, invalid }
 
-/// The user's own provider API keys (BYOK). Keys live only in this
-/// browser's storage — there is no backend — and calls go browser-direct
-/// to the provider. Adding a key flips chat from Simulated to Live;
-/// removing it falls back to the mock.
+/// The user's own provider API keys (BYOK), keyed by provider id. Keys live
+/// only in this browser's storage — there is no backend — and calls go
+/// browser-direct to the provider. Adding any key flips chat from Simulated to
+/// Live; removing the last one falls back to the mock.
+///
+/// The store is map-backed and driven off [ProviderRegistry], so a new
+/// provider needs no changes here. The Anthropic/Gemini-specific getters and
+/// setters are thin shims over the generic API, kept for the many existing
+/// callers and tests.
 class ApiKeysStore extends ChangeNotifier {
-  static const _anthropicKeyName = 'shift_ai.anthropic_key.v1';
-  static const _geminiKeyName = 'shift_ai.gemini_key.v1';
-
   final PersistenceService persistence;
-  final AnthropicClient _anthropicClient;
-  final GeminiClient _geminiClient;
+  final ProviderRegistry registry;
+  final ClientRegistry _clients;
 
-  String _anthropicKey = '';
-  String _geminiKey = '';
-  KeyStatus _anthropicStatus = KeyStatus.none;
-  KeyStatus _geminiStatus = KeyStatus.none;
-  String? _anthropicError;
-  String? _geminiError;
+  final Map<String, String> _keys = {};
+  final Map<String, KeyStatus> _status = {};
+  final Map<String, String?> _errors = {};
 
   ApiKeysStore({
     required this.persistence,
-    AnthropicClient? anthropicClient,
-    GeminiClient? geminiClient,
-  })  : _anthropicClient = anthropicClient ?? AnthropicClient(),
-        _geminiClient = geminiClient ?? GeminiClient();
+    ProviderRegistry? registry,
+    ClientRegistry? clients,
+  })  : registry = registry ?? ProviderRegistry.defaults(),
+        _clients = clients ?? ClientRegistry();
 
-  String get anthropicKey => _anthropicKey;
-  String get geminiKey => _geminiKey;
-  KeyStatus get anthropicStatus => _anthropicStatus;
-  KeyStatus get geminiStatus => _geminiStatus;
-  String? get anthropicError => _anthropicError;
-  String? get geminiError => _geminiError;
+  // ---- Generic, registry-driven API ----
 
-  /// Live mode: any Anthropic key present (validation refines error
-  /// reporting but doesn't gate sending).
-  bool get hasAnthropicKey => _anthropicKey.isNotEmpty;
-  bool get hasGeminiKey => _geminiKey.isNotEmpty;
-  bool get isLive => hasAnthropicKey || hasGeminiKey;
+  /// The stored key for [providerId], or '' when none.
+  String keyFor(String providerId) => _keys[providerId] ?? '';
 
+  /// Whether a (non-empty) key is present for [providerId].
+  bool hasKey(String providerId) => keyFor(providerId).isNotEmpty;
+
+  KeyStatus statusFor(String providerId) =>
+      _status[providerId] ?? KeyStatus.none;
+
+  String? errorFor(String providerId) => _errors[providerId];
+
+  /// Live mode: any provider key present (validation refines error reporting
+  /// but doesn't gate sending).
+  bool get isLive => registry.all.any((d) => hasKey(d.id));
+
+  /// Loads every registered provider's key from persistence.
   Future<void> load() async {
-    _anthropicKey = await persistence.loadApiKey(_anthropicKeyName) ?? '';
-    _geminiKey = await persistence.loadApiKey(_geminiKeyName) ?? '';
-    _anthropicStatus =
-        _anthropicKey.isEmpty ? KeyStatus.none : KeyStatus.untested;
-    _geminiStatus = _geminiKey.isEmpty ? KeyStatus.none : KeyStatus.untested;
+    for (final descriptor in registry.all) {
+      final key =
+          await persistence.loadApiKey(descriptor.persistenceKeyName) ?? '';
+      _keys[descriptor.id] = key;
+      _status[descriptor.id] =
+          key.isEmpty ? KeyStatus.none : KeyStatus.untested;
+    }
     notifyListeners();
   }
 
-  Future<void> setAnthropicKey(String key) async {
-    _anthropicKey = key.trim();
-    _anthropicStatus =
-        _anthropicKey.isEmpty ? KeyStatus.none : KeyStatus.untested;
-    _anthropicError = null;
+  /// Sets (or, when empty, clears) the key for [providerId] and persists it.
+  Future<void> setKey(String providerId, String key) async {
+    final descriptor = registry.byId(providerId);
+    if (descriptor == null) return;
+    final value = key.trim();
+    _keys[providerId] = value;
+    _status[providerId] = value.isEmpty ? KeyStatus.none : KeyStatus.untested;
+    _errors[providerId] = null;
     notifyListeners();
     await persistence.saveApiKey(
-        _anthropicKeyName, _anthropicKey.isEmpty ? null : _anthropicKey);
+        descriptor.persistenceKeyName, value.isEmpty ? null : value);
   }
 
-  Future<void> setGeminiKey(String key) async {
-    _geminiKey = key.trim();
-    _geminiStatus = _geminiKey.isEmpty ? KeyStatus.none : KeyStatus.untested;
-    _geminiError = null;
+  /// Validates the stored key for [providerId] against its provider client.
+  Future<void> testKey(String providerId) async {
+    final descriptor = registry.byId(providerId);
+    if (descriptor == null) return;
+    final value = keyFor(providerId);
+    if (value.isEmpty) return;
+    _status[providerId] = KeyStatus.testing;
+    _errors[providerId] = null;
     notifyListeners();
-    await persistence.saveApiKey(
-        _geminiKeyName, _geminiKey.isEmpty ? null : _geminiKey);
-  }
-
-  Future<void> testGeminiKey() async {
-    if (_geminiKey.isEmpty) return;
-    _geminiStatus = KeyStatus.testing;
-    _geminiError = null;
-    notifyListeners();
-    final problem = await _geminiClient.validateKey(_geminiKey);
-    _geminiStatus = problem == null ? KeyStatus.valid : KeyStatus.invalid;
-    _geminiError = problem;
+    final problem = await _clients.validateKey(descriptor, value);
+    _status[providerId] =
+        problem == null ? KeyStatus.valid : KeyStatus.invalid;
+    _errors[providerId] = problem;
     notifyListeners();
   }
 
-  Future<void> testAnthropicKey() async {
-    if (_anthropicKey.isEmpty) return;
-    _anthropicStatus = KeyStatus.testing;
-    _anthropicError = null;
-    notifyListeners();
-    final problem = await _anthropicClient.validateKey(_anthropicKey);
-    _anthropicStatus = problem == null ? KeyStatus.valid : KeyStatus.invalid;
-    _anthropicError = problem;
-    notifyListeners();
-  }
+  // ---- Legacy Anthropic/Gemini shims (delegate to the generic API) ----
+
+  String get anthropicKey => keyFor('anthropic');
+  String get geminiKey => keyFor('gemini');
+  KeyStatus get anthropicStatus => statusFor('anthropic');
+  KeyStatus get geminiStatus => statusFor('gemini');
+  String? get anthropicError => errorFor('anthropic');
+  String? get geminiError => errorFor('gemini');
+
+  bool get hasAnthropicKey => hasKey('anthropic');
+  bool get hasGeminiKey => hasKey('gemini');
+
+  Future<void> setAnthropicKey(String key) => setKey('anthropic', key);
+  Future<void> setGeminiKey(String key) => setKey('gemini', key);
+  Future<void> testAnthropicKey() => testKey('anthropic');
+  Future<void> testGeminiKey() => testKey('gemini');
 }
