@@ -197,6 +197,13 @@ class _AssistantProse extends StatelessWidget {
     final showTyping =
         message.status == MessageStatus.streaming && message.blocks.isEmpty;
 
+    // Render the response the ‹1/2› navigator currently points at (the newest
+    // by default; older regenerations when the user steps back).
+    final blocks = message.displayBlocks;
+    final text = message.displayText;
+    final studioResult = message.displayStudioResult;
+    final citations = message.displayCitations;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -207,22 +214,22 @@ class _AssistantProse extends StatelessWidget {
             padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
             child: TypingIndicator(),
           )
-        else if (message.blocks.isEmpty && message.text.isNotEmpty)
+        else if (blocks.isEmpty && text.isNotEmpty)
           // Directly constructed / legacy messages carry text without
           // blocks — render the flat text through the same markdown path.
-          MarkdownMessage(text: message.text)
+          MarkdownMessage(text: text)
         else ...[
-          for (final block in message.blocks) _blockView(context, block),
+          for (final block in blocks) _blockView(context, block),
         ],
-        if (message.studioResult != null)
+        if (studioResult != null)
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.md),
-            child: StudioResultCard(result: message.studioResult!),
+            child: StudioResultCard(result: studioResult),
           ),
-        if (message.citations.isNotEmpty)
+        if (citations.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.md),
-            child: _CitationChips(citations: message.citations),
+            child: _CitationChips(citations: citations),
           ),
         _ActionRow(message: message, visible: hovering),
       ],
@@ -605,11 +612,13 @@ class _ActionRow extends StatelessWidget {
       duration: const Duration(milliseconds: 120),
       child: Row(
         children: [
+          if (message.hasVariants)
+            _VariantNavigator(message: message),
           _ActionIcon(
             tooltip: 'Copy',
             icon: Icons.copy_rounded,
             onPressed: () =>
-                Clipboard.setData(ClipboardData(text: message.text)),
+                Clipboard.setData(ClipboardData(text: message.displayText)),
           ),
           _ActionIcon(
             tooltip: 'Regenerate',
@@ -617,11 +626,35 @@ class _ActionRow extends StatelessWidget {
             onPressed: () =>
                 context.read<ConversationStore>().regenerate(message.id),
           ),
+          _ActionIcon(
+            tooltip: 'Good response',
+            icon: message.feedback == MessageFeedback.up
+                ? Icons.thumb_up_rounded
+                : Icons.thumb_up_outlined,
+            color: message.feedback == MessageFeedback.up
+                ? theme.colorScheme.primary
+                : null,
+            onPressed: () => context
+                .read<ConversationStore>()
+                .setFeedback(message.id, MessageFeedback.up),
+          ),
+          _ActionIcon(
+            tooltip: 'Bad response',
+            icon: message.feedback == MessageFeedback.down
+                ? Icons.thumb_down_rounded
+                : Icons.thumb_down_outlined,
+            color: message.feedback == MessageFeedback.down
+                ? theme.colorScheme.primary
+                : null,
+            onPressed: () => context
+                .read<ConversationStore>()
+                .setFeedback(message.id, MessageFeedback.down),
+          ),
           if (TtsService.isSupported)
             _ActionIcon(
               tooltip: 'Read aloud',
               icon: Icons.volume_up_outlined,
-              onPressed: () => TtsService.speak(message.text),
+              onPressed: () => TtsService.speak(message.displayText),
             ),
           const SizedBox(width: AppSpacing.xs),
           Text(
@@ -629,11 +662,12 @@ class _ActionRow extends StatelessWidget {
             style: theme.textTheme.labelSmall
                 ?.copyWith(color: colors.textSecondary),
           ),
-          if (message.usage != null) ...[
+          if (message.displayUsage != null) ...[
             const SizedBox(width: AppSpacing.sm),
             Text(
-              '${message.usage!.model} · ${message.usage!.inputTokens} in / '
-              '${message.usage!.outputTokens} out',
+              '${message.displayUsage!.model} · '
+              '${message.displayUsage!.inputTokens} in / '
+              '${message.displayUsage!.outputTokens} out',
               style: theme.textTheme.labelSmall
                   ?.copyWith(color: colors.textSecondary),
             ),
@@ -644,15 +678,57 @@ class _ActionRow extends StatelessWidget {
   }
 }
 
+/// The ‹ 1/2 › switcher shown under a reply that has been regenerated, so the
+/// user can step between the alternative responses.
+class _VariantNavigator extends StatelessWidget {
+  final ChatMessage message;
+
+  const _VariantNavigator({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final store = context.read<ConversationStore>();
+    final index = message.activeVariant;
+    final count = message.variantCount;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _ActionIcon(
+          tooltip: 'Previous response',
+          icon: Icons.chevron_left_rounded,
+          onPressed:
+              index > 0 ? () => store.selectVariant(message.id, index - 1) : null,
+        ),
+        Text(
+          '${index + 1}/$count',
+          style: theme.textTheme.labelSmall
+              ?.copyWith(color: colors.textSecondary),
+        ),
+        _ActionIcon(
+          tooltip: 'Next response',
+          icon: Icons.chevron_right_rounded,
+          onPressed: index < count - 1
+              ? () => store.selectVariant(message.id, index + 1)
+              : null,
+        ),
+      ],
+    );
+  }
+}
+
 class _ActionIcon extends StatelessWidget {
   final String tooltip;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
+  final Color? color;
 
   const _ActionIcon({
     required this.tooltip,
     required this.icon,
     required this.onPressed,
+    this.color,
   });
 
   @override
@@ -662,7 +738,7 @@ class _ActionIcon extends StatelessWidget {
       tooltip: tooltip,
       iconSize: 15,
       visualDensity: VisualDensity.compact,
-      color: colors.textSecondary,
+      color: color ?? colors.textSecondary,
       icon: Icon(icon),
       onPressed: onPressed,
     );

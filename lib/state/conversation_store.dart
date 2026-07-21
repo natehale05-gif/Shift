@@ -152,8 +152,10 @@ class ConversationStore extends ChangeNotifier {
     await sendMessage(newText, options: options);
   }
 
-  /// Re-runs the turn that produced [assistantMessageId]: the assistant
-  /// reply (and its user prompt) are removed and the prompt is sent again.
+  /// Re-runs the turn that produced [assistantMessageId], keeping the previous
+  /// reply as a switchable variant (Claude's regenerate: the old answer isn't
+  /// lost, it moves behind a ‹1/2› navigator). The new reply streams into the
+  /// same message in place.
   Future<void> regenerate(
     String assistantMessageId, {
     ChatOptions options = ChatOptions.none,
@@ -165,11 +167,60 @@ class ConversationStore extends ChangeNotifier {
     if (index <= 0) return;
     final userMessage = convo.messages[index - 1];
     if (userMessage.role != MessageRole.user) return;
+    final assistant = convo.messages[index];
 
-    _mutateConversation(convo.id, (c) {
-      return c.copyWith(messages: c.messages.sublist(0, index - 1));
+    // Archive the current response, then clear the live fields so the fresh
+    // reply streams in on top. activeVariant points at the new live entry.
+    _updateMessage(convo.id, assistantMessageId, (m) {
+      final archived = [...m.variants, m.toVariant()];
+      return ChatMessage(
+        id: m.id,
+        conversationId: m.conversationId,
+        role: m.role,
+        text: '',
+        blocks: const [],
+        attachments: m.attachments,
+        citations: const [],
+        usage: null,
+        studioType: m.studioType,
+        studioResult: null,
+        timestamp: m.timestamp,
+        status: MessageStatus.streaming,
+        variants: archived,
+        activeVariant: archived.length,
+        feedback: MessageFeedback.none,
+      );
     });
-    await sendMessage(userMessage.text, options: options);
+
+    await _streamReply(
+      conversationId: convo.id,
+      assistantMessageId: assistant.id,
+      userInput: userMessage.text,
+      options: options,
+    );
+  }
+
+  /// Switches which stored response is shown for [messageId] (the ‹1/2›
+  /// navigator). [index] is clamped to the available responses.
+  void selectVariant(String messageId, int index) {
+    final convo = current;
+    if (convo == null) return;
+    _updateMessage(convo.id, messageId, (m) {
+      final clamped = index.clamp(0, m.variantCount - 1);
+      return m.copyWith(activeVariant: clamped);
+    });
+    _persistConversation(convo.id);
+  }
+
+  /// Records thumbs up/down on an assistant reply (toggles off if repeated).
+  void setFeedback(String messageId, MessageFeedback feedback) {
+    final convo = current;
+    if (convo == null) return;
+    _updateMessage(convo.id, messageId, (m) {
+      final next = m.feedback == feedback ? MessageFeedback.none : feedback;
+      return m.copyWith(feedback: next);
+    });
+    _persistConversation(convo.id);
   }
 
   void selectConversation(String id) {
@@ -241,12 +292,33 @@ class ConversationStore extends ChangeNotifier {
       );
     });
 
+    return _streamReply(
+      conversationId: conversationId,
+      assistantMessageId: assistantMessage.id,
+      userInput: text,
+      structuredRequest: structuredRequest,
+      attachments: attachments,
+      options: options,
+    );
+  }
+
+  /// Streams a reply from the chat service into the existing (empty, streaming)
+  /// assistant message [assistantMessageId]. Shared by [sendMessage] and
+  /// [regenerate]. Returns when the stream ends (or is stopped).
+  Future<void> _streamReply({
+    required String conversationId,
+    required String assistantMessageId,
+    required String userInput,
+    StudioRequest? structuredRequest,
+    List<Attachment> attachments = const [],
+    ChatOptions options = ChatOptions.none,
+  }) async {
     // Cancel any prior in-flight generation before starting a new one.
     await _activeSub?.cancel();
 
     final stream = chatService.sendMessage(
       conversation: current!,
-      userInput: text,
+      userInput: userInput,
       structuredRequest: structuredRequest,
       attachments: attachments,
       options: options,
@@ -254,7 +326,7 @@ class ConversationStore extends ChangeNotifier {
 
     final completer = Completer<void>();
     _streamingConversationId = conversationId;
-    _streamingMessageId = assistantMessage.id;
+    _streamingMessageId = assistantMessageId;
     void finish() {
       _activeSub = null;
       _streamingConversationId = null;
@@ -264,12 +336,11 @@ class ConversationStore extends ChangeNotifier {
     }
 
     _activeSub = stream.listen(
-      (event) =>
-          _handleStreamEvent(conversationId, assistantMessage.id, event),
+      (event) => _handleStreamEvent(conversationId, assistantMessageId, event),
       onError: (Object error) {
         _updateMessage(
           conversationId,
-          assistantMessage.id,
+          assistantMessageId,
           (m) => foldMessageEvent(m, MessageError('$error')),
         );
         _persistConversation(conversationId);

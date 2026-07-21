@@ -95,8 +95,7 @@ void main() {
     expect(service.inputs.last, 'revised question');
   });
 
-  test('regenerate replays the turn that produced an assistant message',
-      () async {
+  test('regenerate keeps the old reply as a switchable variant', () async {
     final (store, service) = await _makeStore();
     store.startNewConversation();
     await store.sendMessage('tell me a joke');
@@ -105,9 +104,37 @@ void main() {
 
     await store.regenerate(assistantMessage.id);
 
+    // Same two messages, no new pair — the reply is regenerated in place.
     expect(store.current!.messages, hasLength(2));
-    expect(store.current!.messages[1].text, 'echo: tell me a joke');
     expect(service.inputs, ['tell me a joke', 'tell me a joke']);
+
+    final regenerated = store.current!.messages[1];
+    expect(regenerated.hasVariants, isTrue);
+    expect(regenerated.variantCount, 2);
+    // The live (newest) response is shown by default.
+    expect(regenerated.activeVariant, 1);
+    expect(regenerated.displayText, 'echo: tell me a joke');
+
+    // Stepping back shows the archived first response.
+    store.selectVariant(regenerated.id, 0);
+    expect(store.current!.messages[1].activeVariant, 0);
+    expect(store.current!.messages[1].displayText, 'echo: tell me a joke');
+  });
+
+  test('setFeedback toggles thumbs up/down on an assistant reply', () async {
+    final (store, _) = await _makeStore();
+    store.startNewConversation();
+    await store.sendMessage('hello there');
+    final id = store.current!.messages[1].id;
+
+    store.setFeedback(id, MessageFeedback.up);
+    expect(store.current!.messages[1].feedback, MessageFeedback.up);
+
+    // Same thumb again clears it; the opposite thumb switches.
+    store.setFeedback(id, MessageFeedback.up);
+    expect(store.current!.messages[1].feedback, MessageFeedback.none);
+    store.setFeedback(id, MessageFeedback.down);
+    expect(store.current!.messages[1].feedback, MessageFeedback.down);
   });
 
   test('sendMessage forwards the assembled system prompt in options',
