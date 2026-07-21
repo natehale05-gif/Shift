@@ -14,6 +14,7 @@ import '../models/usage_report.dart';
 import 'artifact_composition.dart';
 import 'audio_synth_service.dart';
 import 'chat_service.dart';
+import 'interactive_artifacts.dart';
 import 'procedural_art.dart';
 import 'studio_clarification.dart';
 import 'studio_composition.dart';
@@ -66,16 +67,23 @@ class MockChatService implements ChatService {
       final plan = (structuredRequest == null && pending == null)
           ? planComposition(conversation, userInput)
           : CompositionPlan.none;
+      // Interactive artifacts (recipe cards, quizzes, flashcards, checklists)
+      // are self-contained interactive widgets built by Code Studio.
+      final interactive = (structuredRequest == null && pending == null)
+          ? InteractiveArtifacts.detect(userInput)
+          : null;
       final wantsBoth = plan.kind == CompositionKind.pageAssembly;
-      final studio = wantsBoth
+      final studio = interactive != null
           ? StudioType.codeStudio
-          : isCopyFed(plan.kind)
-              ? copyFedHost(plan.kind)
-              : isMediaPair(plan.kind)
-                  ? mediaPairHost(plan.kind)
-                  : (structuredRequest?.studioType ??
-                      pending?.$1 ??
-                      StudioResponseBank.detectStudio(userInput));
+          : wantsBoth
+              ? StudioType.codeStudio
+              : isCopyFed(plan.kind)
+                  ? copyFedHost(plan.kind)
+                  : isMediaPair(plan.kind)
+                      ? mediaPairHost(plan.kind)
+                      : (structuredRequest?.studioType ??
+                          pending?.$1 ??
+                          StudioResponseBank.detectStudio(userInput));
       final effectiveInput =
           pending != null ? '${pending.$2} $userInput'.trim() : userInput;
 
@@ -104,7 +112,9 @@ class MockChatService implements ChatService {
 
       final wantsResearch = options.deepResearch ||
           userInput.toLowerCase().contains('deep research');
-      if (wantsResearch) {
+      if (interactive != null) {
+        await _runInteractive(controller, conversation, interactive, userInput);
+      } else if (wantsResearch) {
         await _runDeepResearch(controller, conversation, userInput);
       } else if (studio == StudioType.middleware &&
           (options.webSearch ||
@@ -278,6 +288,56 @@ class MockChatService implements ChatService {
       await _streamText(controller, '\n\n$followUp');
     }
   }
+
+  /// Builds an interactive artifact (recipe card / quiz / flashcards /
+  /// checklist) with templated content — a self-contained interactive widget
+  /// that runs live in the artifact panel, no API key required.
+  Future<void> _runInteractive(
+    StreamController<ChatEvent> controller,
+    Conversation conversation,
+    InteractiveKind kind,
+    String userInput,
+  ) async {
+    final topic = InteractiveArtifacts.parseTopic(userInput, kind);
+    await _streamText(controller,
+        'Building an interactive ${kind.label} for "$topic" — try it in the '
+        'panel; it\'s fully interactive.');
+    await _delay(500, 1000);
+
+    final html = switch (kind) {
+      InteractiveKind.recipe =>
+        InteractiveArtifacts.renderRecipe(InteractiveArtifacts.templatedRecipe(topic)),
+      InteractiveKind.quiz => InteractiveArtifacts.renderQuiz(
+          InteractiveArtifacts.templatedQuiz(topic), '${_titleCase(topic)} Quiz'),
+      InteractiveKind.flashcards => InteractiveArtifacts.renderFlashcards(
+          InteractiveArtifacts.templatedFlashcards(topic), '${_titleCase(topic)} Flashcards'),
+      InteractiveKind.checklist => InteractiveArtifacts.renderChecklist(
+          InteractiveArtifacts.templatedChecklist(topic), _titleCase(topic)),
+    };
+    final title = switch (kind) {
+      InteractiveKind.recipe => _titleCase(topic),
+      InteractiveKind.quiz => '${_titleCase(topic)} Quiz',
+      InteractiveKind.flashcards => '${_titleCase(topic)} Flashcards',
+      InteractiveKind.checklist => _titleCase(topic),
+    };
+    controller.add(ArtifactCreated(InteractiveArtifacts.build(
+      kind: kind,
+      conversationId: conversation.id,
+      title: title,
+      html: html,
+    )));
+    await _streamText(controller,
+        '\n\nOpen it in the panel — check off ingredients, flip cards, or '
+        'score the quiz. Add an API key in Settings and I\'ll fill it with '
+        'real content for your topic.');
+  }
+
+  static String _titleCase(String s) => s.isEmpty
+      ? s
+      : s
+          .split(' ')
+          .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+          .join(' ');
 
   /// Builds the base HTML page, then weaves in each contributor studio's
   /// output procedurally — photos, real copy, an audio player, a video
