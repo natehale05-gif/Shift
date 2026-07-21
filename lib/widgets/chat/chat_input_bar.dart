@@ -13,6 +13,7 @@ import '../../services/live/live_voice_controller.dart';
 import '../../services/prompt_assembler.dart';
 import '../../services/providers/provider_capability.dart';
 import '../../services/speech/speech_service.dart';
+import '../../services/web/file_intake.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/conversation_store.dart';
 import '../../state/project_store.dart';
@@ -53,6 +54,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
   StreamSubscription<SpeechResult>? _speechSubscription;
   String _textBeforeDictation = '';
 
+  /// Removes the window-level paste/drop listeners on dispose.
+  void Function()? _disposeIntake;
+
+  /// True while files are being dragged over the window (drop highlight).
+  bool _dragActive = false;
+
   @override
   void initState() {
     super.initState();
@@ -60,6 +67,28 @@ class _ChatInputBarState extends State<ChatInputBar> {
       final hasText = _controller.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
     });
+    // Accept pasted screenshots and dropped files anywhere in the app (web).
+    _disposeIntake = registerFileIntake(
+      (name, mime, bytes) {
+        if (!mounted) return;
+        setState(() {
+          _attachments.add(
+            Attachment(
+              id: _uuid.v4(),
+              name: name,
+              mimeType: mime,
+              kind: AttachmentKind.fromMimeType(mime),
+              bytes: bytes,
+            ),
+          );
+        });
+      },
+      onDragActive: (active) {
+        if (mounted && active != _dragActive) {
+          setState(() => _dragActive = active);
+        }
+      },
+    );
     // Enter sends; Shift+Enter inserts a newline (Claude's composer behavior).
     _focusNode.onKeyEvent = (node, event) {
       if (event is KeyDownEvent &&
@@ -188,6 +217,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
 
   @override
   void dispose() {
+    _disposeIntake?.call();
     _speechSubscription?.cancel();
     SpeechService.stop();
     _controller.dispose();
@@ -214,7 +244,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
             borderRadius: BorderRadius.circular(24),
             blurSigma: 30,
             tintOpacity: 0.72,
-            border: Border.all(color: colors.border),
+            border: Border.all(
+              color: _dragActive ? theme.colorScheme.primary : colors.border,
+              width: _dragActive ? 2 : 1,
+            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(
