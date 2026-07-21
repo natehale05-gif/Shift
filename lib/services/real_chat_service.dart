@@ -20,6 +20,7 @@ import 'mock_chat_service.dart';
 import 'procedural_art.dart';
 import 'brand_pack_service.dart';
 import 'deck_service.dart';
+import 'interactive_artifacts.dart';
 import 'short_reels_service.dart';
 import 'studio_composition.dart';
 import 'translate_service.dart';
@@ -174,6 +175,19 @@ class RealChatService implements ChatService {
           ? planComposition(conversation, userInput)
           : CompositionPlan.none;
       final wantsBoth = plan.kind == CompositionKind.pageAssembly;
+
+      // Interactive artifacts (recipe cards, quizzes, flashcards, checklists):
+      // Code Studio builds the widget, the best text provider fills its real
+      // content, and Image Studio can supply a hero photo — several studios in
+      // one interactive deliverable.
+      final interactive = pending == null
+          ? InteractiveArtifacts.detect(userInput)
+          : null;
+      if (interactive != null) {
+        await _runInteractive(controller, conversation, interactive, userInput);
+        await controller.close();
+        return;
+      }
 
       // Copy & Scripts writes a script, then a media studio produces from it.
       // The write step is real (Claude/Gemini); the voice/video/music is
@@ -705,6 +719,121 @@ class RealChatService implements ChatService {
     )));
     controller.add(const MessageComplete());
   }
+
+  /// Interactive artifact (recipe card / quiz / flashcards / checklist): the
+  /// best text provider fills the real content; Image Studio can supply a hero
+  /// photo for recipes. Falls back to templated content when no text provider
+  /// is available. Emitted as a runnable HTML artifact.
+  Future<void> _runInteractive(
+    StreamController<ChatEvent> controller,
+    Conversation conversation,
+    InteractiveKind kind,
+    String userInput,
+  ) async {
+    controller.add(const RoutingDetected(StudioType.codeStudio));
+    final topic = InteractiveArtifacts.parseTopic(userInput, kind);
+    controller.add(
+        MessageDelta('Building an interactive ${kind.label} for "$topic"…\n\n'));
+
+    String reply = '';
+    try {
+      reply = await _completeText(
+          InteractiveArtifacts.contentPrompt(kind, topic),
+          maxTokens: 2000);
+    } catch (_) {
+      // fall through to templated content
+    }
+
+    // A hero photo for recipes when the prompt asks for one or an image
+    // provider is available (Image Studio contributing to Code Studio's widget).
+    String? heroUri;
+    if (kind == InteractiveKind.recipe) {
+      final imageId = chooseProvider(ChatRoute.imageGen,
+          registry: _registry, hasKey: keys.hasKey);
+      final wantsPhoto = _mentionsPhoto(userInput) || imageId != null;
+      if (wantsPhoto) {
+        Uint8List? bytes;
+        if (imageId != null) {
+          try {
+            await for (final event in _imageStream(
+                imageId, '$topic, appetizing food photography, on a plate')) {
+              if (event is ImageGenerated) {
+                bytes = event.pngBytes;
+                break;
+              }
+            }
+          } catch (_) {/* procedural fallback below */}
+        }
+        bytes ??= await rasterizeGradientArt(
+            seed: StudioResponseBank.seedFromString(topic));
+        heroUri = 'data:image/png;base64,${base64Encode(bytes)}';
+      }
+    }
+
+    final (html, title, live) =
+        _renderInteractive(kind, reply, topic, heroUri);
+    controller.add(ArtifactCreated(InteractiveArtifacts.build(
+      kind: kind,
+      conversationId: conversation.id,
+      title: title,
+      html: html,
+    )));
+    controller.add(MessageDelta(live
+        ? '\n\nIt\'s live and interactive in the panel — try it out.'
+        : '\n\nIt\'s interactive in the panel. (Add a key with more context and '
+            'I\'ll write richer content.)'));
+    controller.add(const MessageComplete());
+  }
+
+  static bool _mentionsPhoto(String input) {
+    final lower = input.toLowerCase();
+    return lower.contains('photo') ||
+        lower.contains('image') ||
+        lower.contains('picture') ||
+        lower.contains('with a pic');
+  }
+
+  /// Parses the provider [reply] for [kind] (falling back to templated
+  /// content) and renders the interactive HTML. Returns (html, title, live).
+  (String, String, bool) _renderInteractive(
+      InteractiveKind kind, String reply, String topic, String? heroUri) {
+    final t = _titleCase(topic);
+    switch (kind) {
+      case InteractiveKind.recipe:
+        final parsed = InteractiveArtifacts.parseRecipeJson(reply, topic);
+        final recipe = parsed ?? InteractiveArtifacts.templatedRecipe(topic);
+        return (
+          InteractiveArtifacts.renderRecipe(recipe, heroImageDataUri: heroUri),
+          recipe.title,
+          parsed != null,
+        );
+      case InteractiveKind.quiz:
+        final parsed = InteractiveArtifacts.parseQuizJson(reply);
+        final qs = parsed ?? InteractiveArtifacts.templatedQuiz(topic);
+        return (InteractiveArtifacts.renderQuiz(qs, '$t Quiz'), '$t Quiz',
+            parsed != null);
+      case InteractiveKind.flashcards:
+        final parsed = InteractiveArtifacts.parseFlashcardsJson(reply);
+        final cards = parsed ?? InteractiveArtifacts.templatedFlashcards(topic);
+        return (
+          InteractiveArtifacts.renderFlashcards(cards, '$t Flashcards'),
+          '$t Flashcards',
+          parsed != null
+        );
+      case InteractiveKind.checklist:
+        final parsed = InteractiveArtifacts.parseChecklistJson(reply);
+        final items = parsed ?? InteractiveArtifacts.templatedChecklist(topic);
+        return (InteractiveArtifacts.renderChecklist(items, t), t,
+            parsed != null);
+    }
+  }
+
+  static String _titleCase(String s) => s.isEmpty
+      ? s
+      : s
+          .split(' ')
+          .map((w) => w.isEmpty ? w : w[0].toUpperCase() + w.substring(1))
+          .join(' ');
 
   /// Real short-form pack: the best text provider writes the hooks + scripts;
   /// posters are procedural (regenerated from each reel's seed). Downloadable

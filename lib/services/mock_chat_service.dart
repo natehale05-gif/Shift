@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -304,9 +305,24 @@ class MockChatService implements ChatService {
         'panel; it\'s fully interactive.');
     await _delay(500, 1000);
 
+    // Cross-studio in demo mode: a recipe gets a procedural hero photo when
+    // the prompt asks for one (Image Studio feeding Code Studio's widget).
+    String? heroUri;
+    if (kind == InteractiveKind.recipe) {
+      final lower = userInput.toLowerCase();
+      if (lower.contains('photo') ||
+          lower.contains('image') ||
+          lower.contains('picture')) {
+        final bytes = await rasterizeGradientArt(
+            seed: StudioResponseBank.seedFromString(topic));
+        heroUri = 'data:image/png;base64,${base64Encode(bytes)}';
+      }
+    }
+
     final html = switch (kind) {
-      InteractiveKind.recipe =>
-        InteractiveArtifacts.renderRecipe(InteractiveArtifacts.templatedRecipe(topic)),
+      InteractiveKind.recipe => InteractiveArtifacts.renderRecipe(
+          InteractiveArtifacts.templatedRecipe(topic),
+          heroImageDataUri: heroUri),
       InteractiveKind.quiz => InteractiveArtifacts.renderQuiz(
           InteractiveArtifacts.templatedQuiz(topic), '${_titleCase(topic)} Quiz'),
       InteractiveKind.flashcards => InteractiveArtifacts.renderFlashcards(
