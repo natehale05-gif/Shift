@@ -10,7 +10,7 @@ import '../../screens/chat/live_voice_overlay.dart';
 import '../../services/chat_service.dart';
 import '../../services/live/live_voice_controller.dart';
 import '../../services/prompt_assembler.dart';
-import '../../services/providers/anthropic_api_config.dart';
+import '../../services/providers/provider_capability.dart';
 import '../../services/speech/speech_service.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/conversation_store.dart';
@@ -337,8 +337,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
 }
 
 /// Model picker: Auto (the middleware routes each request) or a pinned
-/// model that bypasses routing. Pins only matter in live mode; the mock
-/// ignores them.
+/// model that bypasses routing. Pins only matter in live mode, so the menu
+/// lists Auto plus — for each provider the user has a key for — that
+/// provider's chat models under a disabled header. New providers appear
+/// automatically via the registry.
 class _ModelChip extends StatelessWidget {
   final String? modelPin;
   final ValueChanged<String?> onSelected;
@@ -349,9 +351,17 @@ class _ModelChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
-    final label = modelPin == null
-        ? 'Auto'
-        : AnthropicApiConfig.displayName(modelPin!);
+    final keys = context.watch<ApiKeysStore>();
+    final registry = keys.registry;
+    final label =
+        modelPin == null ? 'Auto' : registry.displayNameForModel(modelPin!);
+
+    // Providers the user has a key for that expose chat models.
+    final keyedProviders = [
+      for (final d in registry.all)
+        if (keys.hasKey(d.id) && d.modelsFor(ProviderCapability.chat).isNotEmpty)
+          d,
+    ];
 
     return PopupMenuButton<String>(
       tooltip:
@@ -368,12 +378,25 @@ class _ModelChip extends StatelessWidget {
           checked: modelPin == null,
           child: const Text('Auto (recommended)'),
         ),
-        for (final model in AnthropicApiConfig.availableModels)
-          CheckedPopupMenuItem(
-            value: model,
-            checked: modelPin == model,
-            child: Text(AnthropicApiConfig.displayName(model)),
+        for (final provider in keyedProviders) ...[
+          PopupMenuItem<String>(
+            enabled: false,
+            height: 32,
+            child: Text(
+              provider.displayName.toUpperCase(),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colors.textSecondary,
+                letterSpacing: 0.5,
+              ),
+            ),
           ),
+          for (final model in provider.modelsFor(ProviderCapability.chat))
+            CheckedPopupMenuItem(
+              value: model.id,
+              checked: modelPin == model.id,
+              child: Text(model.displayName),
+            ),
+        ],
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(

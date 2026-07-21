@@ -23,6 +23,10 @@ import 'providers/anthropic_client.dart';
 import 'providers/anthropic_tools.dart';
 import 'providers/gemini_api_config.dart';
 import 'providers/gemini_client.dart';
+import 'providers/openai_compatible_client.dart';
+import 'providers/provider_capability.dart';
+import 'providers/provider_descriptor.dart';
+import 'providers/provider_registry.dart';
 import 'router/model_router.dart';
 import 'studio_clarification.dart';
 import 'studio_response_bank.dart';
@@ -63,6 +67,8 @@ class RealChatService implements ChatService {
   final ApiKeysStore keys;
   final AnthropicClient _anthropic;
   final GeminiClient _gemini;
+  final OpenAiCompatibleClient _openAi;
+  final ProviderRegistry _registry;
   final ModelRouter _router;
   final MockChatService _mockFallback;
 
@@ -70,10 +76,14 @@ class RealChatService implements ChatService {
     required this.keys,
     AnthropicClient? anthropicClient,
     GeminiClient? geminiClient,
+    OpenAiCompatibleClient? openAiClient,
+    ProviderRegistry? registry,
     ModelRouter? router,
     MockChatService? mockFallback,
   })  : _anthropic = anthropicClient ?? AnthropicClient(),
         _gemini = geminiClient ?? GeminiClient(),
+        _openAi = openAiClient ?? OpenAiCompatibleClient(),
+        _registry = registry ?? ProviderRegistry.defaults(),
         _router = router ??
             ModelRouter(
               client: anthropicClient,
@@ -161,7 +171,30 @@ class RealChatService implements ChatService {
         return;
       }
 
-      final route = options.modelPin != null
+      // An explicit model pin bypasses routing entirely and dispatches to the
+      // pinned model's provider (as long as the user has that key). Claude
+      // pins fall through to the existing Anthropic path below, which already
+      // reads options.modelPin.
+      final pin = options.modelPin;
+      if (pin != null) {
+        final provider = _registry.providerForModel(pin);
+        if (provider != null && keys.hasKey(provider.id)) {
+          if (provider.clientKind == ProviderClientKind.openAiCompatible) {
+            await _runOpenAiChat(
+                controller, conversation, userInput, attachments, options, provider);
+            await controller.close();
+            return;
+          }
+          if (provider.id == 'gemini') {
+            await _runGeminiChat(controller, conversation, userInput,
+                attachments, options, ChatRoute.chat, model: pin);
+            await controller.close();
+            return;
+          }
+        }
+      }
+
+      final route = pin != null
           ? ChatRoute.chat // an explicit model pin bypasses routing
           : pending != null
               ? routeForStudio(pending.$1)
@@ -393,16 +426,45 @@ class RealChatService implements ChatService {
     String userInput,
     List<Attachment> attachments,
     ChatOptions options,
-    ChatRoute route,
-  ) async {
+    ChatRoute route, {
+    String? model,
+  }) async {
     controller.add(RoutingDetected(route.studioType));
     final events = _gemini.streamChat(
       apiKey: keys.geminiKey,
       conversation: conversation,
       userInput: userInput,
+      model: model ?? GeminiApiConfig.flashModel,
       attachments: attachments,
       systemPrompt: options.systemPrompt,
       grounding: options.webSearch || route == ChatRoute.webSearch,
+    );
+    await controller.addStream(events);
+  }
+
+  /// A pinned OpenAI-compatible model (GPT/Groq/OpenRouter/Mistral) answers the
+  /// turn directly. Plain chat — the middleware isn't routing to a studio, so
+  /// no artifact extraction (mirrors a pinned Claude model).
+  Future<void> _runOpenAiChat(
+    StreamController<ChatEvent> controller,
+    Conversation conversation,
+    String userInput,
+    List<Attachment> attachments,
+    ChatOptions options,
+    ProviderDescriptor provider,
+  ) async {
+    controller.add(RoutingDetected(ChatRoute.chat.studioType));
+    final model = options.modelPin!;
+    final events = _openAi.streamChat(
+      apiKey: keys.keyFor(provider.id),
+      baseUrl: provider.baseUrl!,
+      model: model,
+      displayName: _registry.displayNameForModel(model),
+      conversation: conversation,
+      userInput: userInput,
+      attachments: attachments,
+      systemPrompt: options.systemPrompt,
+      extraHeaders: provider.extraHeaders,
     );
     await controller.addStream(events);
   }

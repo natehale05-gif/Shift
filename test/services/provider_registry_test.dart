@@ -19,7 +19,11 @@ void main() {
       expect(registry.providerForModel('gemini-2.5-flash')?.id, 'gemini');
       expect(
           registry.providerForModel('gemini-2.5-flash-image')?.id, 'gemini');
-      expect(registry.providerForModel('gpt-4o'), isNull);
+      expect(registry.providerForModel('gpt-4o')?.id, 'openai');
+      expect(registry.providerForModel('llama-3.3-70b-versatile')?.id, 'groq');
+      expect(registry.providerForModel('mistral-large-latest')?.id, 'mistral');
+      expect(registry.providerForModel('openai/gpt-4o')?.id, 'openrouter');
+      expect(registry.providerForModel('nope-model'), isNull);
     });
   });
 
@@ -37,18 +41,33 @@ void main() {
   });
 
   group('providersFor (the Auto order)', () {
-    test('text capabilities prefer Anthropic, then Gemini', () {
+    const textOrder = [
+      'anthropic',
+      'openai',
+      'gemini',
+      'groq',
+      'mistral',
+      'openrouter'
+    ];
+
+    test('chat is ordered anthropic, openai, gemini, groq, mistral, openrouter',
+        () {
       expect(registry.providersFor(ProviderCapability.chat).map((d) => d.id),
-          ['anthropic', 'gemini']);
-      expect(registry.providersFor(ProviderCapability.code).map((d) => d.id),
-          ['anthropic']);
-      expect(registry.providersFor(ProviderCapability.writing).map((d) => d.id),
-          ['anthropic']);
-      expect(registry.providersFor(ProviderCapability.routing).map((d) => d.id),
-          ['anthropic']);
+          textOrder);
     });
 
-    test('image prefers Gemini', () {
+    test('code/writing/routing follow the same order minus Gemini', () {
+      // Gemini does not advertise code/writing/routing.
+      const noGemini = ['anthropic', 'openai', 'groq', 'mistral', 'openrouter'];
+      expect(registry.providersFor(ProviderCapability.code).map((d) => d.id),
+          noGemini);
+      expect(registry.providersFor(ProviderCapability.writing).map((d) => d.id),
+          noGemini);
+      expect(registry.providersFor(ProviderCapability.routing).map((d) => d.id),
+          noGemini);
+    });
+
+    test('image prefers Gemini (LLM providers do not advertise image)', () {
       expect(registry.providersFor(ProviderCapability.image).map((d) => d.id),
           ['gemini']);
     });

@@ -2,6 +2,7 @@ import 'anthropic_api_config.dart';
 import 'anthropic_client.dart';
 import 'gemini_api_config.dart';
 import 'gemini_client.dart';
+import 'openai_compatible_client.dart';
 import 'provider_capability.dart';
 import 'provider_descriptor.dart';
 
@@ -113,6 +114,123 @@ final geminiDescriptor = ProviderDescriptor(
   consoleUrl: 'aistudio.google.com',
 );
 
+/// OpenAI, Groq, OpenRouter and Mistral all speak the OpenAI chat-completions
+/// wire shape, so they share one client and differ only by this data.
+const _llmCapabilities = {
+  ProviderCapability.chat,
+  ProviderCapability.code,
+  ProviderCapability.writing,
+  ProviderCapability.routing,
+};
+
+final openaiDescriptor = ProviderDescriptor(
+  id: 'openai',
+  displayName: 'OpenAI',
+  persistenceKeyName: 'shift_ai.openai_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.openAiCompatible,
+  baseUrl: 'https://api.openai.com/v1',
+  capabilities: _llmCapabilities,
+  models: const [
+    ProviderModel(id: 'gpt-4o', displayName: 'GPT-4o'),
+    ProviderModel(id: 'gpt-4o-mini', displayName: 'GPT-4o mini'),
+  ],
+  preferenceRanks: const {
+    ProviderCapability.chat: 1,
+    ProviderCapability.code: 1,
+    ProviderCapability.writing: 1,
+    ProviderCapability.routing: 1,
+  },
+  hintPrefix: 'sk-',
+  guidanceText: 'Chat, code and writing with GPT models. Stored only in this '
+      'browser; calls go direct to OpenAI.',
+  consoleUrl: 'platform.openai.com',
+);
+
+final groqDescriptor = ProviderDescriptor(
+  id: 'groq',
+  displayName: 'Groq',
+  persistenceKeyName: 'shift_ai.groq_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.openAiCompatible,
+  baseUrl: 'https://api.groq.com/openai/v1',
+  capabilities: _llmCapabilities,
+  models: const [
+    ProviderModel(
+        id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B'),
+    ProviderModel(
+        id: 'llama-3.1-8b-instant', displayName: 'Llama 3.1 8B'),
+  ],
+  preferenceRanks: const {
+    ProviderCapability.chat: 3,
+    ProviderCapability.code: 3,
+    ProviderCapability.writing: 3,
+    ProviderCapability.routing: 3,
+  },
+  hintPrefix: 'gsk_',
+  guidanceText: 'Very fast open-model inference (Llama). Stored only in this '
+      'browser; calls go direct to Groq.',
+  consoleUrl: 'console.groq.com',
+);
+
+final mistralDescriptor = ProviderDescriptor(
+  id: 'mistral',
+  displayName: 'Mistral',
+  persistenceKeyName: 'shift_ai.mistral_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.openAiCompatible,
+  baseUrl: 'https://api.mistral.ai/v1',
+  capabilities: _llmCapabilities,
+  models: const [
+    ProviderModel(id: 'mistral-large-latest', displayName: 'Mistral Large'),
+    ProviderModel(id: 'mistral-small-latest', displayName: 'Mistral Small'),
+  ],
+  preferenceRanks: const {
+    ProviderCapability.chat: 4,
+    ProviderCapability.code: 4,
+    ProviderCapability.writing: 4,
+    ProviderCapability.routing: 4,
+  },
+  hintPrefix: '',
+  guidanceText: 'European open-weight models. Stored only in this browser; '
+      'calls go direct to Mistral.',
+  consoleUrl: 'console.mistral.ai',
+);
+
+final openrouterDescriptor = ProviderDescriptor(
+  id: 'openrouter',
+  displayName: 'OpenRouter',
+  persistenceKeyName: 'shift_ai.openrouter_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.openAiCompatible,
+  baseUrl: 'https://openrouter.ai/api/v1',
+  extraHeaders: const {
+    'HTTP-Referer': 'https://shiftai.club',
+    'X-Title': 'SHIFT AI',
+  },
+  capabilities: _llmCapabilities,
+  models: const [
+    ProviderModel(
+        id: 'openai/gpt-4o', displayName: 'GPT-4o (OpenRouter)'),
+    ProviderModel(
+        id: 'anthropic/claude-3.5-sonnet',
+        displayName: 'Claude 3.5 Sonnet (OpenRouter)'),
+    ProviderModel(
+        id: 'meta-llama/llama-3.3-70b-instruct',
+        displayName: 'Llama 3.3 70B (OpenRouter)'),
+  ],
+  preferenceRanks: const {
+    ProviderCapability.chat: 5,
+    ProviderCapability.code: 5,
+    ProviderCapability.writing: 5,
+    ProviderCapability.routing: 5,
+  },
+  hintPrefix: 'sk-or-',
+  guidanceText: 'One key, many models routed through OpenRouter. Stored only '
+      'in this browser; calls go direct to OpenRouter.',
+  consoleUrl: 'openrouter.ai/keys',
+);
+
 /// The set of providers the app knows about, plus lookups over them. Pure
 /// data — no network, no state — so it is trivially unit-testable and safe to
 /// construct anywhere.
@@ -125,7 +243,11 @@ class ProviderRegistry {
   /// cases, one more descriptor in this list.
   factory ProviderRegistry.defaults() => ProviderRegistry([
         anthropicDescriptor,
+        openaiDescriptor,
         geminiDescriptor,
+        groqDescriptor,
+        mistralDescriptor,
+        openrouterDescriptor,
       ]);
 
   ProviderDescriptor? byId(String id) {
@@ -174,21 +296,35 @@ class ProviderRegistry {
 }
 
 /// Lazily builds and caches one client per [ProviderClientKind]. Injectable so
-/// tests can supply fakes. Only the [KeyValidatable] surface is exposed here —
-/// the streaming chat clients are held directly by `RealChatService`.
+/// tests can supply fakes. Only the validation surface is exposed here — the
+/// streaming chat clients are held directly by `RealChatService`.
+///
+/// Fixed-endpoint providers (Anthropic, Gemini, and later Flux/Heygen) expose a
+/// simple [KeyValidatable]. OpenAI-compatible providers share one client whose
+/// validation needs the descriptor's base URL / model, so they are validated
+/// through [_openAi] with descriptor data rather than the per-kind map.
 class ClientRegistry {
   final Map<ProviderClientKind, KeyValidatable Function()> _factories;
   final Map<ProviderClientKind, KeyValidatable> _cache = {};
+  final OpenAiCompatibleClient Function() _openAiFactory;
+  OpenAiCompatibleClient? _openAi;
 
-  ClientRegistry({Map<ProviderClientKind, KeyValidatable Function()>? factories})
-      : _factories = {
+  ClientRegistry({
+    Map<ProviderClientKind, KeyValidatable Function()>? factories,
+    OpenAiCompatibleClient Function()? openAiClient,
+  })  : _factories = {
           ProviderClientKind.anthropic: () => AnthropicClient(),
           ProviderClientKind.gemini: () => GeminiClient(),
           ...?factories,
-        };
+        },
+        _openAiFactory = openAiClient ?? (() => OpenAiCompatibleClient());
+
+  /// The shared OpenAI-compatible client, built once.
+  OpenAiCompatibleClient get openAi => _openAi ??= _openAiFactory();
 
   /// The validator for [kind], or null if no client is registered for it yet
-  /// (e.g. a descriptor whose client ships in a later phase).
+  /// (e.g. a descriptor whose client ships in a later phase). Note the
+  /// OpenAI-compatible kind is handled by [validateKey] directly, not here.
   KeyValidatable? validatorFor(ProviderClientKind kind) {
     final factory = _factories[kind];
     if (factory == null) return null;
@@ -200,6 +336,21 @@ class ClientRegistry {
   /// reports success for an unvalidatable provider.
   Future<String?> validateKey(
       ProviderDescriptor descriptor, String apiKey) async {
+    if (descriptor.clientKind == ProviderClientKind.openAiCompatible) {
+      final model = descriptor.defaultModelId;
+      if (descriptor.baseUrl == null || model == null) {
+        return 'Key validation for ${descriptor.displayName} is not available '
+            'yet.';
+      }
+      return openAi.validateKey(
+        apiKey: apiKey,
+        baseUrl: descriptor.baseUrl!,
+        model: model,
+        providerName: descriptor.displayName,
+        consoleUrl: descriptor.consoleUrl,
+        extraHeaders: descriptor.extraHeaders,
+      );
+    }
     final validator = validatorFor(descriptor.clientKind);
     if (validator == null) {
       return 'Key validation for ${descriptor.displayName} is not available '
