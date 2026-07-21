@@ -18,6 +18,7 @@ import 'chat_service.dart';
 import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
 import 'procedural_art.dart';
+import 'brand_pack_service.dart';
 import 'deck_service.dart';
 import 'studio_composition.dart';
 import 'translate_service.dart';
@@ -251,6 +252,15 @@ class RealChatService implements ChatService {
       // returned as a downloadable .pptx (DeckResult) + an HTML deck artifact.
       if (route == ChatRoute.deck) {
         await _runDeck(controller, conversation, userInput);
+        await controller.close();
+        return;
+      }
+
+      // Brand Pack is a real deliverable: a logo (real image provider when
+      // keyed, else procedural), a palette and a type pairing, downloadable as
+      // a .zip kit.
+      if (route == ChatRoute.brandPack) {
+        await _runBrandPack(controller, userInput);
         await controller.close();
         return;
       }
@@ -630,6 +640,48 @@ class RealChatService implements ChatService {
       ],
     )));
     controller.add(StudioResultReady(deck));
+    controller.add(const MessageComplete());
+  }
+
+  /// Real brand pack: a logo (best image provider when keyed, else procedural),
+  /// a deterministic palette + type pairing, emitted as a BrandPackResult whose
+  /// card downloads a .zip kit.
+  Future<void> _runBrandPack(
+      StreamController<ChatEvent> controller, String userInput) async {
+    controller.add(const RoutingDetected(StudioType.brandPackStudio));
+    final name = BrandPackService.parseBrandName(userInput);
+    controller.add(MessageDelta('Designing a brand pack for "$name"…\n\n'));
+    final seed = BrandPackService.seedFor(name);
+
+    Uint8List? logo;
+    final imageId =
+        chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey);
+    if (imageId != null) {
+      try {
+        await for (final event in _imageStream(imageId,
+            '$name logo, minimalist flat vector mark, on a white background')) {
+          if (event is ImageGenerated) {
+            logo = event.pngBytes;
+            break;
+          }
+        }
+      } catch (_) {
+        // fall through to procedural
+      }
+    }
+    final providerLogo = logo != null;
+    logo ??= await rasterizeGradientArt(seed: seed);
+
+    final fonts = BrandPackService.fontPair(seed);
+    controller.add(StudioResultReady(BrandPackResult(
+      brandName: name,
+      palette: BrandPackService.buildPalette(seed),
+      headingFont: fonts.heading,
+      bodyFont: fonts.body,
+      seed: seed,
+      live: providerLogo,
+      logoPng: logo,
+    )));
     controller.add(const MessageComplete());
   }
 

@@ -5,6 +5,7 @@ import '../models/studio_result.dart';
 import '../models/studio_request.dart';
 import '../models/studio_type.dart';
 import 'artifact_composition.dart';
+import 'brand_pack_service.dart';
 import 'deck_service.dart';
 import 'download_service.dart';
 import 'translate_service.dart';
@@ -553,13 +554,19 @@ class StudioResponseBank {
           identityLock: false,
           seed: seed,
         ),
-      StudioType.brandPackStudio => ImageResult(
-          prompt: input.trim().isEmpty ? 'brand logo' : '$input logo',
-          aspectRatio: '1:1',
-          stylePreset: 'Logo',
-          count: 1,
-          seed: seed,
-        ),
+      StudioType.brandPackStudio => () {
+          final name = BrandPackService.parseBrandName(input);
+          final brandSeed = BrandPackService.seedFor(name);
+          final fonts = BrandPackService.fontPair(brandSeed);
+          return BrandPackResult(
+            brandName: name,
+            palette: BrandPackService.buildPalette(brandSeed),
+            headingFont: fonts.heading,
+            bodyFont: fonts.body,
+            seed: brandSeed,
+            live: false,
+          );
+        }(),
       StudioType.translateStudio => () {
           final target = TranslateService.parseTargetLanguage(input) ?? 'Spanish';
           final source = TranslateService.extractSourceText(input);

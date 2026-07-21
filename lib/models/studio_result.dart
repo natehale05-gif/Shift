@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 /// Discriminated union of mock outputs a studio can attach to a chat message.
 /// Every variant is fabricated client-side by [MockChatService] — there is no
 /// real diffusion/video/voice/music model behind any of this.
@@ -15,6 +17,7 @@ sealed class StudioResult {
       'code' => CodeResult.fromJson(json),
       'translate' => TranslateResult.fromJson(json),
       'deck' => DeckResult.fromJson(json),
+      'brandPack' => BrandPackResult.fromJson(json),
       _ => throw ArgumentError('Unknown StudioResult type: ${json['type']}'),
     };
   }
@@ -227,6 +230,52 @@ class DeckResult extends StudioResult {
         'title': title,
         'slides': slides.map((s) => s.toJson()).toList(),
         'live': live,
+      };
+}
+
+/// A brand asset bundle: a logo, a colour palette, and a type pairing,
+/// downloadable as a .zip kit. [logoPng] lives in memory for the session; on
+/// reload it is regenerated procedurally from [seed] (real provider logos are
+/// not persisted, matching attachments).
+class BrandPackResult extends StudioResult {
+  final String brandName;
+  final List<String> palette; // '#RRGGBB'
+  final String headingFont;
+  final String bodyFont;
+  final int seed;
+  final bool live;
+  final Uint8List? logoPng;
+
+  const BrandPackResult({
+    required this.brandName,
+    required this.palette,
+    required this.headingFont,
+    required this.bodyFont,
+    required this.seed,
+    this.live = false,
+    this.logoPng,
+  });
+
+  factory BrandPackResult.fromJson(Map<String, dynamic> json) =>
+      BrandPackResult(
+        brandName: json['brandName'] as String,
+        palette: (json['palette'] as List<dynamic>).cast<String>(),
+        headingFont: json['headingFont'] as String,
+        bodyFont: json['bodyFont'] as String,
+        seed: json['seed'] as int,
+        live: json['live'] as bool? ?? false,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'brandPack',
+        'brandName': brandName,
+        'palette': palette,
+        'headingFont': headingFont,
+        'bodyFont': bodyFont,
+        'seed': seed,
+        'live': live,
+        // logoPng intentionally omitted — regenerated from seed on reload.
       };
 }
 
