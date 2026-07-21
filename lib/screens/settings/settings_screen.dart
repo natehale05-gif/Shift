@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/memory_entry.dart';
+import '../../services/app_data_export.dart';
 import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
 import '../../state/memory_store.dart';
+import '../../state/project_store.dart';
 import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
 import 'api_keys_section.dart';
@@ -50,20 +52,40 @@ class SettingsScreen extends StatelessWidget {
           const SizedBox(height: AppSpacing.lg),
           const _MemoryCard(),
           const SizedBox(height: AppSpacing.lg),
+          const _FeaturePreviewCard(),
+          const SizedBox(height: AppSpacing.lg),
           _SectionCard(
             title: 'Data',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Conversations and demo settings are stored only in this browser — there\'s no account and no server.',
+                  'Everything — chats, projects, memory, preferences, and keys — '
+                  'is stored only in this browser. There\'s no account and no '
+                  'server. Export a full copy, or sign out to wipe it all.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.md),
-                OutlinedButton.icon(
-                  onPressed: () => _confirmClear(context),
-                  icon: const Icon(Icons.delete_outline_rounded),
-                  label: const Text('Clear chat history'),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _exportAll(context),
+                      icon: const Icon(Icons.download_rounded),
+                      label: const Text('Export all data (.zip)'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _confirmClear(context),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Clear chat history'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: () => _confirmSignOut(context),
+                      icon: const Icon(Icons.logout_rounded),
+                      label: const Text('Sign out & erase everything'),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -108,6 +130,87 @@ class SettingsScreen extends StatelessWidget {
             child: const Text('Clear'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _exportAll(BuildContext context) {
+    AppDataExport.download(
+      conversations: context.read<ConversationStore>().conversations,
+      projects: context.read<ProjectStore>().projects,
+      preferences: {
+        'nickname': context.read<UserPrefsStore>().nickname,
+        'role': context.read<UserPrefsStore>().role,
+        'traits': context.read<UserPrefsStore>().traits,
+        'responseStyle': context.read<UserPrefsStore>().responseStyle,
+        'customInstructions':
+            context.read<UserPrefsStore>().customInstructions,
+      },
+      memory: context.read<MemoryStore>().entries,
+      memoryEnabled: context.read<MemoryStore>().enabled,
+    );
+  }
+
+  void _confirmSignOut(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out & erase everything?'),
+        content: const Text(
+          'This permanently deletes every chat, project, memory, and '
+          'preference stored in this browser. Export your data first if you '
+          'want to keep it. This can\'t be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+            ),
+            onPressed: () {
+              final prefs = context.read<UserPrefsStore>();
+              final projects = context.read<ProjectStore>();
+              context.read<ConversationStore>().clearAllHistory();
+              for (final p in [...projects.projects]) {
+                projects.deleteProject(p.id);
+              }
+              context.read<MemoryStore>().clearAll();
+              prefs.setNickname('');
+              prefs.setRole('');
+              prefs.setTraits('');
+              prefs.setCustomInstructions('');
+              prefs.setResponseStyle('normal');
+              Navigator.of(dialogContext).pop();
+            },
+            child: const Text('Erase everything'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Feature-preview toggles (Claude's "Feature preview" settings).
+class _FeaturePreviewCard extends StatelessWidget {
+  const _FeaturePreviewCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<AppSettingsStore>();
+    return _SectionCard(
+      title: 'Feature preview',
+      child: SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Show usage & token counts'),
+        subtitle: Text(
+          'Display the model and input/output token tally under each reply.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        value: settings.showUsage,
+        onChanged: settings.setShowUsage,
       ),
     );
   }

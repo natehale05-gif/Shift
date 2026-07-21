@@ -9,6 +9,7 @@ import '../../models/citation.dart';
 import '../../models/message_block.dart';
 import '../../services/download_service.dart';
 import '../../services/speech/speech_service.dart';
+import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
@@ -667,7 +668,8 @@ class _ActionRow extends StatelessWidget {
             style: theme.textTheme.labelSmall
                 ?.copyWith(color: colors.textSecondary),
           ),
-          if (message.displayUsage != null) ...[
+          if (message.displayUsage != null &&
+              context.watch<AppSettingsStore>().showUsage) ...[
             const SizedBox(width: AppSpacing.sm),
             Text(
               '${message.displayUsage!.model} · '

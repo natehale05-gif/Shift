@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../state/user_prefs_store.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
@@ -172,6 +174,8 @@ class _ProfileButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
+    final name = context.watch<UserPrefsStore>().nickname.trim();
+    final initial = name.isNotEmpty ? name[0].toUpperCase() : null;
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.sm),
       child: Material(
@@ -189,6 +193,7 @@ class _ProfileButton extends StatelessWidget {
                 Container(
                   width: 32,
                   height: 32,
+                  alignment: Alignment.center,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: LinearGradient(
@@ -197,16 +202,26 @@ class _ProfileButton extends StatelessWidget {
                       end: Alignment.bottomRight,
                     ),
                   ),
-                  child: const Icon(
-                    Icons.person_rounded,
-                    color: Colors.white,
-                    size: 18,
-                  ),
+                  child: initial != null
+                      ? Text(
+                          initial,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 15,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.person_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
                 ),
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
-                    'Account',
+                    name.isNotEmpty ? name : 'Account',
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),

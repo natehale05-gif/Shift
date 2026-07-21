@@ -10,10 +10,14 @@ class AppSettingsStore extends ChangeNotifier {
 
   ThemeMode _themeMode = ThemeMode.system;
   String? _selectedTierId;
+  bool _showUsage = true;
 
   AppSettingsStore({required this.persistence});
 
   ThemeMode get themeMode => _themeMode;
+
+  /// Whether to show the model/token usage readout under assistant replies.
+  bool get showUsage => _showUsage;
 
   MembershipTier? get selectedTier {
     if (_selectedTierId == null) return null;
@@ -32,6 +36,7 @@ class AppSettingsStore extends ChangeNotifier {
       _ => ThemeMode.system,
     };
     _selectedTierId = await persistence.loadSelectedTier();
+    _showUsage = await persistence.loadShowUsage() ?? true;
     notifyListeners();
   }
 
@@ -39,6 +44,12 @@ class AppSettingsStore extends ChangeNotifier {
     _themeMode = mode;
     notifyListeners();
     persistence.saveThemeMode(mode.name);
+  }
+
+  void setShowUsage(bool value) {
+    _showUsage = value;
+    notifyListeners();
+    persistence.saveShowUsage(value);
   }
 
   /// Demo only: records which membership tier the user "simulated" picking.

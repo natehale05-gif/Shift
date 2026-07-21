@@ -18,6 +18,7 @@ import 'storage/storage_backend.dart';
 class PersistenceService {
   static const _conversationsKeyV1 = 'shift_ai.conversations.v1';
   static const _themeModeKey = 'shift_ai.theme_mode.v1';
+  static const _showUsageKey = 'shift_ai.show_usage.v1';
   static const _selectedTierKey = 'shift_ai.selected_tier.v1';
   static const _projectsKey = 'shift_ai.projects.v1';
   static const _activeProjectKey = 'shift_ai.active_project.v1';
@@ -155,6 +156,14 @@ class PersistenceService {
   Future<String?> loadThemeMode() => _getKv(_themeModeKey);
 
   Future<void> saveThemeMode(String mode) => _putKv(_themeModeKey, mode);
+
+  Future<bool?> loadShowUsage() async {
+    final raw = await _getKv(_showUsageKey);
+    return raw == null ? null : raw == 'true';
+  }
+
+  Future<void> saveShowUsage(bool value) =>
+      _putKv(_showUsageKey, value.toString());
 
   Future<String?> loadSelectedTier() => _getKv(_selectedTierKey);
 
