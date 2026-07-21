@@ -122,6 +122,11 @@ class ChatOptions {
   final bool codeExecution;
   final bool deepResearch;
 
+  /// Whether the model may spend extended thinking on this turn. Defaults to
+  /// on (matches the always-adaptive behavior); the composer toggle can turn
+  /// it off for a faster, non-reasoning reply.
+  final bool extendedThinking;
+
   /// Assembled system prompt for this turn (persona + user prefs + project
   /// context), built by `assembleSystemPrompt`.
   final String? systemPrompt;
@@ -131,6 +136,7 @@ class ChatOptions {
     this.webSearch = false,
     this.codeExecution = false,
     this.deepResearch = false,
+    this.extendedThinking = true,
     this.systemPrompt,
   });
 

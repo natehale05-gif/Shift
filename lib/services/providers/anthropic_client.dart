@@ -29,6 +29,7 @@ class AnthropicClient implements KeyValidatable {
     List<Attachment> attachments = const [],
     String? systemPrompt,
     bool stream = true,
+    bool extendedThinking = true,
     int maxTokens = AnthropicApiConfig.defaultMaxTokens,
   }) {
     // The store already appends this turn's own user message (plus an
@@ -77,7 +78,7 @@ class AnthropicClient implements KeyValidatable {
       // Adaptive thinking on capable models; 'display' is required — without
       // it the visible text can come back empty. Never send temperature —
       // current models reject it.
-      if (AnthropicApiConfig.thinkingModels.contains(model))
+      if (extendedThinking && AnthropicApiConfig.thinkingModels.contains(model))
         'thinking': {'type': 'adaptive', 'display': 'summarized'},
       if (stream) 'stream': true,
     };
@@ -198,6 +199,7 @@ class AnthropicClient implements KeyValidatable {
     List<Attachment> attachments = const [],
     String? systemPrompt,
     List<Map<String, dynamic>> tools = const [],
+    bool extendedThinking = true,
     int maxContinuations = 5,
   }) async* {
     final baseBody = buildRequestBody(
@@ -206,6 +208,7 @@ class AnthropicClient implements KeyValidatable {
       model: model,
       attachments: attachments,
       systemPrompt: systemPrompt,
+      extendedThinking: extendedThinking,
     );
     if (tools.isNotEmpty) baseBody['tools'] = tools;
 

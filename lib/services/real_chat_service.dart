@@ -1062,6 +1062,7 @@ class RealChatService implements ChatService {
       attachments: attachments,
       systemPrompt: options.systemPrompt,
       tools: tools,
+      extendedThinking: options.extendedThinking,
     );
 
     await for (final event in events) {

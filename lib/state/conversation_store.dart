@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
@@ -28,9 +30,42 @@ class ConversationStore extends ChangeNotifier {
   String? _currentId;
   bool _isLoaded = false;
 
+  /// The in-flight generation, if any. Cancelling this subscription is how
+  /// the Stop button interrupts a streaming reply.
+  StreamSubscription<ChatEvent>? _activeSub;
+  String? _streamingConversationId;
+  String? _streamingMessageId;
+
   ConversationStore({required this.chatService, required this.persistence});
 
   bool get isLoaded => _isLoaded;
+
+  /// True while a reply is streaming into the *current* conversation, so the
+  /// composer can swap its Send button for a Stop button.
+  bool get isStreaming =>
+      _activeSub != null && _streamingConversationId == _currentId;
+
+  /// Interrupts the in-flight generation (the Stop button). The partial reply
+  /// is kept and marked complete, exactly like Claude's stop.
+  void stopGeneration() {
+    final convId = _streamingConversationId;
+    final msgId = _streamingMessageId;
+    _activeSub?.cancel();
+    _activeSub = null;
+    _streamingConversationId = null;
+    _streamingMessageId = null;
+    if (convId != null && msgId != null) {
+      _updateMessage(
+        convId,
+        msgId,
+        (m) => m.status == MessageStatus.streaming
+            ? m.copyWith(status: MessageStatus.complete)
+            : m,
+      );
+      _persistConversation(convId);
+    }
+    notifyListeners();
+  }
 
   List<Conversation> get conversations {
     final sorted = [..._conversations];
@@ -206,6 +241,9 @@ class ConversationStore extends ChangeNotifier {
       );
     });
 
+    // Cancel any prior in-flight generation before starting a new one.
+    await _activeSub?.cancel();
+
     final stream = chatService.sendMessage(
       conversation: current!,
       userInput: text,
@@ -214,40 +252,73 @@ class ConversationStore extends ChangeNotifier {
       options: options,
     );
 
-    await for (final event in stream) {
-      switch (event) {
-        case ArtifactCreated(:final artifact):
-          _upsertArtifact(conversationId, assistantMessage.id, artifact);
-          // Auto-open the panel on the freshly created artifact.
-          onArtifactCreated?.call(artifact.id);
-        case ArtifactUpdated(:final artifact):
-          _upsertArtifact(conversationId, assistantMessage.id, artifact);
-          onArtifactCreated?.call(artifact.id);
-        case ImageGenerated(:final pngBytes, :final alt):
-          // Bytes go to the asset store (IndexedDB) so the image survives
-          // reload; the block keeps them in memory for immediate display.
-          final assetId = _uuid.v4();
-          persistence.saveAsset(assetId, pngBytes);
-          _updateMessage(conversationId, assistantMessage.id, (m) {
-            return m.copyWith(blocks: [
-              ...m.blocks,
-              ImageBlock(alt: alt, pngBytes: pngBytes, assetId: assetId),
-            ]);
-          });
-        case MessageComplete() || MessageError():
-          _updateMessage(
-            conversationId,
-            assistantMessage.id,
-            (m) => foldMessageEvent(m, event),
-          );
-          _persistConversation(conversationId);
-        default:
-          _updateMessage(
-            conversationId,
-            assistantMessage.id,
-            (m) => foldMessageEvent(m, event),
-          );
-      }
+    final completer = Completer<void>();
+    _streamingConversationId = conversationId;
+    _streamingMessageId = assistantMessage.id;
+    void finish() {
+      _activeSub = null;
+      _streamingConversationId = null;
+      _streamingMessageId = null;
+      notifyListeners();
+      if (!completer.isCompleted) completer.complete();
+    }
+
+    _activeSub = stream.listen(
+      (event) =>
+          _handleStreamEvent(conversationId, assistantMessage.id, event),
+      onError: (Object error) {
+        _updateMessage(
+          conversationId,
+          assistantMessage.id,
+          (m) => foldMessageEvent(m, MessageError('$error')),
+        );
+        _persistConversation(conversationId);
+        finish();
+      },
+      onDone: finish,
+    );
+    // Let the composer switch to the Stop button right away.
+    notifyListeners();
+    return completer.future;
+  }
+
+  void _handleStreamEvent(
+    String conversationId,
+    String messageId,
+    ChatEvent event,
+  ) {
+    switch (event) {
+      case ArtifactCreated(:final artifact):
+        _upsertArtifact(conversationId, messageId, artifact);
+        // Auto-open the panel on the freshly created artifact.
+        onArtifactCreated?.call(artifact.id);
+      case ArtifactUpdated(:final artifact):
+        _upsertArtifact(conversationId, messageId, artifact);
+        onArtifactCreated?.call(artifact.id);
+      case ImageGenerated(:final pngBytes, :final alt):
+        // Bytes go to the asset store (IndexedDB) so the image survives
+        // reload; the block keeps them in memory for immediate display.
+        final assetId = _uuid.v4();
+        persistence.saveAsset(assetId, pngBytes);
+        _updateMessage(conversationId, messageId, (m) {
+          return m.copyWith(blocks: [
+            ...m.blocks,
+            ImageBlock(alt: alt, pngBytes: pngBytes, assetId: assetId),
+          ]);
+        });
+      case MessageComplete() || MessageError():
+        _updateMessage(
+          conversationId,
+          messageId,
+          (m) => foldMessageEvent(m, event),
+        );
+        _persistConversation(conversationId);
+      default:
+        _updateMessage(
+          conversationId,
+          messageId,
+          (m) => foldMessageEvent(m, event),
+        );
     }
   }
 

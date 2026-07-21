@@ -50,6 +50,7 @@ class _FakeAnthropicClient extends AnthropicClient {
     List<Attachment> attachments = const [],
     String? systemPrompt,
     List<Map<String, dynamic>> tools = const [],
+    bool extendedThinking = true,
     int maxContinuations = 5,
   }) async* {
     yield const MessageDelta(

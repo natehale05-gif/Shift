@@ -1,5 +1,6 @@
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -41,6 +42,13 @@ class _ChatInputBarState extends State<ChatInputBar> {
   /// Exact model id pinned from the model chip; null = auto-route.
   String? _modelPin;
 
+  // Composer tool toggles (mirror Claude's tools/plus menu). All feed the
+  // per-turn ChatOptions and drive real behavior in both live and demo modes.
+  bool _webSearch = false;
+  bool _deepResearch = false;
+  bool _codeExecution = false;
+  bool _extendedThinking = true;
+
   bool _listening = false;
   StreamSubscription<SpeechResult>? _speechSubscription;
   String _textBeforeDictation = '';
@@ -52,6 +60,16 @@ class _ChatInputBarState extends State<ChatInputBar> {
       final hasText = _controller.text.trim().isNotEmpty;
       if (hasText != _hasText) setState(() => _hasText = hasText);
     });
+    // Enter sends; Shift+Enter inserts a newline (Claude's composer behavior).
+    _focusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.enter &&
+          !HardwareKeyboard.instance.isShiftPressed) {
+        _send();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
   }
 
   /// System prompt for this turn: the conversation's own project wins;
@@ -66,6 +84,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
         projects.activeProject;
     return ChatOptions(
       modelPin: _modelPin,
+      webSearch: _webSearch,
+      deepResearch: _deepResearch,
+      codeExecution: _codeExecution,
+      extendedThinking: _extendedThinking,
       systemPrompt: assembleSystemPrompt(
         nickname: prefs.nickname,
         responseStyle: prefs.responseStyle,
@@ -250,8 +272,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
                   focusNode: _focusNode,
                   minLines: 1,
                   maxLines: 8,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _send(),
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
                   decoration: const InputDecoration(
                     hintText: 'Message SHIFT AI…',
                     filled: false,
@@ -269,6 +291,24 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       icon: const Icon(Icons.attach_file_rounded, size: 20),
                       color: colors.textSecondary,
                       onPressed: _pickFiles,
+                    ),
+                    _ToolsMenu(
+                      webSearch: _webSearch,
+                      deepResearch: _deepResearch,
+                      codeExecution: _codeExecution,
+                      extendedThinking: _extendedThinking,
+                      onToggle: (tool) => setState(() {
+                        switch (tool) {
+                          case _Tool.webSearch:
+                            _webSearch = !_webSearch;
+                          case _Tool.deepResearch:
+                            _deepResearch = !_deepResearch;
+                          case _Tool.codeExecution:
+                            _codeExecution = !_codeExecution;
+                          case _Tool.extendedThinking:
+                            _extendedThinking = !_extendedThinking;
+                        }
+                      }),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     _ModelChip(
@@ -314,7 +354,22 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       },
                     ),
                     const SizedBox(width: AppSpacing.xs),
-                    _SendButton(enabled: _hasText, onPressed: _send),
+                    Builder(
+                      builder: (context) {
+                        final streaming =
+                            context.watch<ConversationStore>().isStreaming;
+                        return streaming
+                            ? _StopButton(
+                                onPressed: () => context
+                                    .read<ConversationStore>()
+                                    .stopGeneration(),
+                              )
+                            : _SendButton(
+                                enabled: _hasText || _attachments.isNotEmpty,
+                                onPressed: _send,
+                              );
+                      },
+                    ),
                   ],
                 ),
               ],
@@ -424,6 +479,99 @@ class _ModelChip extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+enum _Tool { webSearch, deepResearch, codeExecution, extendedThinking }
+
+/// Claude-style tools/plus menu: per-turn toggles for web search, deep
+/// research, code execution, and extended thinking. Each toggle feeds the
+/// turn's [ChatOptions] and drives real behavior in both modes.
+class _ToolsMenu extends StatelessWidget {
+  final bool webSearch;
+  final bool deepResearch;
+  final bool codeExecution;
+  final bool extendedThinking;
+  final ValueChanged<_Tool> onToggle;
+
+  const _ToolsMenu({
+    required this.webSearch,
+    required this.deepResearch,
+    required this.codeExecution,
+    required this.extendedThinking,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final anyActive = webSearch || deepResearch || codeExecution;
+    return PopupMenuButton<_Tool>(
+      tooltip: 'Tools',
+      position: PopupMenuPosition.over,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      ),
+      onSelected: onToggle,
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem(
+          value: _Tool.webSearch,
+          checked: webSearch,
+          child: const Text('Web search'),
+        ),
+        CheckedPopupMenuItem(
+          value: _Tool.deepResearch,
+          checked: deepResearch,
+          child: const Text('Deep research'),
+        ),
+        CheckedPopupMenuItem(
+          value: _Tool.codeExecution,
+          checked: codeExecution,
+          child: const Text('Code execution'),
+        ),
+        CheckedPopupMenuItem(
+          value: _Tool.extendedThinking,
+          checked: extendedThinking,
+          child: const Text('Extended thinking'),
+        ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(
+          Icons.add_circle_outline_rounded,
+          size: 20,
+          color: anyActive ? theme.colorScheme.primary : colors.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+/// Interrupts a streaming reply — shown in place of the send button while a
+/// generation is in flight (Claude's stop control).
+class _StopButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _StopButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return SizedBox(
+      width: 34,
+      height: 34,
+      child: IconButton.filled(
+        tooltip: 'Stop generating',
+        padding: EdgeInsets.zero,
+        style: IconButton.styleFrom(
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
+        ),
+        icon: const Icon(Icons.stop_rounded, size: 18),
+        onPressed: onPressed,
       ),
     );
   }
