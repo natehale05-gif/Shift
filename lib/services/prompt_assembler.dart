@@ -12,9 +12,12 @@ const int knowledgeCharBudget = 16000;
 /// data-out.
 String assembleSystemPrompt({
   String? nickname,
-  String responseStyle = 'balanced',
+  String role = '',
+  String traits = '',
+  String responseStyle = 'normal',
   String customInstructions = '',
   Project? project,
+  List<String> memories = const [],
 }) {
   final buffer = StringBuffer(
     'You are SHIFT AI, a middleware AI that routes requests to specialized '
@@ -31,19 +34,41 @@ String assembleSystemPrompt({
     buffer.write('\n\nAddress the user as "${nickname.trim()}".');
   }
 
+  if (role.trim().isNotEmpty) {
+    buffer.write('\n\nThe user\'s role / what they do: ${role.trim()}. '
+        'Tailor examples and depth to this.');
+  }
+
+  if (traits.trim().isNotEmpty) {
+    buffer.write('\n\nTraits SHIFT AI should have: ${traits.trim()}.');
+  }
+
   switch (responseStyle) {
     case 'concise':
-      buffer.write('\n\nKeep responses short and direct.');
-    case 'detailed':
-      buffer.write(
-          '\n\nGive thorough, well-structured responses with reasoning.');
+      buffer.write('\n\nStyle: keep responses short and direct — lead with the '
+          'answer, minimal preamble.');
+    case 'explanatory':
+      buffer.write('\n\nStyle: give thorough, well-structured responses that '
+          'teach — explain the reasoning and include helpful examples.');
+    case 'formal':
+      buffer.write('\n\nStyle: write in a polished, professional register — '
+          'complete sentences, no slang or emoji.');
     default:
-      break; // balanced: no extra instruction
+      break; // normal: no extra instruction
   }
 
   if (customInstructions.trim().isNotEmpty) {
     buffer.write(
         '\n\nThe user\'s standing instructions:\n${customInstructions.trim()}');
+  }
+
+  if (memories.isNotEmpty) {
+    buffer.write('\n\nWhat you remember about the user from past chats '
+        '(use naturally; don\'t recite):');
+    for (final memory in memories) {
+      final m = memory.trim();
+      if (m.isNotEmpty) buffer.write('\n- $m');
+    }
   }
 
   if (project != null) {

@@ -120,6 +120,8 @@ class _PersonalizationCard extends StatefulWidget {
 
 class _PersonalizationCardState extends State<_PersonalizationCard> {
   late final TextEditingController _nicknameController;
+  late final TextEditingController _roleController;
+  late final TextEditingController _traitsController;
   late final TextEditingController _instructionsController;
 
   @override
@@ -127,6 +129,8 @@ class _PersonalizationCardState extends State<_PersonalizationCard> {
     super.initState();
     final prefs = context.read<UserPrefsStore>();
     _nicknameController = TextEditingController(text: prefs.nickname);
+    _roleController = TextEditingController(text: prefs.role);
+    _traitsController = TextEditingController(text: prefs.traits);
     _instructionsController =
         TextEditingController(text: prefs.customInstructions);
   }
@@ -134,6 +138,8 @@ class _PersonalizationCardState extends State<_PersonalizationCard> {
   @override
   void dispose() {
     _nicknameController.dispose();
+    _roleController.dispose();
+    _traitsController.dispose();
     _instructionsController.dispose();
     super.dispose();
   }
@@ -159,15 +165,40 @@ class _PersonalizationCardState extends State<_PersonalizationCard> {
             onChanged: prefs.setNickname,
           ),
           const SizedBox(height: AppSpacing.md),
-          SegmentedButton<String>(
-            segments: const [
-              ButtonSegment(value: 'concise', label: Text('Concise')),
-              ButtonSegment(value: 'balanced', label: Text('Balanced')),
-              ButtonSegment(value: 'detailed', label: Text('Detailed')),
-            ],
-            selected: {prefs.responseStyle},
-            onSelectionChanged: (selection) =>
-                prefs.setResponseStyle(selection.first),
+          TextField(
+            controller: _roleController,
+            decoration: const InputDecoration(
+              labelText: 'What do you do?',
+              hintText: 'e.g. product designer, high-school teacher, founder',
+            ),
+            onChanged: prefs.setRole,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          TextField(
+            controller: _traitsController,
+            minLines: 1,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'What traits should SHIFT AI have?',
+              hintText: 'e.g. direct, encouraging, uses analogies',
+            ),
+            onChanged: prefs.setTraits,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'normal', label: Text('Normal')),
+                ButtonSegment(value: 'concise', label: Text('Concise')),
+                ButtonSegment(
+                    value: 'explanatory', label: Text('Explanatory')),
+                ButtonSegment(value: 'formal', label: Text('Formal')),
+              ],
+              selected: {prefs.responseStyle},
+              onSelectionChanged: (selection) =>
+                  prefs.setResponseStyle(selection.first),
+            ),
           ),
           const SizedBox(height: AppSpacing.md),
           TextField(

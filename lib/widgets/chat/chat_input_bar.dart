@@ -43,6 +43,10 @@ class _ChatInputBarState extends State<ChatInputBar> {
   /// Exact model id pinned from the model chip; null = auto-route.
   String? _modelPin;
 
+  /// Per-conversation style override (Normal/Concise/Explanatory/Formal);
+  /// null = use the global setting.
+  String? _styleOverride;
+
   // Composer tool toggles (mirror Claude's tools/plus menu). All feed the
   // per-turn ChatOptions and drive real behavior in both live and demo modes.
   bool _webSearch = false;
@@ -119,7 +123,9 @@ class _ChatInputBarState extends State<ChatInputBar> {
       extendedThinking: _extendedThinking,
       systemPrompt: assembleSystemPrompt(
         nickname: prefs.nickname,
-        responseStyle: prefs.responseStyle,
+        role: prefs.role,
+        traits: prefs.traits,
+        responseStyle: _styleOverride ?? prefs.responseStyle,
         customInstructions: prefs.customInstructions,
         project: project,
       ),
@@ -348,6 +354,12 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       modelPin: _modelPin,
                       onSelected: (pin) => setState(() => _modelPin = pin),
                     ),
+                    const SizedBox(width: AppSpacing.xs),
+                    _StyleChip(
+                      styleOverride: _styleOverride,
+                      onSelected: (style) =>
+                          setState(() => _styleOverride = style),
+                    ),
                     const Spacer(),
                     IconButton(
                       tooltip: _listening
@@ -510,6 +522,73 @@ class _ModelChip extends StatelessWidget {
               size: 14,
               color: colors.textSecondary,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The named response styles (Claude's Normal / Concise / Explanatory /
+/// Formal). id → display label.
+const Map<String, String> kResponseStyles = {
+  'normal': 'Normal',
+  'concise': 'Concise',
+  'explanatory': 'Explanatory',
+  'formal': 'Formal',
+};
+
+/// Per-conversation style picker in the composer. "Default" defers to the
+/// global setting; picking a style overrides it for the turns that follow.
+class _StyleChip extends StatelessWidget {
+  final String? styleOverride;
+  final ValueChanged<String?> onSelected;
+
+  const _StyleChip({required this.styleOverride, required this.onSelected});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final label =
+        styleOverride == null ? 'Style' : kResponseStyles[styleOverride]!;
+    return PopupMenuButton<String>(
+      tooltip: 'Response style',
+      position: PopupMenuPosition.over,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+      ),
+      onSelected: (value) =>
+          onSelected(value == 'default' ? null : value),
+      itemBuilder: (context) => [
+        CheckedPopupMenuItem(
+          value: 'default',
+          checked: styleOverride == null,
+          child: const Text('Default (from Settings)'),
+        ),
+        for (final entry in kResponseStyles.entries)
+          CheckedPopupMenuItem(
+            value: entry.key,
+            checked: styleOverride == entry.key,
+            child: Text(entry.value),
+          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppSpacing.radiusXl),
+          border: Border.all(color: colors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: colors.textSecondary),
+            ),
+            const SizedBox(width: 2),
+            Icon(Icons.expand_more_rounded, size: 14, color: colors.textSecondary),
           ],
         ),
       ),
