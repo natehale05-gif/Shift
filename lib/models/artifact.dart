@@ -39,6 +39,12 @@ class Artifact {
 
   /// Highlighting language for [ArtifactKind.code] artifacts.
   final String? language;
+
+  /// True for self-contained interactive results (recipe cards, quizzes,
+  /// flashcards, checklists). These render only — no code view — since the
+  /// user asked for the thing, not its source. Website/app builds are false.
+  final bool interactive;
+
   final List<ArtifactVersion> versions;
 
   const Artifact({
@@ -47,6 +53,7 @@ class Artifact {
     required this.title,
     required this.kind,
     this.language,
+    this.interactive = false,
     required this.versions,
   });
 
@@ -58,6 +65,7 @@ class Artifact {
         title: title,
         kind: kind,
         language: language,
+        interactive: interactive,
         versions: [
           ...versions,
           ArtifactVersion(content: content, createdAt: createdAt),
@@ -70,6 +78,7 @@ class Artifact {
         title: json['title'] as String,
         kind: ArtifactKind.fromName(json['kind'] as String),
         language: json['language'] as String?,
+        interactive: json['interactive'] as bool? ?? false,
         versions: (json['versions'] as List<dynamic>)
             .map((e) => ArtifactVersion.fromJson(e as Map<String, dynamic>))
             .toList(),
@@ -81,6 +90,7 @@ class Artifact {
         'title': title,
         'kind': kind.name,
         'language': language,
+        if (interactive) 'interactive': true,
         'versions': versions.map((e) => e.toJson()).toList(),
       };
 }

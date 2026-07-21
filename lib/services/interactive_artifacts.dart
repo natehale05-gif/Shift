@@ -508,6 +508,7 @@ refresh();
         conversationId: conversationId,
         title: title,
         kind: ArtifactKind.html,
+        interactive: true,
         versions: [ArtifactVersion(content: html, createdAt: DateTime.now())],
       );
 

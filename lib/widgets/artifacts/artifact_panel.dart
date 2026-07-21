@@ -10,6 +10,7 @@ import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_typography.dart';
+import 'artifact_code_view.dart';
 import 'artifact_preview.dart';
 import 'console_output_view.dart';
 
@@ -37,6 +38,14 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
       artifact.kind == ArtifactKind.code &&
       const ['javascript', 'js', 'typescript']
           .contains(artifact.language?.toLowerCase());
+
+  /// Highlighting language for the Code tab, by artifact kind.
+  static String _codeLanguage(Artifact artifact) => switch (artifact.kind) {
+        ArtifactKind.html => 'html',
+        ArtifactKind.svg => 'xml',
+        ArtifactKind.markdown => 'markdown',
+        ArtifactKind.code => artifact.language ?? 'plaintext',
+      };
 
   Future<void> _run(String code) async {
     setState(() {
@@ -82,6 +91,14 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
     final content = artifact.versions[versionIndex].content;
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
+
+    // Code is viewable for website/app builds, but hidden for interactive
+    // results (recipe/quiz/flashcards/checklist) — you asked for the thing,
+    // not its source.
+    final showCodeToggle = !artifact.interactive;
+    final onCodeTab = showCodeToggle && panel.tab == ArtifactTab.code;
+    final showToolbar =
+        showCodeToggle || _isRunnable(artifact) || artifact.versions.length > 1;
 
     return Container(
       decoration: BoxDecoration(
@@ -135,14 +152,36 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
               ],
             ),
           ),
-          // No Preview/Code toggle — like Claude, you see the rendered result,
-          // not the code. (The code is still downloadable from the header.)
-          // Only show a toolbar row when there's a Run action or versions.
-          if (_isRunnable(artifact) || artifact.versions.length > 1) ...[
+          // Preview/Code toggle for website/app builds; interactive results
+          // render only. The code stays downloadable from the header either way.
+          if (showToolbar) ...[
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Row(
                 children: [
+                  if (showCodeToggle)
+                    SegmentedButton<ArtifactTab>(
+                      style: ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      segments: const [
+                        ButtonSegment(
+                          value: ArtifactTab.preview,
+                          label: Text('Preview'),
+                          icon: Icon(Icons.visibility_outlined, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: ArtifactTab.code,
+                          label: Text('Code'),
+                          icon: Icon(Icons.code_rounded, size: 16),
+                        ),
+                      ],
+                      selected: {panel.tab},
+                      onSelectionChanged: (selection) => context
+                          .read<ArtifactPanelStore>()
+                          .selectTab(selection.first),
+                    ),
                   const Spacer(),
                   if (_isRunnable(artifact))
                     TextButton.icon(
@@ -172,10 +211,15 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
           ],
           Divider(height: 1, color: colors.border),
           Expanded(
-            child: ArtifactPreview(
-              artifact: artifact,
-              versionIndex: versionIndex,
-            ),
+            child: onCodeTab
+                ? ArtifactCodeView(
+                    code: content,
+                    language: _codeLanguage(artifact),
+                  )
+                : ArtifactPreview(
+                    artifact: artifact,
+                    versionIndex: versionIndex,
+                  ),
           ),
           if (_consoleLines != null) ...[
             Divider(height: 1, color: colors.border),

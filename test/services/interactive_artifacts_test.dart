@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shift_ai/models/artifact.dart';
 import 'package:shift_ai/services/interactive_artifacts.dart';
 
 void main() {
@@ -35,6 +36,18 @@ void main() {
   });
 
   group('renderers produce runnable, interactive HTML', () {
+    test('build marks the artifact interactive (so the panel hides code)', () {
+      final artifact = InteractiveArtifacts.build(
+        kind: InteractiveKind.recipe,
+        conversationId: 'c1',
+        title: 'Pancakes',
+        html: '<!DOCTYPE html><html></html>',
+      );
+      expect(artifact.interactive, isTrue);
+      // Round-trips through JSON.
+      expect(Artifact.fromJson(artifact.toJson()).interactive, isTrue);
+    });
+
     test('recipe embeds ingredients, steps, a timer and a servings scaler', () {
       final html = InteractiveArtifacts.renderRecipe(
           InteractiveArtifacts.templatedRecipe('cookies'),
