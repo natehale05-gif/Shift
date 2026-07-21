@@ -6,6 +6,7 @@ import '../models/studio_request.dart';
 import '../models/studio_type.dart';
 import 'artifact_composition.dart';
 import 'download_service.dart';
+import 'translate_service.dart';
 
 /// Canned templates and keyword tables backing [MockChatService]. Every
 /// "generated" asset here is fabricated client-side — there is no real
@@ -558,13 +559,17 @@ class StudioResponseBank {
           count: 1,
           seed: seed,
         ),
-      StudioType.translateStudio => CopyResult(
-          contentType: 'Translation',
-          tone: 'Faithful',
-          text: input.trim().isEmpty
-              ? 'Tell me what to translate and into which language.'
-              : input.trim(),
-        ),
+      StudioType.translateStudio => () {
+          final target = TranslateService.parseTargetLanguage(input) ?? 'Spanish';
+          final source = TranslateService.extractSourceText(input);
+          return TranslateResult(
+            sourceText: source,
+            targetLanguage: target,
+            translatedText: TranslateService.simulatedTranslation(
+                source.isEmpty ? input.trim() : source, target),
+            live: false,
+          );
+        }(),
       StudioType.deckStudio => CopyResult(
           contentType: 'Deck outline',
           tone: 'Clear',

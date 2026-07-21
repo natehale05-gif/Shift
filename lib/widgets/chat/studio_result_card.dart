@@ -35,6 +35,7 @@ class StudioResultCard extends StatelessWidget {
       AudioResult r => _AudioResultView(result: r),
       CopyResult r => _CopyResultView(result: r),
       CodeResult r => _CodeResultView(result: r),
+      TranslateResult r => _TranslateResultView(result: r),
     };
   }
 }
@@ -432,6 +433,58 @@ class _AudioResultViewState extends State<_AudioResultView> {
               icon: const Icon(Icons.download_rounded, size: 18),
               onPressed: _download,
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TranslateResultView extends StatelessWidget {
+  final TranslateResult result;
+  const _TranslateResultView({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _ResultShell(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                _Badge(
+                    text: result.live
+                        ? 'Translated · ${result.targetLanguage}'
+                        : 'Simulated · ${result.targetLanguage}'),
+                const Spacer(),
+                IconButton(
+                  tooltip: 'Copy translation',
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  onPressed: () {
+                    Clipboard.setData(
+                        ClipboardData(text: result.translatedText));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Copied to clipboard')),
+                    );
+                  },
+                ),
+                IconButton(
+                  tooltip: 'Download as .txt',
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  onPressed: () {
+                    final filename =
+                        '${DownloadService.slugify('translation ${result.targetLanguage}', fallback: 'translation')}.txt';
+                    DownloadService.downloadText(result.translatedText, filename);
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Text(result.translatedText, style: theme.textTheme.bodyMedium),
           ],
         ),
       ),

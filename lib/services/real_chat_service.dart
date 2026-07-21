@@ -19,6 +19,7 @@ import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
 import 'procedural_art.dart';
 import 'studio_composition.dart';
+import 'translate_service.dart';
 import 'providers/anthropic_api_config.dart';
 import 'providers/anthropic_client.dart';
 import 'providers/anthropic_tools.dart';
@@ -236,6 +237,14 @@ class RealChatService implements ChatService {
                       anthropicKey: keys.anthropicKey,
                       geminiKey: keys.geminiKey,
                     );
+
+      // Translate is a real deliverable: the best text provider does the
+      // translation, returned as a downloadable TranslateResult.
+      if (route == ChatRoute.translate) {
+        await _runTranslate(controller, userInput);
+        await controller.close();
+        return;
+      }
 
       // Auto: pick the best available provider for the route's capability.
       final providerId =
@@ -537,6 +546,45 @@ class RealChatService implements ChatService {
 
   /// Copy-fed / media-pair scripts write with the best available text model.
   Future<String> _writeText(String prompt) => _completeText(prompt);
+
+  /// Real document translation: the best available text provider translates the
+  /// source into the requested language; the result is a downloadable
+  /// [TranslateResult]. Degrades to a clearly-labelled simulated result if no
+  /// text provider is available or the call fails.
+  Future<void> _runTranslate(
+      StreamController<ChatEvent> controller, String userInput) async {
+    controller.add(const RoutingDetected(StudioType.translateStudio));
+    final target = TranslateService.parseTargetLanguage(userInput) ?? 'Spanish';
+    final source = TranslateService.extractSourceText(userInput);
+    if (source.trim().isEmpty) {
+      controller.add(MessageDelta(
+          'Happy to translate into $target — what text should I translate?'));
+      controller.add(const MessageComplete());
+      return;
+    }
+    controller.add(MessageDelta('Translating into $target…\n\n'));
+
+    var translated = '';
+    try {
+      translated = (await _completeText(
+              TranslateService.translationPrompt(source, target),
+              maxTokens: 2000))
+          .trim();
+    } catch (_) {
+      // fall through to the simulated result
+    }
+    final live = translated.isNotEmpty;
+    if (!live) {
+      translated = TranslateService.simulatedTranslation(source, target);
+    }
+    controller.add(StudioResultReady(TranslateResult(
+      sourceText: source,
+      targetLanguage: target,
+      translatedText: translated,
+      live: live,
+    )));
+    controller.add(const MessageComplete());
+  }
 
   Future<void> _runGeminiChat(
     StreamController<ChatEvent> controller,

@@ -13,6 +13,7 @@ sealed class StudioResult {
       'audio' => AudioResult.fromJson(json),
       'copy' => CopyResult.fromJson(json),
       'code' => CodeResult.fromJson(json),
+      'translate' => TranslateResult.fromJson(json),
       _ => throw ArgumentError('Unknown StudioResult type: ${json['type']}'),
     };
   }
@@ -146,6 +147,40 @@ class AudioResult extends StudioResult {
         'durationSec': durationSec,
         'seed': seed,
         'transcript': transcript,
+      };
+}
+
+/// A document translation: the translated text plus its source and target
+/// language. Downloadable as a .txt file. [live] is true when a real provider
+/// produced it (vs a simulated demo).
+class TranslateResult extends StudioResult {
+  final String sourceText;
+  final String targetLanguage;
+  final String translatedText;
+  final bool live;
+
+  const TranslateResult({
+    required this.sourceText,
+    required this.targetLanguage,
+    required this.translatedText,
+    this.live = false,
+  });
+
+  factory TranslateResult.fromJson(Map<String, dynamic> json) =>
+      TranslateResult(
+        sourceText: json['sourceText'] as String,
+        targetLanguage: json['targetLanguage'] as String,
+        translatedText: json['translatedText'] as String,
+        live: json['live'] as bool? ?? false,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'translate',
+        'sourceText': sourceText,
+        'targetLanguage': targetLanguage,
+        'translatedText': translatedText,
+        'live': live,
       };
 }
 
