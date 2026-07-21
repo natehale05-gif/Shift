@@ -23,8 +23,8 @@ import 'typing_indicator.dart';
 class MessageView extends StatefulWidget {
   final ChatMessage message;
 
-  /// Invoked when the user taps an artifact card (opens the panel once the
-  /// artifacts panel ships; null renders the card non-interactive).
+  /// Invoked when the user taps an artifact card to open the artifacts panel;
+  /// null renders the card non-interactive.
   final void Function(ArtifactRefBlock ref)? onOpenArtifact;
 
   const MessageView({super.key, required this.message, this.onOpenArtifact});

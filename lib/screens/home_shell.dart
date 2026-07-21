@@ -6,6 +6,7 @@ import '../state/conversation_store.dart';
 import '../state/home_shell_controller.dart';
 import '../widgets/common/app_sidebar.dart';
 import '../widgets/common/command_palette.dart';
+import '../widgets/common/keyboard_shortcuts_sheet.dart';
 import 'chat/chat_screen.dart';
 import 'culture/culture_screen.dart';
 import 'membership/membership_screen.dart';
@@ -50,6 +51,14 @@ class _HomeShellState extends State<HomeShell> {
     setState(() => _index = 0);
   }
 
+  /// Escape stops an in-flight generation (Claude's stop shortcut).
+  void _onEscape() {
+    final store = context.read<ConversationStore>();
+    if (store.isStreaming) store.stopGeneration();
+  }
+
+  void _showShortcuts() => showKeyboardShortcuts(context);
+
   @override
   Widget build(BuildContext context) {
     return CallbackShortcuts(
@@ -65,6 +74,11 @@ class _HomeShellState extends State<HomeShell> {
           control: true,
           shift: true,
         ): _newChat,
+        const SingleActivator(LogicalKeyboardKey.slash, meta: true):
+            _showShortcuts,
+        const SingleActivator(LogicalKeyboardKey.slash, control: true):
+            _showShortcuts,
+        const SingleActivator(LogicalKeyboardKey.escape): _onEscape,
       },
       child: FocusScope(autofocus: true, child: _buildShell(context)),
     );
