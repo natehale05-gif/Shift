@@ -36,6 +36,20 @@ class _RecordingOpenAi extends OpenAiCompatibleClient {
     yield const MessageDelta('Hi from GPT.');
     yield const MessageComplete();
   }
+
+  // The router classifies via complete() when only an OpenAI-compatible key
+  // exists; keep it offline and route everything to plain chat.
+  @override
+  Future<String> complete({
+    required String apiKey,
+    required String baseUrl,
+    required String model,
+    required String prompt,
+    String? systemPrompt,
+    Map<String, String> extraHeaders = const {},
+    int maxTokens = 400,
+  }) async =>
+      '{"route":"chat"}';
 }
 
 Conversation _fresh(String input) => Conversation(
@@ -114,6 +128,27 @@ void main() {
     expect(openAi.seenBaseUrl, 'https://openrouter.ai/api/v1');
     expect(openAi.seenModel, 'openai/gpt-4o');
     expect(openAi.seenHeaders?['X-Title'], 'SHIFT AI');
+  });
+
+  test('Auto (no pin): an OpenAI-only user gets live GPT text, not the mock',
+      () async {
+    final keys = await _keys({'openai': 'sk-openai-123'});
+    final openAi = _RecordingOpenAi();
+    final service = RealChatService(keys: keys, openAiClient: openAi);
+
+    final events = await service
+        .sendMessage(
+          conversation: _fresh('tell me a fun fact'),
+          userInput: 'tell me a fun fact',
+        )
+        .toList();
+
+    // Routed to OpenAI's default chat model with no pin.
+    expect(openAi.seenBaseUrl, 'https://api.openai.com/v1');
+    expect(openAi.seenModel, 'gpt-4o');
+    expect(events.whereType<MessageDelta>().map((e) => e.chunk).join(),
+        'Hi from GPT.');
+    expect(events.last, isA<MessageComplete>());
   });
 
   test('pinning a provider with no key does not dispatch to OpenAI', () async {

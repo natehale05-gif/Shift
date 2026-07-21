@@ -1,9 +1,13 @@
 import 'dart:convert';
 
 import '../../models/studio_type.dart';
+import '../../state/api_keys_store.dart';
 import '../providers/anthropic_api_config.dart';
 import '../providers/anthropic_client.dart';
 import '../providers/gemini_client.dart';
+import '../providers/openai_compatible_client.dart';
+import '../providers/provider_capability.dart';
+import '../providers/provider_registry.dart';
 import '../studio_response_bank.dart';
 
 /// What kind of executor a prompt needs — the middleware AI's routing
@@ -92,10 +96,27 @@ const _routerSystemPrompt =
 class ModelRouter {
   final AnthropicClient _client;
   final GeminiClient _gemini;
+  final OpenAiCompatibleClient _openAi;
+  final ProviderRegistry _registry;
 
-  ModelRouter({AnthropicClient? client, GeminiClient? geminiClient})
-      : _client = client ?? AnthropicClient(),
-        _gemini = geminiClient ?? GeminiClient();
+  /// Optional key store. When neither an Anthropic nor a Gemini key is present,
+  /// the router uses this (plus the registry) to classify with an
+  /// OpenAI-compatible provider the user does have a key for, instead of
+  /// dropping straight to the keyword tables. Injected via the constructor so
+  /// the frozen [route] signature stays intact.
+  final ApiKeysStore? _keys;
+
+  ModelRouter({
+    AnthropicClient? client,
+    GeminiClient? geminiClient,
+    OpenAiCompatibleClient? openAiClient,
+    ProviderRegistry? registry,
+    ApiKeysStore? keys,
+  })  : _client = client ?? AnthropicClient(),
+        _gemini = geminiClient ?? GeminiClient(),
+        _openAi = openAiClient ?? OpenAiCompatibleClient(),
+        _registry = registry ?? ProviderRegistry.defaults(),
+        _keys = keys;
 
   Future<ChatRoute> route({
     required String input,
@@ -105,7 +126,8 @@ class ModelRouter {
     final hasAnthropic = anthropicKey != null && anthropicKey.isNotEmpty;
     final hasGemini = geminiKey != null && geminiKey.isNotEmpty;
     if (!hasAnthropic && !hasGemini) {
-      return keywordRoute(input);
+      // Step 3: an OpenAI-compatible key can still classify; else keywords.
+      return (await _routeViaOpenAi(input)) ?? keywordRoute(input);
     }
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
@@ -129,5 +151,36 @@ class ModelRouter {
       }
     }
     return keywordRoute(input);
+  }
+
+  /// Classifies with the best routing-capable OpenAI-compatible provider the
+  /// user has a key for. Returns null when none is available or the call fails,
+  /// so the caller falls back to the keyword tables.
+  Future<ChatRoute?> _routeViaOpenAi(String input) async {
+    final keys = _keys;
+    if (keys == null) return null;
+    for (final descriptor
+        in _registry.providersFor(ProviderCapability.routing)) {
+      if (descriptor.clientKind != ProviderClientKind.openAiCompatible) continue;
+      if (!keys.hasKey(descriptor.id)) continue;
+      final model = descriptor.modelForCapability(ProviderCapability.routing)?.id ??
+          descriptor.defaultModelId;
+      if (model == null || descriptor.baseUrl == null) return null;
+      try {
+        final reply = await _openAi.complete(
+          apiKey: keys.keyFor(descriptor.id),
+          baseUrl: descriptor.baseUrl!,
+          model: model,
+          systemPrompt: _routerSystemPrompt,
+          prompt: input,
+          maxTokens: 60,
+          extraHeaders: descriptor.extraHeaders,
+        );
+        return parseRouteJson(reply);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 }

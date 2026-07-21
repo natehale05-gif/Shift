@@ -28,6 +28,7 @@ import 'providers/provider_capability.dart';
 import 'providers/provider_descriptor.dart';
 import 'providers/provider_registry.dart';
 import 'router/model_router.dart';
+import 'router/provider_selection.dart';
 import 'studio_clarification.dart';
 import 'studio_response_bank.dart';
 
@@ -36,25 +37,27 @@ const _uuid = Uuid();
 /// Which backend serves a routed request.
 enum Executor { anthropic, gemini, mock }
 
-/// The degradation matrix: each route runs on the best available provider,
-/// falling back to the mock so every request still produces something.
-/// Pure — unit-tested across all key combinations.
+/// The Anthropic/Gemini degradation matrix, preserved as a thin wrapper over
+/// the capability-based [chooseProvider] so there is one source of truth for
+/// the Auto decision. Given only the two legacy flags, [chooseProvider] can
+/// only ever pick Anthropic, Gemini, or nothing (→ mock), reproducing the
+/// original nine-combo matrix exactly. Pure — unit-tested.
 Executor chooseExecutor(
   ChatRoute route, {
   required bool hasAnthropic,
   required bool hasGemini,
 }) {
-  return switch (route) {
-    // Image generation is a Gemini capability.
-    ChatRoute.imageGen => hasGemini ? Executor.gemini : Executor.mock,
-    // No live provider generates video/audio yet.
-    ChatRoute.video || ChatRoute.audio => Executor.mock,
-    // Text-shaped work prefers Claude, then Gemini, then the mock.
-    _ => hasAnthropic
-        ? Executor.anthropic
-        : hasGemini
-            ? Executor.gemini
-            : Executor.mock,
+  final id = chooseProvider(
+    route,
+    registry: ProviderRegistry.defaults(),
+    hasKey: (providerId) =>
+        (providerId == 'anthropic' && hasAnthropic) ||
+        (providerId == 'gemini' && hasGemini),
+  );
+  return switch (id) {
+    'anthropic' => Executor.anthropic,
+    'gemini' => Executor.gemini,
+    _ => Executor.mock,
   };
 }
 
@@ -88,6 +91,9 @@ class RealChatService implements ChatService {
             ModelRouter(
               client: anthropicClient,
               geminiClient: geminiClient,
+              openAiClient: openAiClient,
+              registry: registry,
+              keys: keys,
             ),
         _mockFallback = mockFallback ?? MockChatService();
 
@@ -180,8 +186,9 @@ class RealChatService implements ChatService {
         final provider = _registry.providerForModel(pin);
         if (provider != null && keys.hasKey(provider.id)) {
           if (provider.clientKind == ProviderClientKind.openAiCompatible) {
-            await _runOpenAiChat(
-                controller, conversation, userInput, attachments, options, provider);
+            await _runOpenAiChat(controller, conversation, userInput,
+                attachments, options, provider,
+                model: pin);
             await controller.close();
             return;
           }
@@ -206,21 +213,20 @@ class RealChatService implements ChatService {
                       geminiKey: keys.geminiKey,
                     );
 
-      final executor = chooseExecutor(
-        route,
-        hasAnthropic: keys.hasAnthropicKey,
-        hasGemini: keys.hasGeminiKey,
-      );
+      // Auto: pick the best available provider for the route's capability.
+      final providerId =
+          chooseProvider(route, registry: _registry, hasKey: keys.hasKey);
+      final provider = providerId == null ? null : _registry.byId(providerId);
 
       final pageContributors = plan.kind == CompositionKind.pageAssembly
           ? plan.contributors
           : const <StudioType>{};
 
-      switch (executor) {
-        case Executor.anthropic:
+      switch (provider?.clientKind) {
+        case ProviderClientKind.anthropic:
           await _runAnthropicChat(controller, conversation, userInput,
               attachments, options, route, pageContributors);
-        case Executor.gemini:
+        case ProviderClientKind.gemini:
           if (route == ChatRoute.imageGen) {
             await _runGeminiImageWithClarification(
                 controller, conversation, userInput, pending);
@@ -228,7 +234,12 @@ class RealChatService implements ChatService {
             await _runGeminiChat(controller, conversation, userInput,
                 attachments, options, route);
           }
-        case Executor.mock:
+        case ProviderClientKind.openAiCompatible:
+          await _runOpenAiChat(controller, conversation, userInput, attachments,
+              options, provider!, model: _autoModelFor(provider, route));
+        default:
+          // No live provider (video/audio, or an image route without a Gemini
+          // key, or no keys at all) → the fully-functional mock.
           await _delegateToMock(controller, conversation, userInput, null,
               attachments, options);
           return;
@@ -248,28 +259,15 @@ class RealChatService implements ChatService {
     String topic,
   ) async {
     controller.add(const RoutingDetected(StudioType.middleware));
-    final useAnthropic = keys.hasAnthropicKey;
 
     Future<String> completeText(String prompt,
-        {bool strongModel = false}) async {
-      if (useAnthropic) {
-        return _anthropic.complete(
-          apiKey: keys.anthropicKey,
-          model: strongModel
-              ? AnthropicApiConfig.defaultModel
-              : AnthropicApiConfig.haikuModel,
-          prompt: prompt,
-          maxTokens: strongModel ? 8000 : 300,
-        );
-      }
-      return _gemini.complete(
-        apiKey: keys.geminiKey,
-        prompt: prompt,
-        model: strongModel
-            ? GeminiApiConfig.proModel
-            : GeminiApiConfig.flashModel,
-      );
-    }
+            {bool strongModel = false}) =>
+        _completeText(prompt,
+            maxTokens: strongModel ? 8000 : 300, strong: strongModel);
+
+    // A grounded (web-search-backed) provider for the search step, if any.
+    final searchId =
+        chooseProvider(ChatRoute.webSearch, registry: _registry, hasKey: keys.hasKey);
 
     final engine = DeepResearchEngine(
       planQueries: (topic) async {
@@ -287,14 +285,25 @@ class RealChatService implements ChatService {
         }
       },
       search: (query) async {
+        const ask = 'Search the web and concisely summarize the key '
+            'findings for: ';
+        // Only Anthropic/Gemini can actually ground on the live web. With just
+        // an OpenAI-compatible key, degrade to a plain completion from the
+        // model's own knowledge (no live sources) — a documented limitation.
+        if (searchId == null) {
+          final notes = await _completeText(
+            'Concisely summarize what you know about: $query',
+            maxTokens: 800,
+          );
+          return ResearchRoundResult(notes: notes, citations: const []);
+        }
         final buffer = StringBuffer();
         final citations = <Citation>[];
-        final events = useAnthropic
+        final events = searchId == 'anthropic'
             ? _anthropic.streamChat(
                 apiKey: keys.anthropicKey,
                 conversation: _emptyConversation(),
-                userInput: 'Search the web and concisely summarize the '
-                    'key findings for: $query',
+                userInput: '$ask$query',
                 model: AnthropicApiConfig.sonnetModel,
                 tools: const [AnthropicTools.webSearch],
                 maxContinuations: 3,
@@ -302,8 +311,7 @@ class RealChatService implements ChatService {
             : _gemini.streamChat(
                 apiKey: keys.geminiKey,
                 conversation: _emptyConversation(),
-                userInput: 'Search the web and concisely summarize the '
-                    'key findings for: $query',
+                userInput: '$ask$query',
                 grounding: true,
               );
         await for (final event in events) {
@@ -403,22 +411,49 @@ class RealChatService implements ChatService {
   }
 
   /// Small non-streaming completion on whichever text model the user has a
-  /// key for (Claude preferred).
-  Future<String> _writeText(String prompt) {
-    if (keys.hasAnthropicKey) {
-      return _anthropic.complete(
-        apiKey: keys.anthropicKey,
-        model: AnthropicApiConfig.haikuModel,
-        prompt: prompt,
-        maxTokens: 400,
-      );
+  /// key for (registry preference order — Claude first, then OpenAI, Gemini,
+  /// Groq, Mistral, OpenRouter). [strong] asks for the provider's most capable
+  /// model rather than its fast one. Returns '' when no live text provider is
+  /// available, so callers fall back to their templates.
+  Future<String> _completeText(String prompt,
+      {int maxTokens = 400, bool strong = false}) async {
+    final id = chooseProvider(ChatRoute.chat, registry: _registry, hasKey: keys.hasKey);
+    final provider = id == null ? null : _registry.byId(id);
+    switch (provider?.clientKind) {
+      case ProviderClientKind.anthropic:
+        return _anthropic.complete(
+          apiKey: keys.anthropicKey,
+          model: strong
+              ? AnthropicApiConfig.defaultModel
+              : AnthropicApiConfig.haikuModel,
+          prompt: prompt,
+          maxTokens: maxTokens,
+        );
+      case ProviderClientKind.gemini:
+        return _gemini.complete(
+          apiKey: keys.geminiKey,
+          prompt: prompt,
+          model: strong ? GeminiApiConfig.proModel : GeminiApiConfig.flashModel,
+        );
+      case ProviderClientKind.openAiCompatible:
+        final model = provider!.modelForCapability(ProviderCapability.chat)?.id ??
+            provider.defaultModelId ??
+            provider.models.first.id;
+        return _openAi.complete(
+          apiKey: keys.keyFor(provider.id),
+          baseUrl: provider.baseUrl!,
+          model: model,
+          prompt: prompt,
+          maxTokens: maxTokens,
+          extraHeaders: provider.extraHeaders,
+        );
+      default:
+        return '';
     }
-    return _gemini.complete(
-      apiKey: keys.geminiKey,
-      prompt: prompt,
-      model: GeminiApiConfig.flashModel,
-    );
   }
+
+  /// Copy-fed / media-pair scripts write with the best available text model.
+  Future<String> _writeText(String prompt) => _completeText(prompt);
 
   Future<void> _runGeminiChat(
     StreamController<ChatEvent> controller,
@@ -442,19 +477,19 @@ class RealChatService implements ChatService {
     await controller.addStream(events);
   }
 
-  /// A pinned OpenAI-compatible model (GPT/Groq/OpenRouter/Mistral) answers the
-  /// turn directly. Plain chat — the middleware isn't routing to a studio, so
-  /// no artifact extraction (mirrors a pinned Claude model).
+  /// An OpenAI-compatible model (GPT/Groq/OpenRouter/Mistral) answers the turn
+  /// directly — whether pinned or chosen by Auto. Plain chat, so no artifact
+  /// extraction (mirrors a pinned Claude model).
   Future<void> _runOpenAiChat(
     StreamController<ChatEvent> controller,
     Conversation conversation,
     String userInput,
     List<Attachment> attachments,
     ChatOptions options,
-    ProviderDescriptor provider,
-  ) async {
+    ProviderDescriptor provider, {
+    required String model,
+  }) async {
     controller.add(RoutingDetected(ChatRoute.chat.studioType));
-    final model = options.modelPin!;
     final events = _openAi.streamChat(
       apiKey: keys.keyFor(provider.id),
       baseUrl: provider.baseUrl!,
@@ -467,6 +502,16 @@ class RealChatService implements ChatService {
       extraHeaders: provider.extraHeaders,
     );
     await controller.addStream(events);
+  }
+
+  /// The model an OpenAI-compatible provider should use for an Auto-routed
+  /// request: the provider's model for the route's capability, else its default
+  /// chat model, else the first listed model.
+  String _autoModelFor(ProviderDescriptor provider, ChatRoute route) {
+    final capability = capabilityForRoute(route);
+    return provider.modelForCapability(capability)?.id ??
+        provider.defaultModelId ??
+        provider.models.first.id;
   }
 
   /// Freeform image prompts get the same "ask before guessing" gate as the
