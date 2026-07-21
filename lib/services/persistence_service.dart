@@ -20,6 +20,7 @@ class PersistenceService {
   static const _themeModeKey = 'shift_ai.theme_mode.v1';
   static const _selectedTierKey = 'shift_ai.selected_tier.v1';
   static const _projectsKey = 'shift_ai.projects.v1';
+  static const _activeProjectKey = 'shift_ai.active_project.v1';
   static const _userPrefsKey = 'shift_ai.user_prefs.v1';
   static const _migratedFlagKey = 'shift_ai.migrated_to_idb.v1';
   static const maxStoredConversations = 50;
@@ -182,6 +183,17 @@ class PersistenceService {
         _projectsKey,
         jsonEncode(projects.map((p) => p.toJson()).toList()),
       );
+
+  Future<String?> loadActiveProject() => _getKv(_activeProjectKey);
+
+  Future<void> saveActiveProject(String? id) async {
+    await _ensureMigrated();
+    if (id == null) {
+      await _backend.deleteKv(_activeProjectKey);
+    } else {
+      await _backend.putKv(_activeProjectKey, id);
+    }
+  }
 
   /// Provider API keys (BYOK). Stored in this browser's IndexedDB only —
   /// there is no backend to send them to.

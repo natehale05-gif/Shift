@@ -1,7 +1,11 @@
+import 'dart:convert';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/project.dart';
+import '../../state/conversation_store.dart';
 import '../../state/project_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_typography.dart';
@@ -108,6 +112,31 @@ class _ProjectDetailSheetState extends State<_ProjectDetailSheet> {
     ));
   }
 
+  /// Adds one or more text files (their contents become knowledge the AI
+  /// always sees for this project's chats).
+  Future<void> _uploadKnowledge(ProjectStore store, Project project) async {
+    const typeGroup = XTypeGroup(
+      label: 'Text files',
+      extensions: [
+        'txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'yaml', 'yml',
+        'html', 'css', 'js', 'ts', 'dart', 'py', 'xml',
+      ],
+    );
+    final files = await openFiles(acceptedTypeGroups: const [typeGroup]);
+    if (files.isEmpty) return;
+    final docs = <KnowledgeDoc>[];
+    for (final file in files) {
+      final bytes = await file.readAsBytes();
+      final text = utf8.decode(bytes, allowMalformed: true).trim();
+      if (text.isEmpty) continue;
+      docs.add(KnowledgeDoc(name: file.name, text: text));
+    }
+    if (docs.isEmpty) return;
+    store.updateProject(
+      project.copyWith(knowledge: [...project.knowledge, ...docs]),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = context.watch<ProjectStore>();
@@ -183,9 +212,14 @@ class _ProjectDetailSheetState extends State<_ProjectDetailSheet> {
                 Text('Knowledge', style: theme.textTheme.titleSmall),
                 const Spacer(),
                 TextButton.icon(
+                  onPressed: () => _uploadKnowledge(store, project),
+                  icon: const Icon(Icons.upload_file_rounded, size: 18),
+                  label: const Text('Upload'),
+                ),
+                TextButton.icon(
                   onPressed: () => _addKnowledge(store, project),
                   icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Add'),
+                  label: const Text('Paste'),
                 ),
               ],
             ),
@@ -216,6 +250,47 @@ class _ProjectDetailSheetState extends State<_ProjectDetailSheet> {
                   },
                 ),
               ),
+            const SizedBox(height: AppSpacing.lg),
+            Text('Chats in this project', style: theme.textTheme.titleSmall),
+            const SizedBox(height: AppSpacing.xs),
+            Builder(
+              builder: (context) {
+                final chats = context
+                    .watch<ConversationStore>()
+                    .conversations
+                    .where((c) => c.projectId == project.id && !c.archived)
+                    .toList();
+                if (chats.isEmpty) {
+                  return Text(
+                    'No chats yet. New chats you start while this project is '
+                    'active will be filed here.',
+                    style: theme.textTheme.bodySmall,
+                  );
+                }
+                return Column(
+                  children: [
+                    for (final chat in chats)
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading:
+                            const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                        title: Text(
+                          chat.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () {
+                          context
+                              .read<ConversationStore>()
+                              .selectConversation(chat.id);
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                  ],
+                );
+              },
+            ),
           ],
         ),
       ),

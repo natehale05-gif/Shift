@@ -31,6 +31,11 @@ class ProjectStore extends ChangeNotifier {
 
   Future<void> load() async {
     _projects = await persistence.loadProjects();
+    final savedActive = await persistence.loadActiveProject();
+    // Only restore it if the project still exists.
+    if (savedActive != null && projectById(savedActive) != null) {
+      _activeProjectId = savedActive;
+    }
     notifyListeners();
   }
 
@@ -57,15 +62,20 @@ class ProjectStore extends ChangeNotifier {
 
   void deleteProject(String id) {
     _projects.removeWhere((p) => p.id == id);
-    if (_activeProjectId == id) _activeProjectId = null;
+    if (_activeProjectId == id) {
+      _activeProjectId = null;
+      persistence.saveActiveProject(null);
+    }
     notifyListeners();
     _persist();
   }
 
-  /// Sets which project new conversations belong to (null = none).
+  /// Sets which project new conversations belong to (null = none). Persisted
+  /// so the selection survives a reload.
   void setActiveProject(String? id) {
     _activeProjectId = id;
     notifyListeners();
+    persistence.saveActiveProject(id);
   }
 
   Future<void> _persist() => persistence.saveProjects(_projects);
