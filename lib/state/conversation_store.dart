@@ -200,6 +200,34 @@ class ConversationStore extends ChangeNotifier {
     );
   }
 
+  /// Picks up a reply that was cut off at the token ceiling (Claude's
+  /// "Continue"). The existing text is kept and the model streams more onto the
+  /// end of the same message — the deltas append in place.
+  Future<void> continueReply(
+    String messageId, {
+    ChatOptions options = ChatOptions.none,
+  }) async {
+    final convo = current;
+    if (convo == null) return;
+    final index = convo.messages.indexWhere((m) => m.id == messageId);
+    if (index < 0) return;
+    final message = convo.messages[index];
+    if (message.status != MessageStatus.incomplete) return;
+
+    // Flip back to streaming; new deltas fold onto the existing text/blocks.
+    _updateMessage(convo.id, messageId, (m) {
+      return m.copyWith(status: MessageStatus.streaming);
+    });
+
+    await _streamReply(
+      conversationId: convo.id,
+      assistantMessageId: messageId,
+      userInput: 'Continue exactly where you left off, without repeating '
+          'anything you already wrote.',
+      options: options,
+    );
+  }
+
   /// Switches which stored response is shown for [messageId] (the ‹1/2›
   /// navigator). [index] is clamped to the available responses.
   void selectVariant(String messageId, int index) {
@@ -377,7 +405,7 @@ class ConversationStore extends ChangeNotifier {
             ImageBlock(alt: alt, pngBytes: pngBytes, assetId: assetId),
           ]);
         });
-      case MessageComplete() || MessageError():
+      case MessageComplete() || MessageError() || MessageIncomplete():
         _updateMessage(
           conversationId,
           messageId,

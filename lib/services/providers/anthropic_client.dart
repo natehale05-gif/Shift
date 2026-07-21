@@ -221,6 +221,7 @@ class AnthropicClient implements KeyValidatable {
         List<Map<String, dynamic>>.from(baseBody['messages'] as List);
     var inputTokens = 0;
     var outputTokens = 0;
+    String? finalStopReason;
     final allCitations = <String, Citation>{};
 
     for (var round = 0; round <= maxContinuations; round++) {
@@ -262,6 +263,7 @@ class AnthropicClient implements KeyValidatable {
         });
         continue;
       }
+      finalStopReason = accumulator.stopReason;
       break;
     }
 
@@ -273,7 +275,13 @@ class AnthropicClient implements KeyValidatable {
       outputTokens: outputTokens,
       model: AnthropicApiConfig.displayName(model),
     ));
-    yield const MessageComplete();
+    // A max_tokens stop means the reply was cut off — surface it as
+    // continuable rather than a clean finish.
+    if (finalStopReason == 'max_tokens') {
+      yield const MessageIncomplete();
+    } else {
+      yield const MessageComplete();
+    }
   }
 
   /// Small non-streaming call to classify a prompt or validate a key.

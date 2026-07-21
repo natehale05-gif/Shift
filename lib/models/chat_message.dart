@@ -7,7 +7,7 @@ import 'usage_report.dart';
 
 enum MessageRole { user, assistant, system }
 
-enum MessageStatus { sending, streaming, complete, error }
+enum MessageStatus { sending, streaming, complete, incomplete, error }
 
 /// Reader reaction to an assistant reply (Claude's thumbs up/down).
 enum MessageFeedback { none, up, down }

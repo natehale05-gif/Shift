@@ -113,6 +113,17 @@ ChatMessage foldMessageEvent(ChatMessage message, ChatEvent event) {
             .toList(),
       );
 
+    case MessageIncomplete():
+      // Cut off at the token ceiling: settle spinners but mark it continuable.
+      return message.copyWith(
+        status: MessageStatus.incomplete,
+        blocks: message.blocks
+            .map((b) => b is ToolUseBlock && b.status == ToolUseStatus.running
+                ? b.copyWith(status: ToolUseStatus.done)
+                : b)
+            .toList(),
+      );
+
     case MessageError(message: final errorText):
       return message.copyWith(
         text: message.text.isEmpty

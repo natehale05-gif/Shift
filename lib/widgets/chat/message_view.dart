@@ -231,6 +231,11 @@ class _AssistantProse extends StatelessWidget {
             padding: const EdgeInsets.only(top: AppSpacing.md),
             child: _CitationChips(citations: citations),
           ),
+        if (message.status == MessageStatus.incomplete)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            child: _ContinueButton(messageId: message.id),
+          ),
         _ActionRow(message: message, visible: hovering),
       ],
     );
@@ -673,6 +678,27 @@ class _ActionRow extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Shown under a reply that hit the token ceiling — picks up where it left
+/// off (Claude's "Continue").
+class _ContinueButton extends StatelessWidget {
+  final String messageId;
+
+  const _ContinueButton({required this.messageId});
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      onPressed: () =>
+          context.read<ConversationStore>().continueReply(messageId),
+      icon: const Icon(Icons.play_arrow_rounded, size: 16),
+      label: const Text('Continue'),
+      style: OutlinedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
       ),
     );
   }

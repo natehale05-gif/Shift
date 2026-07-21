@@ -108,6 +108,13 @@ class MessageComplete extends ChatEvent {
   const MessageComplete();
 }
 
+/// The reply ended because it hit the output-token ceiling, not because the
+/// model was done — the UI offers a "Continue" action to pick up where it
+/// stopped.
+class MessageIncomplete extends ChatEvent {
+  const MessageIncomplete();
+}
+
 class MessageError extends ChatEvent {
   final String message;
   const MessageError(this.message);
