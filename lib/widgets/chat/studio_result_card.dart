@@ -9,6 +9,7 @@ import 'package:flutter_highlight/themes/atom-one-dark.dart';
 
 import '../../models/studio_result.dart';
 import '../../services/audio_synth_service.dart';
+import '../../services/deck_pptx.dart';
 import '../../services/download_service.dart';
 import '../../services/open_url.dart';
 import '../../services/procedural_art.dart';
@@ -36,6 +37,7 @@ class StudioResultCard extends StatelessWidget {
       CopyResult r => _CopyResultView(result: r),
       CodeResult r => _CodeResultView(result: r),
       TranslateResult r => _TranslateResultView(result: r),
+      DeckResult r => _DeckResultView(result: r),
     };
   }
 }
@@ -485,6 +487,81 @@ class _TranslateResultView extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(result.translatedText, style: theme.textTheme.bodyMedium),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DeckResultView extends StatelessWidget {
+  final DeckResult result;
+  const _DeckResultView({required this.result});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    return _ResultShell(
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                _Badge(
+                    text: result.live
+                        ? '${result.slides.length} slides'
+                        : 'Draft · ${result.slides.length} slides'),
+                const Spacer(),
+                FilledButton.tonalIcon(
+                  onPressed: () {
+                    final bytes = DeckPptx.build(result);
+                    final filename =
+                        '${DownloadService.slugify(result.title, fallback: 'deck')}.pptx';
+                    DownloadService.downloadBytes(bytes, filename,
+                        mimeType:
+                            'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+                  },
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: const Text('Download .pptx'),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            // A compact outline preview of the slides.
+            for (var i = 0; i < result.slides.length; i++) ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 22,
+                      alignment: Alignment.centerLeft,
+                      child: Text('${i + 1}',
+                          style: theme.textTheme.labelSmall
+                              ?.copyWith(color: colors.textSecondary)),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(result.slides[i].title,
+                              style: theme.textTheme.titleSmall),
+                          if (result.slides[i].bullets.isNotEmpty)
+                            Text(result.slides[i].bullets.join(' · '),
+                                style: theme.textTheme.bodySmall
+                                    ?.copyWith(color: colors.textSecondary)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

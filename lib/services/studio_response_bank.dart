@@ -5,6 +5,7 @@ import '../models/studio_result.dart';
 import '../models/studio_request.dart';
 import '../models/studio_type.dart';
 import 'artifact_composition.dart';
+import 'deck_service.dart';
 import 'download_service.dart';
 import 'translate_service.dart';
 
@@ -570,11 +571,10 @@ class StudioResponseBank {
             live: false,
           );
         }(),
-      StudioType.deckStudio => CopyResult(
-          contentType: 'Deck outline',
-          tone: 'Clear',
-          text: input.trim().isEmpty ? 'What should the deck cover?' : input.trim(),
-        ),
+      StudioType.deckStudio => () {
+          final req = DeckService.parseDeckRequest(input);
+          return DeckService.templatedDeck(req.topic, req.slideCount);
+        }(),
       StudioType.middleware => throw ArgumentError('No studio result for middleware'),
     };
   }

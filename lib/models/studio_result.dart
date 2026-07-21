@@ -14,6 +14,7 @@ sealed class StudioResult {
       'copy' => CopyResult.fromJson(json),
       'code' => CodeResult.fromJson(json),
       'translate' => TranslateResult.fromJson(json),
+      'deck' => DeckResult.fromJson(json),
       _ => throw ArgumentError('Unknown StudioResult type: ${json['type']}'),
     };
   }
@@ -180,6 +181,51 @@ class TranslateResult extends StudioResult {
         'sourceText': sourceText,
         'targetLanguage': targetLanguage,
         'translatedText': translatedText,
+        'live': live,
+      };
+}
+
+/// One slide in a generated deck: a title and its bullet points.
+class DeckSlide {
+  final String title;
+  final List<String> bullets;
+  const DeckSlide({required this.title, this.bullets = const []});
+
+  factory DeckSlide.fromJson(Map<String, dynamic> json) => DeckSlide(
+        title: json['title'] as String? ?? '',
+        bullets:
+            (json['bullets'] as List<dynamic>? ?? const []).cast<String>(),
+      );
+
+  Map<String, dynamic> toJson() => {'title': title, 'bullets': bullets};
+}
+
+/// A generated slide deck. Downloadable as a real .pptx and previewable as an
+/// HTML deck artifact. [live] is true when a provider wrote the outline.
+class DeckResult extends StudioResult {
+  final String title;
+  final List<DeckSlide> slides;
+  final bool live;
+
+  const DeckResult({
+    required this.title,
+    required this.slides,
+    this.live = false,
+  });
+
+  factory DeckResult.fromJson(Map<String, dynamic> json) => DeckResult(
+        title: json['title'] as String,
+        slides: (json['slides'] as List<dynamic>)
+            .map((s) => DeckSlide.fromJson(s as Map<String, dynamic>))
+            .toList(),
+        live: json['live'] as bool? ?? false,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'deck',
+        'title': title,
+        'slides': slides.map((s) => s.toJson()).toList(),
         'live': live,
       };
 }

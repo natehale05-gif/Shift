@@ -18,6 +18,7 @@ import 'chat_service.dart';
 import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
 import 'procedural_art.dart';
+import 'deck_service.dart';
 import 'studio_composition.dart';
 import 'translate_service.dart';
 import 'providers/anthropic_api_config.dart';
@@ -242,6 +243,14 @@ class RealChatService implements ChatService {
       // translation, returned as a downloadable TranslateResult.
       if (route == ChatRoute.translate) {
         await _runTranslate(controller, userInput);
+        await controller.close();
+        return;
+      }
+
+      // Deck is a real deliverable: the best text provider writes the outline,
+      // returned as a downloadable .pptx (DeckResult) + an HTML deck artifact.
+      if (route == ChatRoute.deck) {
+        await _runDeck(controller, conversation, userInput);
         await controller.close();
         return;
       }
@@ -583,6 +592,44 @@ class RealChatService implements ChatService {
       translatedText: translated,
       live: live,
     )));
+    controller.add(const MessageComplete());
+  }
+
+  /// Real slide deck: the best text provider writes a JSON outline, rendered as
+  /// a downloadable .pptx (DeckResult) and an HTML deck artifact. Falls back to
+  /// a templated outline when no provider is available or the call fails.
+  Future<void> _runDeck(
+    StreamController<ChatEvent> controller,
+    Conversation conversation,
+    String userInput,
+  ) async {
+    controller.add(const RoutingDetected(StudioType.deckStudio));
+    final req = DeckService.parseDeckRequest(userInput);
+    controller.add(MessageDelta(
+        'Building a ${req.slideCount}-slide deck on "${req.topic}"…\n\n'));
+
+    DeckResult? deck;
+    try {
+      final reply = await _completeText(
+          DeckService.outlinePrompt(req.topic, req.slideCount),
+          maxTokens: 2000);
+      deck = DeckService.parseOutlineJson(reply, req.topic);
+    } catch (_) {
+      // fall through to the template
+    }
+    deck ??= DeckService.templatedDeck(req.topic, req.slideCount);
+
+    controller.add(ArtifactCreated(Artifact(
+      id: _uuid.v4(),
+      conversationId: conversation.id,
+      title: '${deck.title} — deck',
+      kind: ArtifactKind.html,
+      versions: [
+        ArtifactVersion(
+            content: DeckService.buildDeckHtml(deck), createdAt: DateTime.now()),
+      ],
+    )));
+    controller.add(StudioResultReady(deck));
     controller.add(const MessageComplete());
   }
 

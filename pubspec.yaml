@@ -49,6 +49,9 @@ dependencies:
   # Streaming fetch on web — package:http's XHR-based BrowserClient buffers
   # whole responses, which breaks incremental SSE.
   fetch_client: ^1.2.1
+  # ZIP encoder for real deliverables: .pptx decks and .zip brand/reel packs
+  # are OOXML/ZIP containers assembled in-browser.
+  archive: ^3.6.1
 
 dev_dependencies:
   flutter_test:
