@@ -4,6 +4,8 @@ import 'flux_api_config.dart';
 import 'flux_client.dart';
 import 'gemini_api_config.dart';
 import 'gemini_client.dart';
+import 'heygen_api_config.dart';
+import 'heygen_client.dart';
 import 'openai_compatible_client.dart';
 import 'provider_capability.dart';
 import 'provider_descriptor.dart';
@@ -267,6 +269,38 @@ final fluxDescriptor = ProviderDescriptor(
       'fails with a network/CORS error, it likely needs a proxy.',
 );
 
+/// Heygen — talking-avatar video generation. The app has no in-app video
+/// player, so a finished job is shown in the existing video card with an
+/// "Open in Heygen" link. Browser-direct calls are CORS-risky.
+final heygenDescriptor = ProviderDescriptor(
+  id: 'heygen',
+  displayName: 'Heygen (avatars)',
+  persistenceKeyName: 'shift_ai.heygen_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.heygen,
+  baseUrl: HeygenApiConfig.base,
+  // Avatar-from-script only — not generic text-to-video, so it does not
+  // advertise the plain `video` capability (that route stays on the mock).
+  // The talkingAvatar / scriptedVideo composition paths use it directly when a
+  // key is present.
+  capabilities: const {ProviderCapability.avatar},
+  models: const [
+    ProviderModel(
+      id: HeygenApiConfig.model,
+      displayName: 'Heygen Avatar',
+      capabilities: {ProviderCapability.avatar},
+    ),
+  ],
+  preferenceRanks: const {ProviderCapability.avatar: 0},
+  hintPrefix: '',
+  guidanceText: 'Talking-avatar videos from a script. Rendered by Heygen and '
+      'opened in a new tab (no in-app player). Stored only in this browser.',
+  consoleUrl: 'app.heygen.com',
+  browserWarning:
+      'Heygen may block direct browser calls (CORS). If a key test or render '
+      'fails with a network/CORS error, it likely needs a proxy.',
+);
+
 /// The set of providers the app knows about, plus lookups over them. Pure
 /// data — no network, no state — so it is trivially unit-testable and safe to
 /// construct anywhere.
@@ -285,6 +319,7 @@ class ProviderRegistry {
         mistralDescriptor,
         openrouterDescriptor,
         fluxDescriptor,
+        heygenDescriptor,
       ]);
 
   ProviderDescriptor? byId(String id) {
@@ -353,6 +388,7 @@ class ClientRegistry {
           ProviderClientKind.anthropic: () => AnthropicClient(),
           ProviderClientKind.gemini: () => GeminiClient(),
           ProviderClientKind.flux: () => FluxClient(),
+          ProviderClientKind.heygen: () => HeygenClient(),
           ...?factories,
         },
         _openAiFactory = openAiClient ?? (() => OpenAiCompatibleClient());

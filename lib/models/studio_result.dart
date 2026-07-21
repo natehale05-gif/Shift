@@ -59,13 +59,30 @@ class VideoResult extends StudioResult {
   final bool identityLock;
   final int seed;
 
+  /// When this video was rendered by a real provider (Heygen), the URL of the
+  /// finished clip. The app has no in-app player, so the card offers an "Open"
+  /// link rather than embedding it. Null for simulated results.
+  final String? videoUrl;
+
+  /// Optional real thumbnail (provider CDN URL) used as the poster instead of
+  /// the procedural gradient. Null for simulated results.
+  final String? posterUrl;
+
+  /// The provider label shown on the "Open in …" link (e.g. 'Heygen').
+  final String? providerLabel;
+
   const VideoResult({
     required this.prompt,
     required this.durationSec,
     required this.aspectRatio,
     required this.identityLock,
     required this.seed,
+    this.videoUrl,
+    this.posterUrl,
+    this.providerLabel,
   });
+
+  bool get isRealVideo => videoUrl != null;
 
   factory VideoResult.fromJson(Map<String, dynamic> json) => VideoResult(
         prompt: json['prompt'] as String,
@@ -73,6 +90,9 @@ class VideoResult extends StudioResult {
         aspectRatio: json['aspectRatio'] as String,
         identityLock: json['identityLock'] as bool,
         seed: json['seed'] as int,
+        videoUrl: json['videoUrl'] as String?,
+        posterUrl: json['posterUrl'] as String?,
+        providerLabel: json['providerLabel'] as String?,
       );
 
   @override
@@ -83,6 +103,9 @@ class VideoResult extends StudioResult {
         'aspectRatio': aspectRatio,
         'identityLock': identityLock,
         'seed': seed,
+        if (videoUrl != null) 'videoUrl': videoUrl,
+        if (posterUrl != null) 'posterUrl': posterUrl,
+        if (providerLabel != null) 'providerLabel': providerLabel,
       };
 }
 

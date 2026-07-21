@@ -9,6 +9,7 @@ import '../models/attachment.dart';
 import '../models/citation.dart';
 import '../models/conversation.dart';
 import '../models/studio_request.dart';
+import '../models/studio_result.dart';
 import '../models/studio_type.dart';
 import '../state/api_keys_store.dart';
 import 'artifact_composition.dart';
@@ -24,6 +25,7 @@ import 'providers/anthropic_tools.dart';
 import 'providers/flux_client.dart';
 import 'providers/gemini_api_config.dart';
 import 'providers/gemini_client.dart';
+import 'providers/heygen_client.dart';
 import 'providers/openai_compatible_client.dart';
 import 'providers/provider_capability.dart';
 import 'providers/provider_descriptor.dart';
@@ -73,6 +75,7 @@ class RealChatService implements ChatService {
   final GeminiClient _gemini;
   final OpenAiCompatibleClient _openAi;
   final FluxClient _flux;
+  final HeygenClient _heygen;
   final ProviderRegistry _registry;
   final ModelRouter _router;
   final MockChatService _mockFallback;
@@ -83,6 +86,7 @@ class RealChatService implements ChatService {
     GeminiClient? geminiClient,
     OpenAiCompatibleClient? openAiClient,
     FluxClient? fluxClient,
+    HeygenClient? heygenClient,
     ProviderRegistry? registry,
     ModelRouter? router,
     MockChatService? mockFallback,
@@ -90,6 +94,7 @@ class RealChatService implements ChatService {
         _gemini = geminiClient ?? GeminiClient(),
         _openAi = openAiClient ?? OpenAiCompatibleClient(),
         _flux = fluxClient ?? FluxClient(),
+        _heygen = heygenClient ?? HeygenClient(),
         _registry = registry ?? ProviderRegistry.defaults(),
         _router = router ??
             ModelRouter(
@@ -382,10 +387,50 @@ class RealChatService implements ChatService {
     if (script.isEmpty) script = mockScript(kind, userInput);
 
     controller.add(MessageDelta('$script\n\n'));
+
+    // A scripted video with a Heygen key renders a real talking-avatar clip.
+    if (kind == CompositionKind.scriptedVideo) {
+      final heygenVideo = await _tryHeygenVideo(script);
+      if (heygenVideo != null) {
+        controller.add(StudioResultReady(heygenVideo));
+        controller.add(const MessageDelta(
+            '\n\nRendered with Heygen — open it in a new tab from the card '
+            'above.'));
+        controller.add(const MessageComplete());
+        return;
+      }
+    }
+
     controller.add(StudioResultReady(copyFedResult(kind, userInput, script)));
     final followUp = copyFedFollowUp(kind);
     if (followUp.isNotEmpty) controller.add(MessageDelta(followUp));
     controller.add(const MessageComplete());
+  }
+
+  /// Renders a real talking-avatar video with Heygen from [script], returning
+  /// null when there is no Heygen key or the render fails (so callers fall back
+  /// to the simulated card). Represented in the existing [VideoResult] card
+  /// with an "Open in Heygen" link and the real thumbnail as the poster.
+  Future<VideoResult?> _tryHeygenVideo(String script) async {
+    if (!keys.hasKey('heygen')) return null;
+    try {
+      final video = await _heygen.generateAvatarVideo(
+        apiKey: keys.keyFor('heygen'),
+        script: script,
+      );
+      return VideoResult(
+        prompt: script,
+        durationSec: 10,
+        aspectRatio: '16:9',
+        identityLock: true,
+        seed: StudioResponseBank.seedFromString(script),
+        videoUrl: video.videoUrl,
+        posterUrl: video.thumbnailUrl,
+        providerLabel: 'Heygen',
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Media pairs (live): a portrait from Gemini (else procedural) shown with
@@ -399,7 +444,29 @@ class RealChatService implements ChatService {
     controller.add(RoutingDetected(mediaPairHost(kind)));
     controller.add(MessageDelta('${mediaPairIntro(kind)}\n\n'));
 
+    // The voiceover script is written first (real) — both the Heygen render
+    // and the synthesized voiceover need it.
+    var script = '';
+    try {
+      script = (await _writeText(scriptLlmPrompt(kind, userInput))).trim();
+    } catch (_) {
+      // Fall through to the template.
+    }
+    if (script.isEmpty) script = mockScript(kind, userInput);
+
+    // A talking avatar with a Heygen key becomes a real avatar video (Heygen's
+    // core product), shown in the video card instead of the portrait + voice.
     if (kind == CompositionKind.talkingAvatar) {
+      final heygenVideo = await _tryHeygenVideo(script);
+      if (heygenVideo != null) {
+        controller.add(StudioResultReady(heygenVideo));
+        controller.add(const MessageDelta(
+            '\n\nRendered with Heygen — open it in a new tab from the card '
+            'above.'));
+        controller.add(const MessageComplete());
+        return;
+      }
+      // No Heygen key (or the render failed): a portrait + synthesized voice.
       final images = keys.hasGeminiKey
           ? await _generateGeminiPhotos('$userInput, portrait headshot', 1)
           : await _generateProceduralPhotos(userInput, 1);
@@ -408,14 +475,6 @@ class RealChatService implements ChatService {
             .add(ImageGenerated(pngBytes: images.first, alt: 'Avatar portrait'));
       }
     }
-
-    var script = '';
-    try {
-      script = (await _writeText(scriptLlmPrompt(kind, userInput))).trim();
-    } catch (_) {
-      // Fall through to the template.
-    }
-    if (script.isEmpty) script = mockScript(kind, userInput);
 
     controller.add(StudioResultReady(mediaPairAudio(kind, userInput, script)));
     final followUp = mediaPairFollowUp(kind);

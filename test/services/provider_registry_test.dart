@@ -78,9 +78,10 @@ void main() {
           ['anthropic', 'gemini']);
     });
 
-    test('capabilities no built-in provider serves are empty', () {
+    test('avatar resolves to Heygen; video and voice have no provider', () {
+      expect(registry.providersFor(ProviderCapability.avatar).map((d) => d.id),
+          ['heygen']);
       expect(registry.providersFor(ProviderCapability.video), isEmpty);
-      expect(registry.providersFor(ProviderCapability.avatar), isEmpty);
       expect(registry.providersFor(ProviderCapability.voice), isEmpty);
     });
   });
@@ -129,20 +130,19 @@ void main() {
       expect(clients.validatorFor(ProviderClientKind.gemini), isNotNull);
     });
 
-    test('returns a problem string when no client is wired for a kind', () async {
+    test('returns a problem string when an OpenAI-compatible provider is '
+        'misconfigured (no base URL / model)', () async {
       final clients = ClientRegistry();
-      // Heygen has no client wired yet (ships in Phase 6).
-      expect(clients.validatorFor(ProviderClientKind.heygen), isNull);
-      const heygenish = ProviderDescriptor(
-        id: 'heygen',
-        displayName: 'Heygen',
-        persistenceKeyName: 'shift_ai.heygen_key.v1',
+      const broken = ProviderDescriptor(
+        id: 'broken',
+        displayName: 'Broken',
+        persistenceKeyName: 'shift_ai.broken_key.v1',
         authScheme: AuthScheme.header,
-        clientKind: ProviderClientKind.heygen,
-        capabilities: {ProviderCapability.avatar},
-        models: [],
+        clientKind: ProviderClientKind.openAiCompatible,
+        capabilities: {ProviderCapability.chat},
+        models: [], // no default model, no base URL
       );
-      final problem = await clients.validateKey(heygenish, 'x');
+      final problem = await clients.validateKey(broken, 'x');
       expect(problem, isNotNull);
     });
 

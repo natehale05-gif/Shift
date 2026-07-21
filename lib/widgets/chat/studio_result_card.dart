@@ -10,6 +10,7 @@ import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import '../../models/studio_result.dart';
 import '../../services/audio_synth_service.dart';
 import '../../services/download_service.dart';
+import '../../services/open_url.dart';
 import '../../services/procedural_art.dart';
 import '../../services/web_audio_player.dart';
 import '../../theme/app_spacing.dart';
@@ -210,52 +211,82 @@ class _VideoResultViewState extends State<_VideoResultView> {
   @override
   Widget build(BuildContext context) {
     final result = widget.result;
+    final isReal = result.isRealVideo;
     return _ResultShell(
       child: AspectRatio(
         aspectRatio: _aspectRatioValue(result.aspectRatio),
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // Real renders (Heygen) show the provider thumbnail as the poster;
+            // simulated ones paint the procedural gradient.
             RepaintBoundary(
               key: _boundaryKey,
-              child: CustomPaint(
-                painter: GradientArtPainter(
-                  seed: result.seed,
-                  palette: paletteFromSeed(result.seed),
-                ),
-              ),
+              child: result.posterUrl != null
+                  ? Image.network(
+                      result.posterUrl!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => CustomPaint(
+                        painter: GradientArtPainter(
+                          seed: result.seed,
+                          palette: paletteFromSeed(result.seed),
+                        ),
+                      ),
+                    )
+                  : CustomPaint(
+                      painter: GradientArtPainter(
+                        seed: result.seed,
+                        palette: paletteFromSeed(result.seed),
+                      ),
+                    ),
             ),
             Positioned(
               left: AppSpacing.sm,
               top: AppSpacing.sm,
-              child: _Badge(text: '${result.durationSec}s${result.identityLock ? ' · locked' : ''}'),
+              child: _Badge(
+                  text: isReal
+                      ? (result.providerLabel ?? 'Video')
+                      : '${result.durationSec}s${result.identityLock ? ' · locked' : ''}'),
             ),
-            Positioned(
-              right: AppSpacing.sm,
-              top: AppSpacing.sm,
-              child: _RoundIconButton(
-                icon: Icons.download_rounded,
-                tooltip: 'Download thumbnail (PNG)',
-                loading: _downloading,
-                onPressed: _download,
+            if (!isReal)
+              Positioned(
+                right: AppSpacing.sm,
+                top: AppSpacing.sm,
+                child: _RoundIconButton(
+                  icon: Icons.download_rounded,
+                  tooltip: 'Download thumbnail (PNG)',
+                  loading: _downloading,
+                  onPressed: _download,
+                ),
               ),
-            ),
-            Center(
-              child: IconButton.filled(
-                onPressed: _togglePlay,
-                icon: Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+            if (isReal)
+              // No in-app player — link out to the finished clip.
+              Center(
+                child: FilledButton.icon(
+                  onPressed: () => openUrl(result.videoUrl!),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: Text('Open in ${result.providerLabel ?? 'browser'}'),
+                ),
+              )
+            else ...[
+              Center(
+                child: IconButton.filled(
+                  onPressed: _togglePlay,
+                  icon: Icon(
+                      _playing ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                ),
               ),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: LinearProgressIndicator(
-                value: _progress,
-                minHeight: 3,
-                backgroundColor: Colors.white24,
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: LinearProgressIndicator(
+                  value: _progress,
+                  minHeight: 3,
+                  backgroundColor: Colors.white24,
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),
