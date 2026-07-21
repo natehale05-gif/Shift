@@ -7,7 +7,9 @@ import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
 import '../../state/memory_store.dart';
 import '../../state/project_store.dart';
+import '../../state/styles_store.dart';
 import '../../state/user_prefs_store.dart';
+import '../../widgets/common/style_editor.dart';
 import '../../theme/app_spacing.dart';
 import 'api_keys_section.dart';
 import '../../theme/app_theme.dart';
@@ -49,6 +51,8 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           const _PersonalizationCard(),
+          const SizedBox(height: AppSpacing.lg),
+          const _StylesCard(),
           const SizedBox(height: AppSpacing.lg),
           const _MemoryCard(),
           const SizedBox(height: AppSpacing.lg),
@@ -319,6 +323,102 @@ class _PersonalizationCardState extends State<_PersonalizationCard> {
             ),
             onChanged: prefs.setCustomInstructions,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Custom response styles: the built-in set (read-only) plus user-created
+/// styles with create/edit/delete (Claude's custom styles).
+class _StylesCard extends StatelessWidget {
+  const _StylesCard();
+
+  Future<void> _create(BuildContext context) async {
+    final result = await showStyleEditorDialog(context);
+    if (result == null || !context.mounted) return;
+    context.read<StylesStore>().create(result.$1, result.$2);
+  }
+
+  Future<void> _edit(BuildContext context, String id, String name,
+      String instructions) async {
+    final result = await showStyleEditorDialog(
+      context,
+      initialName: name,
+      initialInstructions: instructions,
+    );
+    if (result == null || !context.mounted) return;
+    context
+        .read<StylesStore>()
+        .update(id, name: result.$1, instructions: result.$2);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final styles = context.watch<StylesStore>();
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    return _SectionCard(
+      title: 'Response styles',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Built-in: Normal, Concise, Explanatory, Formal. Create your '
+                  'own and pick it from the composer\'s Style menu.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => _create(context),
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('New style'),
+              ),
+            ],
+          ),
+          if (styles.customStyles.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpacing.xs),
+              child: Text(
+                'No custom styles yet.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: colors.textSecondary),
+              ),
+            ),
+          for (final style in styles.customStyles)
+            ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.brush_outlined, size: 18),
+              title: Text(style.name),
+              subtitle: Text(
+                style.instructions,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall,
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Edit',
+                    iconSize: 16,
+                    icon: const Icon(Icons.edit_outlined),
+                    onPressed: () => _edit(
+                        context, style.id, style.name, style.instructions),
+                  ),
+                  IconButton(
+                    tooltip: 'Delete',
+                    iconSize: 16,
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => context.read<StylesStore>().remove(style.id),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

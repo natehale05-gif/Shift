@@ -7,8 +7,11 @@ import '../../models/attachment.dart';
 import '../../models/chat_message.dart';
 import '../../models/citation.dart';
 import '../../models/message_block.dart';
+import '../../services/chat_service.dart';
 import '../../services/download_service.dart';
+import '../../services/providers/provider_capability.dart';
 import '../../services/speech/speech_service.dart';
+import '../../state/api_keys_store.dart';
 import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
@@ -688,12 +691,7 @@ class _ActionRow extends StatelessWidget {
             onPressed: () =>
                 Clipboard.setData(ClipboardData(text: message.displayText)),
           ),
-          _ActionIcon(
-            tooltip: 'Regenerate',
-            icon: Icons.refresh_rounded,
-            onPressed: () =>
-                context.read<ConversationStore>().regenerate(message.id),
-          ),
+          _RegenerateButton(message: message),
           _ActionIcon(
             tooltip: 'Good response',
             icon: message.feedback == MessageFeedback.up
@@ -763,6 +761,62 @@ class _ContinueButton extends StatelessWidget {
       label: const Text('Continue'),
       style: OutlinedButton.styleFrom(
         visualDensity: VisualDensity.compact,
+      ),
+    );
+  }
+}
+
+/// Regenerate control: a plain tap re-runs with Auto; the menu also offers
+/// "Retry with …" for each chat model the user has a key for.
+class _RegenerateButton extends StatelessWidget {
+  final ChatMessage message;
+
+  const _RegenerateButton({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final keys = context.watch<ApiKeysStore>();
+    final registry = keys.registry;
+    final keyedProviders = [
+      for (final d in registry.all)
+        if (keys.hasKey(d.id) &&
+            d.modelsFor(ProviderCapability.chat).isNotEmpty)
+          d,
+    ];
+
+    void regen(String? pin) => context.read<ConversationStore>().regenerate(
+          message.id,
+          options: pin == null ? ChatOptions.none : ChatOptions(modelPin: pin),
+        );
+
+    return PopupMenuButton<String>(
+      tooltip: 'Regenerate',
+      position: PopupMenuPosition.under,
+      onSelected: (value) => regen(value == 'auto' ? null : value),
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: 'auto', child: Text('Try again')),
+        for (final provider in keyedProviders) ...[
+          PopupMenuItem(
+            enabled: false,
+            height: 32,
+            child: Text(
+              provider.displayName.toUpperCase(),
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: colors.textSecondary, letterSpacing: 0.5),
+            ),
+          ),
+          for (final model in provider.modelsFor(ProviderCapability.chat))
+            PopupMenuItem(
+              value: model.id,
+              child: Text('Retry with ${model.displayName}'),
+            ),
+        ],
+      ],
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Icon(Icons.refresh_rounded, size: 15, color: colors.textSecondary),
       ),
     );
   }

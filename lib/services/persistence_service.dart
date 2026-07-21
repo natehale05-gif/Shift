@@ -23,6 +23,7 @@ class PersistenceService {
   static const _projectsKey = 'shift_ai.projects.v1';
   static const _activeProjectKey = 'shift_ai.active_project.v1';
   static const _memoryKey = 'shift_ai.memory.v1';
+  static const _stylesKey = 'shift_ai.custom_styles.v1';
   static const _userPrefsKey = 'shift_ai.user_prefs.v1';
   static const _migratedFlagKey = 'shift_ai.migrated_to_idb.v1';
   static const maxStoredConversations = 50;
@@ -207,6 +208,19 @@ class PersistenceService {
 
   Future<void> saveMemory(Map<String, dynamic> value) =>
       _putKv(_memoryKey, jsonEncode(value));
+
+  Future<List<dynamic>> loadCustomStyles() async {
+    final raw = await _getKv(_stylesKey);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      return jsonDecode(raw) as List<dynamic>;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> saveCustomStyles(List<Map<String, dynamic>> styles) =>
+      _putKv(_stylesKey, jsonEncode(styles));
 
   Future<String?> loadActiveProject() => _getKv(_activeProjectKey);
 

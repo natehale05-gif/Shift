@@ -18,10 +18,12 @@ import '../../state/api_keys_store.dart';
 import '../../state/conversation_store.dart';
 import '../../state/memory_store.dart';
 import '../../state/project_store.dart';
+import '../../state/styles_store.dart';
 import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../common/liquid_glass.dart';
+import '../common/style_editor.dart';
 
 const _uuid = Uuid();
 
@@ -114,9 +116,13 @@ class _ChatInputBarState extends State<ChatInputBar> {
     final projects = context.read<ProjectStore>();
     final store = context.read<ConversationStore>();
     final memory = context.read<MemoryStore>();
+    final styles = context.read<StylesStore>();
     final project =
         projects.projectById(store.current?.projectId) ??
         projects.activeProject;
+    // Resolve the active style id (built-in or custom) to a prompt directive.
+    final styleId = _styleOverride ?? prefs.responseStyle;
+    final customStyle = styles.styleById(styleId);
     return ChatOptions(
       modelPin: _modelPin,
       webSearch: _webSearch,
@@ -127,7 +133,8 @@ class _ChatInputBarState extends State<ChatInputBar> {
         nickname: prefs.nickname,
         role: prefs.role,
         traits: prefs.traits,
-        responseStyle: _styleOverride ?? prefs.responseStyle,
+        responseStyle: customStyle == null ? styleId : 'normal',
+        styleInstruction: customStyle?.instructions ?? '',
         customInstructions: prefs.customInstructions,
         project: project,
         memories: memory.activeTexts,
@@ -532,49 +539,74 @@ class _ModelChip extends StatelessWidget {
   }
 }
 
-/// The named response styles (Claude's Normal / Concise / Explanatory /
-/// Formal). id → display label.
-const Map<String, String> kResponseStyles = {
-  'normal': 'Normal',
-  'concise': 'Concise',
-  'explanatory': 'Explanatory',
-  'formal': 'Formal',
-};
-
 /// Per-conversation style picker in the composer. "Default" defers to the
-/// global setting; picking a style overrides it for the turns that follow.
+/// global setting; picking a built-in or custom style overrides it for the
+/// turns that follow. "Create style…" adds a new custom style.
 class _StyleChip extends StatelessWidget {
   final String? styleOverride;
   final ValueChanged<String?> onSelected;
 
   const _StyleChip({required this.styleOverride, required this.onSelected});
 
+  Future<void> _createStyle(BuildContext context) async {
+    final result = await showStyleEditorDialog(context);
+    if (result == null || !context.mounted) return;
+    final style = context.read<StylesStore>().create(result.$1, result.$2);
+    onSelected(style.id);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
-    final label =
-        styleOverride == null ? 'Style' : kResponseStyles[styleOverride]!;
+    final styles = context.watch<StylesStore>();
+    final label = styleOverride == null
+        ? 'Style'
+        : styles.labelFor(styleOverride!) ?? 'Style';
     return PopupMenuButton<String>(
       tooltip: 'Response style',
       position: PopupMenuPosition.over,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
       ),
-      onSelected: (value) =>
-          onSelected(value == 'default' ? null : value),
+      onSelected: (value) {
+        if (value == '__create__') {
+          _createStyle(context);
+        } else {
+          onSelected(value == 'default' ? null : value);
+        }
+      },
       itemBuilder: (context) => [
         CheckedPopupMenuItem(
           value: 'default',
           checked: styleOverride == null,
           child: const Text('Default (from Settings)'),
         ),
-        for (final entry in kResponseStyles.entries)
+        for (final entry in builtInStyles.entries)
           CheckedPopupMenuItem(
             value: entry.key,
             checked: styleOverride == entry.key,
             child: Text(entry.value),
           ),
+        if (styles.customStyles.isNotEmpty) const PopupMenuDivider(),
+        for (final style in styles.customStyles)
+          CheckedPopupMenuItem(
+            value: style.id,
+            checked: styleOverride == style.id,
+            child: Text(style.name),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: '__create__',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_rounded, size: 16),
+              SizedBox(width: 8),
+              Text('Create style…'),
+            ],
+          ),
+        ),
       ],
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 5),
