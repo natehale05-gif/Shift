@@ -28,6 +28,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
   late final AppSettingsStore _appSettingsStore;
   late final ProjectStore _projectStore;
   late final UserPrefsStore _userPrefsStore;
+  late final ArtifactPanelStore _artifactPanelStore;
 
   @override
   void initState() {
@@ -42,10 +43,13 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
       real: RealChatService(keys: _apiKeysStore),
       mock: MockChatService(),
     );
+    _artifactPanelStore = ArtifactPanelStore();
     _conversationStore = ConversationStore(
       chatService: chatService,
       persistence: _persistence,
-    )..load();
+    )
+      ..onArtifactCreated = _artifactPanelStore.open
+      ..load();
     _appSettingsStore = AppSettingsStore(persistence: _persistence)..load();
     _projectStore = ProjectStore(persistence: _persistence)..load();
     _userPrefsStore = UserPrefsStore(persistence: _persistence)..load();
@@ -58,7 +62,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
         ChangeNotifierProvider.value(value: _conversationStore),
         ChangeNotifierProvider.value(value: _appSettingsStore),
         ChangeNotifierProvider(create: (_) => EcopayCalculatorStore()),
-        ChangeNotifierProvider(create: (_) => ArtifactPanelStore()),
+        ChangeNotifierProvider.value(value: _artifactPanelStore),
         ChangeNotifierProvider.value(value: _projectStore),
         ChangeNotifierProvider.value(value: _userPrefsStore),
         ChangeNotifierProvider.value(value: _apiKeysStore),

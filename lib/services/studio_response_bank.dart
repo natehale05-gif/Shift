@@ -89,32 +89,40 @@ class StudioResponseBank {
     return StudioType.middleware;
   }
 
+  /// A direct, simulated answer — no "middleware" framing, no talk of routing
+  /// or studios. In demo mode this stands in for whichever model would answer.
   static String middlewareReply(String input) {
     final trimmed = input.trim();
     final templates = [
-      "Here's my take: $trimmed\n\nI didn't spot a clear match for one of the six studios here, so I'm answering this one directly. Tell me if you'd rather I hand it off to Image, Video, Voice & Avatar, Music, Copy & Scripts, or Code.",
-      "Got it — $trimmed\n\nThinking about this as your middleware AI: I can route this to a specialized studio if you want a generated asset, or keep chatting it through with you here. What would help most?",
-      "On it. Taking \"$trimmed\" at face value, here's a quick pass — and if you want visuals, audio, video, or copy out of this, just say the word and I'll dispatch it to the right studio.",
+      "Here's a quick take on that: $trimmed. In demo mode this is a "
+          "simulated reply — add an API key in Settings and a real model "
+          "answers this directly.",
+      "Good question — $trimmed. This is a simulated answer for now; with an "
+          "API key added, you'll get a real response here.",
+      "On it. Here's a short pass at \"$trimmed\" — simulated in demo mode, and "
+          "real once you add a key in Settings.",
     ];
     return templates[trimmed.length % templates.length];
   }
 
+  /// A brief, natural lead-in for a generated result — never names a studio or
+  /// mentions routing (the routing is invisible, like Claude).
   static String routingIntro(StudioType studio, String input) {
     return switch (studio) {
-      StudioType.imageStudio =>
-        "Routing this to Image Studio — \"$input\" reads like a visual request.",
-      StudioType.videoStudio =>
-        "Routing this to Video Studio — sounds like you want a moving asset out of \"$input\".",
+      StudioType.imageStudio => "Here's the image you asked for:",
+      StudioType.videoStudio => "Here's your video:",
+      StudioType.voiceStudio ||
       StudioType.voiceAvatarStudio =>
-        "Routing this to Voice & Avatar Studio for \"$input\".",
-      StudioType.musicStudio =>
-        "Routing this to Music Studio — let's score \"$input\".",
-      StudioType.copyScriptsStudio =>
-        "Routing this to Copy & Scripts Studio to write \"$input\".",
-      StudioType.codeStudio =>
-        "Routing this to Code Studio to build \"$input\".",
+        "Here's the voiceover:",
+      StudioType.avatarStudio => "Here's your talking-head video:",
+      StudioType.musicStudio => "Here's the track:",
+      StudioType.copyScriptsStudio => "Here's a draft:",
+      StudioType.codeStudio => "Here you go:",
+      StudioType.translateStudio => "Here's the translation:",
+      StudioType.deckStudio => "Here's your deck:",
+      StudioType.shortReelsStudio => "Here's your short-form pack:",
+      StudioType.brandPackStudio => "Here's your brand pack:",
       StudioType.middleware => middlewareReply(input),
-      _ => 'Routing this to ${studio.displayName} for "$input".',
     };
   }
 
@@ -224,9 +232,8 @@ class StudioResponseBank {
   /// studio's output gets woven into an artifact another studio already built.
   static String compositionIntro(String artifactTitle,
       [ArtifactMediaKind kind = ArtifactMediaKind.image]) {
-    final (studio, noun) = _composeWords(kind);
-    return 'Routing this to $studio to generate the $noun, then adding it '
-        'into your "$artifactTitle" artifact.';
+    final (_, noun) = _composeWords(kind);
+    return 'Adding a $noun to "$artifactTitle"…';
   }
 
   static String compositionFollowUp(String artifactTitle,
@@ -247,25 +254,14 @@ class StudioResponseBank {
   /// turn — e.g. "build me a dog treat website with several photos and a
   /// soundtrack" — naming the contributor studios pulled in.
   static String pageAssemblyIntro(String input, List<String> contributors) {
-    final names = _joinNames(contributors);
-    return 'Routing this to Code Studio to build "$input" — and pulling in '
-        '$names to fill it in.';
+    return 'Building "$input" for you…';
   }
 
   static String pageAssemblyFollowUp(List<String> contributors) {
-    final n = contributors.length;
-    return 'Here\'s a first pass below, assembled with Code Studio and '
-        '$n other ${n == 1 ? 'studio' : 'studios'} '
-        '(${_joinNames(contributors)}) already in place. Ask for different '
-        'visuals, copy, or audio anytime.';
+    return 'Here\'s a first pass — with the photos, copy and media woven in. '
+        'Ask for different visuals, copy, or audio anytime.';
   }
 
-  static String _joinNames(List<String> names) {
-    if (names.isEmpty) return 'the right studios';
-    if (names.length == 1) return names.single;
-    if (names.length == 2) return '${names[0]} and ${names[1]}';
-    return '${names.sublist(0, names.length - 1).join(', ')}, and ${names.last}';
-  }
 
   /// Deterministic landing-page copy (headline / body / CTA) for the mock's
   /// Copy & Scripts contributor. Structural record type so it's assignable to
@@ -419,7 +415,7 @@ class StudioResponseBank {
 <body>
   <main class="hero">
     <h1>$title</h1>
-    <p>Generated by SHIFT AI's Code Studio. Edit this page by asking for changes in chat — each revision becomes a new version of this artifact.</p>
+    <p>Generated by SHIFT AI. Edit this page by asking for changes in chat — each revision becomes a new version of this artifact.</p>
     <a class="cta" href="#">Get started</a>
   </main>
 </body>

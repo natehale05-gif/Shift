@@ -247,15 +247,9 @@ StudioType copyFedHost(CompositionKind kind) => switch (kind) {
     };
 
 String copyFedIntro(CompositionKind kind) => switch (kind) {
-      CompositionKind.narratedScript =>
-        'Routing this to Copy & Scripts to write the script, then Voice & '
-            'Avatar Studio to narrate it.',
-      CompositionKind.scriptedVideo =>
-        'Routing this to Copy & Scripts to write the script, then Video '
-            'Studio to shoot it.',
-      CompositionKind.jingle =>
-        'Routing this to Copy & Scripts to write the hook, then Music Studio '
-            'to score it.',
+      CompositionKind.narratedScript => 'Writing the script and voicing it…',
+      CompositionKind.scriptedVideo => 'Writing the script and filming it…',
+      CompositionKind.jingle => 'Writing the hook and scoring it…',
       _ => '',
     };
 
@@ -314,11 +308,9 @@ StudioType mediaPairHost(CompositionKind kind) => switch (kind) {
 
 String mediaPairIntro(CompositionKind kind) => switch (kind) {
       CompositionKind.talkingAvatar =>
-        'Routing this to Image Studio for the avatar portrait, then Voice & '
-            'Avatar Studio to give it a voice.',
+        'Making the portrait and giving it a voice…',
       CompositionKind.scoredNarration =>
-        'Routing this to Voice & Avatar to narrate, then Music Studio to lay '
-            'a bed underneath.',
+        'Recording the narration over a music bed…',
       _ => '',
     };
 

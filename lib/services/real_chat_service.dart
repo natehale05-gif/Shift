@@ -467,7 +467,7 @@ class RealChatService implements ChatService {
       if (heygenVideo != null) {
         controller.add(StudioResultReady(heygenVideo));
         controller.add(const MessageDelta(
-            '\n\nRendered with Heygen — open it in a new tab from the card '
+            '\n\nRendered — open it in a new tab from the card '
             'above.'));
         controller.add(const MessageComplete());
         return;
@@ -535,7 +535,7 @@ class RealChatService implements ChatService {
       if (heygenVideo != null) {
         controller.add(StudioResultReady(heygenVideo));
         controller.add(const MessageDelta(
-            '\n\nRendered with Heygen — open it in a new tab from the card '
+            '\n\nRendered — open it in a new tab from the card '
             'above.'));
         controller.add(const MessageComplete());
         return;
@@ -928,9 +928,6 @@ class RealChatService implements ChatService {
     return _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt);
   }
 
-  String _imageProviderName(String providerId) =>
-      providerId == 'flux' ? 'Flux' : 'Gemini';
-
   /// Freeform image prompts get the same "ask before guessing" gate as the
   /// mock — the image endpoints are one-shot (no conversation), so this is the
   /// only chance to ask before spending a real generation call. Works for any
@@ -979,8 +976,7 @@ class RealChatService implements ChatService {
     String prompt,
   ) async {
     controller.add(MessageDelta(
-        'Generating the image with ${_imageProviderName(providerId)}, then '
-        'adding it into "${target.title}"…\n\n'));
+        'Adding an image to "${target.title}"…\n\n'));
     Uint8List? bytes;
     await for (final event in _imageStream(providerId, prompt)) {
       switch (event) {
@@ -1011,9 +1007,7 @@ class RealChatService implements ChatService {
     if (close) {
       controller.add(RoutingDetected(ChatRoute.imageGen.studioType));
     }
-    controller.add(MessageDelta(
-        'Routing this to Image Studio — generating with '
-        '${_imageProviderName(providerId)}…\n\n'));
+    controller.add(const MessageDelta('Creating that image…\n\n'));
     await controller.addStream(_imageStream(providerId, prompt));
     if (close) await controller.close();
   }

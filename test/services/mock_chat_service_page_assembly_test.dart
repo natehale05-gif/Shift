@@ -69,12 +69,9 @@ void main() {
       isFalse,
     );
 
-    // The intro names all the collaborating studios.
+    // Routing is invisible (like Claude): the visible text names no studios.
     final text = events.whereType<MessageDelta>().map((e) => e.chunk).join();
-    expect(text, contains('Code Studio'));
-    expect(text, contains('Image Studio'));
-    expect(text, contains('Music Studio'));
-    expect(text, contains('Copy & Scripts Studio'));
+    expect(text, isNot(contains('Studio')));
 
     // Woven into the page, not shown as separate cards.
     expect(events.whereType<StudioResultReady>(), isEmpty);

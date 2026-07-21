@@ -19,6 +19,11 @@ class ConversationStore extends ChangeNotifier {
   final ChatService chatService;
   final PersistenceService persistence;
 
+  /// Called when a new artifact is created, so the UI can open the artifacts
+  /// panel automatically — like Claude, the result just appears; you don't
+  /// click anything.
+  void Function(String artifactId)? onArtifactCreated;
+
   List<Conversation> _conversations = [];
   String? _currentId;
   bool _isLoaded = false;
@@ -213,8 +218,11 @@ class ConversationStore extends ChangeNotifier {
       switch (event) {
         case ArtifactCreated(:final artifact):
           _upsertArtifact(conversationId, assistantMessage.id, artifact);
+          // Auto-open the panel on the freshly created artifact.
+          onArtifactCreated?.call(artifact.id);
         case ArtifactUpdated(:final artifact):
           _upsertArtifact(conversationId, assistantMessage.id, artifact);
+          onArtifactCreated?.call(artifact.id);
         case ImageGenerated(:final pngBytes, :final alt):
           // Bytes go to the asset store (IndexedDB) so the image survives
           // reload; the block keeps them in memory for immediate display.

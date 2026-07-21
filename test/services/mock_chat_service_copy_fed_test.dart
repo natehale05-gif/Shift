@@ -31,9 +31,9 @@ void main() {
     expect(audio.transcript, isNotNull);
     expect(audio.transcript!.trim(), isNotEmpty);
 
-    // The written script is also shown as chat text.
+    // The written script is shown as chat text; routing stays invisible.
     final text = events.whereType<MessageDelta>().map((e) => e.chunk).join();
-    expect(text, contains('Copy & Scripts'));
+    expect(text, isNot(contains('Studio')));
     expect(text, contains(audio.transcript!.split(' ').first));
   }, timeout: const Timeout(Duration(minutes: 2)));
 

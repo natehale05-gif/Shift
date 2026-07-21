@@ -7,7 +7,6 @@ import '../../models/attachment.dart';
 import '../../models/chat_message.dart';
 import '../../models/citation.dart';
 import '../../models/message_block.dart';
-import '../../models/studio_type.dart';
 import '../../services/download_service.dart';
 import '../../services/speech/speech_service.dart';
 import '../../state/conversation_store.dart';
@@ -201,12 +200,8 @@ class _AssistantProse extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (message.studioType != null &&
-            message.studioType != StudioType.middleware)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-            child: _RoutingChip(studioType: message.studioType!),
-          ),
+        // The routing is invisible on purpose — like Claude, you just get the
+        // answer, not a "routed to X studio" chip.
         if (showTyping)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
@@ -589,42 +584,6 @@ class _CitationChips extends StatelessWidget {
             ),
           ),
       ],
-    );
-  }
-}
-
-/// "Routed -> Image Studio" chip above an assistant turn — the visible trace
-/// of the middleware AI's routing decision.
-class _RoutingChip extends StatelessWidget {
-  final StudioType studioType;
-
-  const _RoutingChip({required this.studioType});
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = studioType.accent;
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 3),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(studioType.icon, size: 12, color: accent),
-          const SizedBox(width: 4),
-          Text(
-            'Routed to ${studioType.shortName}',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: accent,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -35,9 +35,9 @@ void main() {
     // inline image cards.
     expect(events.whereType<StudioResultReady>(), isEmpty);
 
+    // Routing is invisible (like Claude): the visible text never names a studio.
     final text = events.whereType<MessageDelta>().map((e) => e.chunk).join();
-    expect(text, contains('Code Studio'));
-    expect(text, contains('Image Studio'));
+    expect(text, isNot(contains('Studio')));
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('an explicit photo count is honored', () async {

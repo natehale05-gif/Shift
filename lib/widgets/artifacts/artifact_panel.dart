@@ -10,7 +10,6 @@ import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_typography.dart';
-import 'artifact_code_view.dart';
 import 'artifact_preview.dart';
 import 'console_output_view.dart';
 
@@ -136,73 +135,47 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-            child: Row(
-              children: [
-                SegmentedButton<ArtifactTab>(
-                  segments: const [
-                    ButtonSegment(
-                      value: ArtifactTab.preview,
-                      label: Text('Preview'),
+          // No Preview/Code toggle — like Claude, you see the rendered result,
+          // not the code. (The code is still downloadable from the header.)
+          // Only show a toolbar row when there's a Run action or versions.
+          if (_isRunnable(artifact) || artifact.versions.length > 1) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              child: Row(
+                children: [
+                  const Spacer(),
+                  if (_isRunnable(artifact))
+                    TextButton.icon(
+                      onPressed: _running ? null : () => _run(content),
+                      icon: _running
+                          ? const SizedBox(
+                              width: 12,
+                              height: 12,
+                              child:
+                                  CircularProgressIndicator(strokeWidth: 1.6),
+                            )
+                          : const Icon(Icons.play_arrow_rounded, size: 18),
+                      label: const Text('Run'),
                     ),
-                    ButtonSegment(
-                      value: ArtifactTab.code,
-                      label: Text('Code'),
+                  if (artifact.versions.length > 1)
+                    _VersionStepper(
+                      versionIndex: versionIndex,
+                      versionCount: artifact.versions.length,
+                      onSelect: (index) => context
+                          .read<ArtifactPanelStore>()
+                          .selectVersion(index),
                     ),
-                  ],
-                  selected: {panel.tab},
-                  onSelectionChanged: (selection) => context
-                      .read<ArtifactPanelStore>()
-                      .selectTab(selection.first),
-                  showSelectedIcon: false,
-                  style: ButtonStyle(
-                    visualDensity: VisualDensity.compact,
-                    textStyle: WidgetStatePropertyAll(
-                      theme.textTheme.labelMedium,
-                    ),
-                  ),
-                ),
-                const Spacer(),
-                if (_isRunnable(artifact))
-                  TextButton.icon(
-                    onPressed: _running ? null : () => _run(content),
-                    icon: _running
-                        ? const SizedBox(
-                            width: 12,
-                            height: 12,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 1.6),
-                          )
-                        : const Icon(Icons.play_arrow_rounded, size: 18),
-                    label: const Text('Run'),
-                  ),
-                if (artifact.versions.length > 1)
-                  _VersionStepper(
-                    versionIndex: versionIndex,
-                    versionCount: artifact.versions.length,
-                    onSelect: (index) => context
-                        .read<ArtifactPanelStore>()
-                        .selectVersion(index),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: AppSpacing.sm),
+            const SizedBox(height: AppSpacing.sm),
+          ],
           Divider(height: 1, color: colors.border),
           Expanded(
-            child: panel.tab == ArtifactTab.preview
-                ? ArtifactPreview(
-                    artifact: artifact,
-                    versionIndex: versionIndex,
-                  )
-                : ArtifactCodeView(
-                    code: content,
-                    language: artifact.language ??
-                        (artifact.kind == ArtifactKind.html
-                            ? 'xml'
-                            : 'plaintext'),
-                  ),
+            child: ArtifactPreview(
+              artifact: artifact,
+              versionIndex: versionIndex,
+            ),
           ),
           if (_consoleLines != null) ...[
             Divider(height: 1, color: colors.border),
