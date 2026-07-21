@@ -10,11 +10,12 @@ import '../streaming/sse_client.dart';
 import 'anthropic_api_config.dart';
 import 'anthropic_stream_accumulator.dart';
 import 'anthropic_tools.dart';
+import 'provider_registry.dart';
 
 /// Raw-HTTP Anthropic Messages API client (no official Dart SDK exists).
 /// The request builder and SSE→ChatEvent mapper are pure and unit-tested;
 /// only [streamChat]/[validateKey] touch the network.
-class AnthropicClient {
+class AnthropicClient implements KeyValidatable {
   final SseClient _sse;
 
   AnthropicClient({SseClient? sseClient}) : _sse = sseClient ?? SseClient();
@@ -303,6 +304,7 @@ class AnthropicClient {
   }
 
   /// Cheap key check. Returns null on success or a human-readable problem.
+  @override
   Future<String?> validateKey(String apiKey) async {
     try {
       await complete(

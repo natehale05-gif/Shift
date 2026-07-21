@@ -13,11 +13,12 @@ import '../streaming/http_client_stub.dart'
     if (dart.library.html) '../streaming/http_client_web.dart';
 import '../streaming/sse_client.dart';
 import 'gemini_api_config.dart';
+import 'provider_registry.dart';
 
 /// Raw-HTTP Gemini client: streaming chat (optionally grounded with Google
 /// Search) and image generation. Pure request builder and chunk mapper are
 /// unit-tested; only the send methods touch the network.
-class GeminiClient {
+class GeminiClient implements KeyValidatable {
   final SseClient _sse;
   final http.Client Function() _clientFactory;
 
@@ -301,6 +302,7 @@ class GeminiClient {
   /// Cheap key check. Returns null on success or a human-readable problem
   /// (raw error bodies included on purpose — they make endpoint drift
   /// diagnosable).
+  @override
   Future<String?> validateKey(String apiKey) async {
     try {
       await complete(apiKey: apiKey, prompt: 'Reply with OK.');
