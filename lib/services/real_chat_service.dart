@@ -20,6 +20,7 @@ import 'mock_chat_service.dart';
 import 'procedural_art.dart';
 import 'brand_pack_service.dart';
 import 'deck_service.dart';
+import 'short_reels_service.dart';
 import 'studio_composition.dart';
 import 'translate_service.dart';
 import 'providers/anthropic_api_config.dart';
@@ -261,6 +262,15 @@ class RealChatService implements ChatService {
       // a .zip kit.
       if (route == ChatRoute.brandPack) {
         await _runBrandPack(controller, userInput);
+        await controller.close();
+        return;
+      }
+
+      // ShortReels is a real deliverable: a pack of short-form reels (hooks +
+      // scripts written by the best text provider, procedural posters),
+      // downloadable as a .zip.
+      if (route == ChatRoute.shortReels) {
+        await _runShortReels(controller, userInput);
         await controller.close();
         return;
       }
@@ -682,6 +692,31 @@ class RealChatService implements ChatService {
       live: providerLogo,
       logoPng: logo,
     )));
+    controller.add(const MessageComplete());
+  }
+
+  /// Real short-form pack: the best text provider writes the hooks + scripts;
+  /// posters are procedural (regenerated from each reel's seed). Downloadable
+  /// as a .zip. Falls back to a templated pack when no provider is available.
+  Future<void> _runShortReels(
+      StreamController<ChatEvent> controller, String userInput) async {
+    controller.add(const RoutingDetected(StudioType.shortReelsStudio));
+    final req = ShortReelsService.parseReelsRequest(userInput);
+    controller.add(MessageDelta(
+        'Cutting a ${req.count}-reel pack on "${req.topic}"…\n\n'));
+
+    ShortReelsPackResult? pack;
+    try {
+      final reply = await _completeText(
+          ShortReelsService.scriptsPrompt(req.topic, req.count),
+          maxTokens: 2000);
+      pack = ShortReelsService.parsePackJson(reply, req.topic);
+    } catch (_) {
+      // fall through to the template
+    }
+    pack ??= ShortReelsService.templatedPack(req.topic, req.count);
+
+    controller.add(StudioResultReady(pack));
     controller.add(const MessageComplete());
   }
 

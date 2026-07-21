@@ -8,6 +8,7 @@ import 'artifact_composition.dart';
 import 'brand_pack_service.dart';
 import 'deck_service.dart';
 import 'download_service.dart';
+import 'short_reels_service.dart';
 import 'translate_service.dart';
 
 /// Canned templates and keyword tables backing [MockChatService]. Every
@@ -547,13 +548,10 @@ class StudioResponseBank {
           seed: seed,
           transcript: input.trim().isEmpty ? narrationScript(input) : input,
         ),
-      StudioType.shortReelsStudio => VideoResult(
-          prompt: input,
-          durationSec: 15,
-          aspectRatio: '9:16',
-          identityLock: false,
-          seed: seed,
-        ),
+      StudioType.shortReelsStudio => () {
+          final req = ShortReelsService.parseReelsRequest(input);
+          return ShortReelsService.templatedPack(req.topic, req.count);
+        }(),
       StudioType.brandPackStudio => () {
           final name = BrandPackService.parseBrandName(input);
           final brandSeed = BrandPackService.seedFor(name);

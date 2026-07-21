@@ -18,6 +18,7 @@ sealed class StudioResult {
       'translate' => TranslateResult.fromJson(json),
       'deck' => DeckResult.fromJson(json),
       'brandPack' => BrandPackResult.fromJson(json),
+      'shortReels' => ShortReelsPackResult.fromJson(json),
       _ => throw ArgumentError('Unknown StudioResult type: ${json['type']}'),
     };
   }
@@ -276,6 +277,56 @@ class BrandPackResult extends StudioResult {
         'seed': seed,
         'live': live,
         // logoPng intentionally omitted — regenerated from seed on reload.
+      };
+}
+
+/// One short-form reel: a hook line, a shot-by-shot script, and a poster seed
+/// (the poster is regenerated procedurally from the seed).
+class ShortReel {
+  final String hook;
+  final String script;
+  final int seed;
+  const ShortReel({required this.hook, required this.script, required this.seed});
+
+  factory ShortReel.fromJson(Map<String, dynamic> json) => ShortReel(
+        hook: json['hook'] as String? ?? '',
+        script: json['script'] as String? ?? '',
+        seed: json['seed'] as int? ?? 0,
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'hook': hook, 'script': script, 'seed': seed};
+}
+
+/// A short-form video pack: several reels, downloadable as a .zip (posters +
+/// scripts + an HTML storyboard). [live] is true when a provider wrote the
+/// scripts.
+class ShortReelsPackResult extends StudioResult {
+  final String topic;
+  final List<ShortReel> reels;
+  final bool live;
+
+  const ShortReelsPackResult({
+    required this.topic,
+    required this.reels,
+    this.live = false,
+  });
+
+  factory ShortReelsPackResult.fromJson(Map<String, dynamic> json) =>
+      ShortReelsPackResult(
+        topic: json['topic'] as String,
+        reels: (json['reels'] as List<dynamic>)
+            .map((r) => ShortReel.fromJson(r as Map<String, dynamic>))
+            .toList(),
+        live: json['live'] as bool? ?? false,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'shortReels',
+        'topic': topic,
+        'reels': reels.map((r) => r.toJson()).toList(),
+        'live': live,
       };
 }
 
