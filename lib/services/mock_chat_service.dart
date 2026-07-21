@@ -115,6 +115,8 @@ class MockChatService implements ChatService {
           userInput.toLowerCase().contains('deep research');
       if (interactive != null) {
         await _runInteractive(controller, conversation, interactive, userInput);
+      } else if (_wantsDiagram(userInput)) {
+        await _runDiagram(controller, userInput);
       } else if (wantsResearch) {
         await _runDeepResearch(controller, conversation, userInput);
       } else if (studio == StudioType.middleware &&
@@ -293,6 +295,70 @@ class MockChatService implements ChatService {
   /// Builds an interactive artifact (recipe card / quiz / flashcards /
   /// checklist) with templated content — a self-contained interactive widget
   /// that runs live in the artifact panel, no API key required.
+  static final RegExp _diagramRe = RegExp(
+    r'\b(diagram|flow ?chart|flow ?diagram|sequence diagram|mind ?map|'
+    r'gantt|org ?chart|class diagram|state diagram|er diagram)\b',
+    caseSensitive: false,
+  );
+
+  bool _wantsDiagram(String input) => _diagramRe.hasMatch(input);
+
+  /// Demo diagrams: streams a templated ```mermaid fence (rendered live by the
+  /// markdown view). A real model writes its own mermaid in live mode.
+  Future<void> _runDiagram(
+    StreamController<ChatEvent> controller,
+    String userInput,
+  ) async {
+    await _streamText(
+        controller, 'Here\'s a diagram — it renders live right below.\n\n');
+    await _delay(300, 700);
+    await _streamText(controller, '```mermaid\n${_diagramFor(userInput)}\n```\n');
+    await _streamText(controller,
+        '\nAdd an API key in Settings and I\'ll draw a diagram tailored to '
+        'your exact topic.');
+  }
+
+  static String _diagramFor(String input) {
+    final s = input.toLowerCase();
+    if (s.contains('sequence')) {
+      return 'sequenceDiagram\n'
+          '  participant U as User\n'
+          '  participant A as SHIFT AI\n'
+          '  participant S as Studio\n'
+          '  U->>A: Send a request\n'
+          '  A->>S: Route to the right studio\n'
+          '  S-->>A: Return the result\n'
+          '  A-->>U: Reply with the answer';
+    }
+    if (s.contains('mind')) {
+      return 'mindmap\n'
+          '  root((SHIFT AI))\n'
+          '    Chat\n'
+          '    Studios\n'
+          '      Image\n'
+          '      Video\n'
+          '      Code\n'
+          '    Memory';
+    }
+    if (s.contains('gantt')) {
+      return 'gantt\n'
+          '  title Project plan\n'
+          '  dateFormat  YYYY-MM-DD\n'
+          '  section Build\n'
+          '  Design      :a1, 2026-01-01, 7d\n'
+          '  Develop     :after a1, 14d\n'
+          '  section Launch\n'
+          '  Test        :2026-01-22, 5d\n'
+          '  Ship        :2026-01-27, 2d';
+    }
+    return 'flowchart TD\n'
+        '  A[Your request] --> B{Middleware AI}\n'
+        '  B -->|creative| C[Studio]\n'
+        '  B -->|question| D[Direct answer]\n'
+        '  C --> E[Result]\n'
+        '  D --> E';
+  }
+
   Future<void> _runInteractive(
     StreamController<ChatEvent> controller,
     Conversation conversation,

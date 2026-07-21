@@ -75,6 +75,12 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  # Bundled JS libraries inlined into sandboxed iframes at runtime (CDN-free,
+  # offline-capable — same rationale as the bundled fonts). mermaid renders
+  # ```mermaid diagrams inline in chat.
+  assets:
+    - assets/js/mermaid.min.js
+
   # Bundled locally (not fetched from a font CDN at runtime) so text renders
   # reliably on static GitHub Pages hosting with no backend and no guaranteed
   # network access to third-party font services. Inter (SIL Open Font

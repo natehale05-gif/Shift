@@ -4,8 +4,11 @@ import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
+import '../../services/mermaid_service.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
+import '../artifacts/iframe_view_stub.dart'
+    if (dart.library.html) '../artifacts/iframe_view_web.dart';
 
 /// Renders assistant markdown. This is the only file that touches the
 /// markdown package directly — if gpt_markdown ever needs replacing, the
@@ -23,7 +26,9 @@ class MarkdownMessage extends StatelessWidget {
       style: theme.textTheme.bodyLarge?.copyWith(height: 1.6),
       onLinkTap: (url, title) {},
       codeBuilder: (context, language, code, closed) =>
-          _CodeBlock(language: language, code: code),
+          language.toLowerCase() == 'mermaid'
+              ? _MermaidBlock(code: code, closed: closed)
+              : _CodeBlock(language: language, code: code),
       highlightBuilder: (context, inlineCode, style) =>
           _InlineCode(code: inlineCode),
     );
@@ -95,6 +100,77 @@ class _CodeBlock extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Renders a ```mermaid fence as a live diagram in a sandboxed iframe, using
+/// the bundled mermaid runtime.
+class _MermaidBlock extends StatelessWidget {
+  final String code;
+
+  /// Whether the ```mermaid fence has finished streaming. We only render once
+  /// closed, so mermaid never parses a half-written diagram.
+  final bool closed;
+
+  const _MermaidBlock({required this.code, required this.closed});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final dark = theme.brightness == Brightness.dark;
+    if (!closed) {
+      return Container(
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        padding: const EdgeInsets.all(AppSpacing.md),
+        decoration: BoxDecoration(
+          color: colors.surfaceAlt,
+          borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 1.6),
+            ),
+            const SizedBox(width: 10),
+            Text('Drawing diagram…', style: theme.textTheme.labelMedium),
+          ],
+        ),
+      );
+    }
+    return FutureBuilder<String>(
+      future: MermaidService.buildHtml(code, dark: dark),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const SizedBox(
+            height: 80,
+            child: Center(
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 1.6),
+              ),
+            ),
+          );
+        }
+        return Container(
+          margin: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          height: 320,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            border: Border.all(color: colors.border),
+            borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+          ),
+          child: buildSandboxedIframe(
+            viewKey: 'mermaid-${code.hashCode}-${dark ? 'd' : 'l'}',
+            htmlContent: snapshot.data!,
+          ),
+        );
+      },
     );
   }
 }
