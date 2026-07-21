@@ -13,6 +13,7 @@ import '../../state/app_settings_store.dart';
 import '../../state/conversation_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
+import '../artifacts/artifact_preview.dart';
 import 'markdown_message.dart';
 import 'studio_result_card.dart';
 import 'typing_indicator.dart';
@@ -259,7 +260,11 @@ class _AssistantProse extends StatelessWidget {
         ),
       ArtifactRefBlock() => Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-          child: _ArtifactCard(block: block, onOpen: onOpenArtifact),
+          // Interactive results render live inline (recipe/quiz/flashcards/
+          // checklist); website/app builds stay a card that opens the panel.
+          child: block.interactive
+              ? _InlineArtifact(block: block)
+              : _ArtifactCard(block: block, onOpen: onOpenArtifact),
         ),
     };
   }
@@ -477,6 +482,63 @@ class _ImageBlockView extends StatelessWidget {
     }
 
     return _placeholder(context, 'Image not saved — ${block.alt}');
+  }
+}
+
+/// Renders an interactive artifact (recipe/quiz/flashcards/checklist) live
+/// inline in the conversation — a real widget in the chat, not a link to
+/// another page.
+class _InlineArtifact extends StatelessWidget {
+  final ArtifactRefBlock block;
+
+  const _InlineArtifact({required this.block});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final artifact =
+        context.watch<ConversationStore>().current?.artifactById(block.artifactId);
+    if (artifact == null) {
+      // Artifact pruned or from another conversation — degrade to a card.
+      return _ArtifactCard(block: block, onOpen: null);
+    }
+    final versionIndex =
+        block.versionIndex.clamp(0, artifact.versions.length - 1);
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 680),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 540,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              border: Border.all(color: colors.border),
+              borderRadius: BorderRadius.circular(AppSpacing.radiusMd),
+            ),
+            child: ArtifactPreview(
+              artifact: artifact,
+              versionIndex: versionIndex,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: TextButton.icon(
+              onPressed: () => DownloadService.downloadText(
+                artifact.versions[versionIndex].content,
+                '${DownloadService.slugify(artifact.title)}.html',
+              ),
+              icon: const Icon(Icons.download_rounded, size: 16),
+              label: const Text('Download'),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

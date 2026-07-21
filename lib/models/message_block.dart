@@ -37,6 +37,7 @@ sealed class MessageBlock {
           title: json['title'] as String,
           kind: ArtifactKind.fromName(json['kind'] as String),
           versionIndex: json['versionIndex'] as int,
+          interactive: json['interactive'] as bool? ?? false,
         ),
       _ => TextBlock(json['text'] as String? ?? ''),
     };
@@ -128,18 +129,22 @@ class ImageBlock extends MessageBlock {
 }
 
 /// Pointer from a message to an artifact version created/updated by that
-/// turn. Rendered as a tappable card that opens the artifact.
+/// turn. Non-interactive artifacts (websites/apps) render as a tappable card
+/// that opens the side panel; [interactive] ones (recipe/quiz/flashcards/
+/// checklist) render as a live widget inline in the conversation, like Claude.
 class ArtifactRefBlock extends MessageBlock {
   final String artifactId;
   final String title;
   final ArtifactKind kind;
   final int versionIndex;
+  final bool interactive;
 
   const ArtifactRefBlock({
     required this.artifactId,
     required this.title,
     required this.kind,
     required this.versionIndex,
+    this.interactive = false,
   });
 
   @override
@@ -149,5 +154,6 @@ class ArtifactRefBlock extends MessageBlock {
         'title': title,
         'kind': kind.name,
         'versionIndex': versionIndex,
+        if (interactive) 'interactive': true,
       };
 }

@@ -413,11 +413,12 @@ class ConversationStore extends ChangeNotifier {
     switch (event) {
       case ArtifactCreated(:final artifact):
         _upsertArtifact(conversationId, messageId, artifact);
-        // Auto-open the panel on the freshly created artifact.
-        onArtifactCreated?.call(artifact.id);
+        // Interactive results (recipe/quiz/…) render inline in the chat, so
+        // they don't take over the side panel; only website/app builds do.
+        if (!artifact.interactive) onArtifactCreated?.call(artifact.id);
       case ArtifactUpdated(:final artifact):
         _upsertArtifact(conversationId, messageId, artifact);
-        onArtifactCreated?.call(artifact.id);
+        if (!artifact.interactive) onArtifactCreated?.call(artifact.id);
       case ImageGenerated(:final pngBytes, :final alt):
         // Bytes go to the asset store (IndexedDB) so the image survives
         // reload; the block keeps them in memory for immediate display.
@@ -464,15 +465,24 @@ class ConversationStore extends ChangeNotifier {
       return convo.copyWith(artifacts: artifacts);
     });
     _updateMessage(conversationId, messageId, (m) {
-      return m.copyWith(blocks: [
-        ...m.blocks,
-        ArtifactRefBlock(
-          artifactId: artifact.id,
-          title: artifact.title,
-          kind: artifact.kind,
-          versionIndex: artifact.versions.length - 1,
-        ),
-      ]);
+      final ref = ArtifactRefBlock(
+        artifactId: artifact.id,
+        title: artifact.title,
+        kind: artifact.kind,
+        versionIndex: artifact.versions.length - 1,
+        interactive: artifact.interactive,
+      );
+      // If this message already points at the artifact (a new version arrived),
+      // update that block in place rather than stacking a duplicate.
+      final existing = m.blocks.indexWhere(
+        (b) => b is ArtifactRefBlock && b.artifactId == artifact.id,
+      );
+      if (existing != -1) {
+        final blocks = [...m.blocks];
+        blocks[existing] = ref;
+        return m.copyWith(blocks: blocks);
+      }
+      return m.copyWith(blocks: [...m.blocks, ref]);
     });
   }
 

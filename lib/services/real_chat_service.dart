@@ -779,9 +779,9 @@ class RealChatService implements ChatService {
       html: html,
     )));
     controller.add(MessageDelta(live
-        ? '\n\nIt\'s live and interactive in the panel — try it out.'
-        : '\n\nIt\'s interactive in the panel. (Add a key with more context and '
-            'I\'ll write richer content.)'));
+        ? '\n\nIt\'s live and interactive right here in the chat — try it out.'
+        : '\n\nIt\'s interactive right here in the chat. (Add a key with more '
+            'context and I\'ll write richer content.)'));
     controller.add(const MessageComplete());
   }
 

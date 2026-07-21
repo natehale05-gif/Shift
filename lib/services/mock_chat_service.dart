@@ -301,8 +301,8 @@ class MockChatService implements ChatService {
   ) async {
     final topic = InteractiveArtifacts.parseTopic(userInput, kind);
     await _streamText(controller,
-        'Building an interactive ${kind.label} for "$topic" — try it in the '
-        'panel; it\'s fully interactive.');
+        'Here\'s an interactive ${kind.label} for "$topic" — it\'s live right '
+        'here in the chat.');
     await _delay(500, 1000);
 
     // Cross-studio in demo mode: a recipe gets a procedural hero photo when
@@ -343,9 +343,9 @@ class MockChatService implements ChatService {
       html: html,
     )));
     await _streamText(controller,
-        '\n\nOpen it in the panel — check off ingredients, flip cards, or '
-        'score the quiz. Add an API key in Settings and I\'ll fill it with '
-        'real content for your topic.');
+        '\n\nCheck off ingredients, flip cards, or score the quiz right in the '
+        'card. Add an API key in Settings and I\'ll fill it with real content '
+        'for your topic.');
   }
 
   static String _titleCase(String s) => s.isEmpty
