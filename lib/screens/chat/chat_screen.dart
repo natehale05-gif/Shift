@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/chat_message.dart';
 import '../../models/conversation.dart';
 import '../../models/studio_type.dart';
+import '../../services/chat_find.dart';
 import '../../services/conversation_export.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/artifact_panel_store.dart';
@@ -245,8 +247,16 @@ class _ChatBody extends StatefulWidget {
 class _ChatBodyState extends State<_ChatBody> {
   final _scrollController = ScrollController();
 
+  // In-chat find (Cmd/Ctrl+F): match message indices + the active one.
+  bool _findActive = false;
+  final _findController = TextEditingController();
+  final _findFocus = FocusNode();
+  List<int> _matches = const [];
+  int _activeMatch = 0;
+  final Map<int, GlobalKey> _itemKeys = {};
+
   void _scrollToBottom() {
-    if (!_scrollController.hasClients) return;
+    if (_findActive || !_scrollController.hasClients) return;
     _scrollController.animateTo(
       _scrollController.position.maxScrollExtent,
       duration: const Duration(milliseconds: 250),
@@ -254,8 +264,54 @@ class _ChatBodyState extends State<_ChatBody> {
     );
   }
 
+  void _openFind() {
+    setState(() => _findActive = true);
+    _findFocus.requestFocus();
+  }
+
+  void _closeFind() {
+    setState(() {
+      _findActive = false;
+      _findController.clear();
+      _matches = const [];
+      _activeMatch = 0;
+    });
+  }
+
+  void _runFind(String query) {
+    final messages = context.read<ConversationStore>().current?.messages ??
+        const <ChatMessage>[];
+    final matches = findMatchingMessageIndices(messages, query);
+    setState(() {
+      _matches = matches;
+      _activeMatch = 0;
+    });
+    if (matches.isNotEmpty) _scrollToMatch();
+  }
+
+  void _stepMatch(int delta) {
+    if (_matches.isEmpty) return;
+    setState(() =>
+        _activeMatch = (_activeMatch + delta) % _matches.length);
+    if (_activeMatch < 0) _activeMatch += _matches.length;
+    _scrollToMatch();
+  }
+
+  void _scrollToMatch() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final key = _itemKeys[_matches[_activeMatch]];
+      final ctx = key?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx,
+            alignment: 0.15, duration: const Duration(milliseconds: 250));
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _findController.dispose();
+    _findFocus.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -264,47 +320,173 @@ class _ChatBodyState extends State<_ChatBody> {
   Widget build(BuildContext context) {
     final store = context.watch<ConversationStore>();
     final messages = store.current?.messages ?? const [];
+    final colors = Theme.of(context).extension<AppSemanticColors>()!;
+    final activeMatchIndex =
+        _matches.isEmpty ? -1 : _matches[_activeMatch];
 
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
-    return Column(
-      children: [
-        Expanded(
-          child: messages.isEmpty
-              ? const _EmptyState()
-              : ListView.separated(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.lg,
-                    vertical: AppSpacing.xl,
-                  ),
-                  itemCount: messages.length,
-                  separatorBuilder: (_, __) =>
-                      const SizedBox(height: AppSpacing.lg),
-                  itemBuilder: (context, index) => Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: _kProseColumnWidth,
-                      ),
-                      child: MessageView(
-                        message: messages[index],
-                        onOpenArtifact: (ref) =>
-                            context.read<ArtifactPanelStore>().open(
-                              ref.artifactId,
-                              versionIndex: ref.versionIndex,
-                            ),
-                      ),
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyF, meta: true): _openFind,
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _openFind,
+        if (_findActive)
+          const SingleActivator(LogicalKeyboardKey.escape): _closeFind,
+      },
+      child: Column(
+        children: [
+          if (_findActive)
+            _FindBar(
+              controller: _findController,
+              focusNode: _findFocus,
+              matchCount: _matches.length,
+              activeMatch: _matches.isEmpty ? 0 : _activeMatch + 1,
+              onChanged: _runFind,
+              onNext: () => _stepMatch(1),
+              onPrev: () => _stepMatch(-1),
+              onClose: _closeFind,
+            ),
+          Expanded(
+            child: messages.isEmpty
+                ? const _EmptyState()
+                : ListView.separated(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.lg,
+                      vertical: AppSpacing.xl,
                     ),
+                    itemCount: messages.length,
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.lg),
+                    itemBuilder: (context, index) {
+                      final key = _itemKeys.putIfAbsent(index, GlobalKey.new);
+                      final isActiveMatch = index == activeMatchIndex;
+                      return Center(
+                        key: key,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            maxWidth: _kProseColumnWidth,
+                          ),
+                          child: Container(
+                            decoration: isActiveMatch
+                                ? BoxDecoration(
+                                    color: colors.surfaceAlt,
+                                    borderRadius: BorderRadius.circular(
+                                        AppSpacing.radiusMd),
+                                    border: Border.all(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .primary),
+                                  )
+                                : null,
+                            padding: isActiveMatch
+                                ? const EdgeInsets.all(AppSpacing.sm)
+                                : EdgeInsets.zero,
+                            child: MessageView(
+                              message: messages[index],
+                              onOpenArtifact: (ref) =>
+                                  context.read<ArtifactPanelStore>().open(
+                                        ref.artifactId,
+                                        versionIndex: ref.versionIndex,
+                                      ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
-                ),
-        ),
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: _kProseColumnWidth),
-            child: const ChatInputBar(),
           ),
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _kProseColumnWidth),
+              child: const ChatInputBar(),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The in-chat find bar (Cmd/Ctrl+F): query field, match count, prev/next,
+/// and close.
+class _FindBar extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final int matchCount;
+  final int activeMatch;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onNext;
+  final VoidCallback onPrev;
+  final VoidCallback onClose;
+
+  const _FindBar({
+    required this.controller,
+    required this.focusNode,
+    required this.matchCount,
+    required this.activeMatch,
+    required this.onChanged,
+    required this.onNext,
+    required this.onPrev,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    return Material(
+      color: theme.colorScheme.surface,
+      elevation: 1,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.xs,
         ),
-      ],
+        child: Row(
+          children: [
+            const Icon(Icons.search_rounded, size: 18),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onChanged: onChanged,
+                onSubmitted: (_) => onNext(),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: 'Find in conversation…',
+                ),
+              ),
+            ),
+            Text(
+              controller.text.isEmpty ? '' : '$activeMatch/$matchCount',
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: colors.textSecondary),
+            ),
+            IconButton(
+              tooltip: 'Previous',
+              iconSize: 18,
+              onPressed: matchCount > 0 ? onPrev : null,
+              icon: const Icon(Icons.keyboard_arrow_up_rounded),
+            ),
+            IconButton(
+              tooltip: 'Next',
+              iconSize: 18,
+              onPressed: matchCount > 0 ? onNext : null,
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+            ),
+            IconButton(
+              tooltip: 'Close',
+              iconSize: 18,
+              onPressed: onClose,
+              icon: const Icon(Icons.close_rounded),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
