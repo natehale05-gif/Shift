@@ -12,6 +12,7 @@ import 'state/artifact_panel_store.dart';
 import 'state/conversation_store.dart';
 import 'state/memory_store.dart';
 import 'state/styles_store.dart';
+import 'state/usage_store.dart';
 import 'state/ecopay_calculator_store.dart';
 import 'state/project_store.dart';
 import 'state/user_prefs_store.dart';
@@ -34,6 +35,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
   late final ArtifactPanelStore _artifactPanelStore;
   late final MemoryStore _memoryStore;
   late final StylesStore _stylesStore;
+  late final UsageStore _usageStore;
 
   @override
   void initState() {
@@ -51,6 +53,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
     _artifactPanelStore = ArtifactPanelStore();
     _memoryStore = MemoryStore(persistence: _persistence)..load();
     _stylesStore = StylesStore(persistence: _persistence)..load();
+    _usageStore = UsageStore(persistence: _persistence)..load();
     _conversationStore = ConversationStore(
       chatService: chatService,
       persistence: _persistence,
@@ -80,6 +83,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
         ChangeNotifierProvider.value(value: _userPrefsStore),
         ChangeNotifierProvider.value(value: _memoryStore),
         ChangeNotifierProvider.value(value: _stylesStore),
+        ChangeNotifierProvider.value(value: _usageStore),
         ChangeNotifierProvider.value(value: _apiKeysStore),
       ],
       child: Consumer<AppSettingsStore>(

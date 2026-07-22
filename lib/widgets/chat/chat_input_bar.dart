@@ -19,6 +19,7 @@ import '../../state/conversation_store.dart';
 import '../../state/memory_store.dart';
 import '../../state/project_store.dart';
 import '../../state/styles_store.dart';
+import '../../state/usage_store.dart';
 import '../../state/user_prefs_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
@@ -156,6 +157,7 @@ class _ChatInputBarState extends State<ChatInputBar> {
       attachments: List.of(_attachments),
       options: _buildOptions(),
     );
+    context.read<UsageStore>().recordMessage();
     _controller.clear();
     setState(() => _attachments.clear());
     _focusNode.requestFocus();
@@ -431,14 +433,22 @@ class _ChatInputBarState extends State<ChatInputBar> {
             ),
           ),
           const SizedBox(height: AppSpacing.xs),
-          Text(
-            context.watch<ApiKeysStore>().isLive
-                ? 'Live mode — SHIFT AI can make mistakes. Usage bills to '
-                      'your API key.'
-                : 'SHIFT AI is in demo mode — responses are simulated.',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: colors.textSecondary,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  context.watch<ApiKeysStore>().isLive
+                      ? 'Live mode — SHIFT AI can make mistakes. Usage bills to '
+                            'your API key.'
+                      : 'SHIFT AI is in demo mode — responses are simulated.',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              const _UsageMeter(),
+            ],
           ),
         ],
       ),
@@ -626,6 +636,49 @@ class _StyleChip extends StatelessWidget {
             Icon(Icons.expand_more_rounded, size: 14, color: colors.textSecondary),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Illustrative daily-usage indicator (Claude's plan-limit meter). Demo only —
+/// nothing is metered or charged.
+class _UsageMeter extends StatelessWidget {
+  const _UsageMeter();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final usage = context.watch<UsageStore>();
+    return Tooltip(
+      message: 'Illustrative daily limit — resets tomorrow. Nothing is '
+          'metered or charged in this demo.',
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 44,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(3),
+              child: LinearProgressIndicator(
+                value: usage.fraction,
+                minHeight: 4,
+                backgroundColor: colors.border,
+                color: usage.remaining == 0
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            '${usage.used}/${usage.cap} today',
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colors.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }

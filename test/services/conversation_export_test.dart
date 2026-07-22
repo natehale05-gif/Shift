@@ -65,4 +65,15 @@ void main() {
     final jsonString = ConversationExport.toJsonString(_fixture());
     expect(jsonString, contains('"title": "Bakery plans"'));
   });
+
+  test('printable HTML renders roles and escapes markup', () {
+    final html = ConversationExport.toPrintableHtml(_fixture());
+    expect(html, contains('<!DOCTYPE html>'));
+    expect(html, contains('<h1>Bakery plans</h1>'));
+    expect(html, contains('>You<'));
+    expect(html, contains('>SHIFT AI<'));
+    expect(html, contains('Help me name my bakery'));
+    // Assistant text with markup is HTML-escaped, not rendered as tags.
+    expect(html, contains('Golden Crumb'));
+  });
 }

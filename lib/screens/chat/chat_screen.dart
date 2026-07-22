@@ -10,6 +10,7 @@ import '../../services/conversation_export.dart';
 import '../../state/api_keys_store.dart';
 import '../../state/artifact_panel_store.dart';
 import '../../state/conversation_store.dart';
+import '../../state/usage_store.dart';
 import '../../theme/app_spacing.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/app_typography.dart';
@@ -78,8 +79,39 @@ class ChatScreen extends StatelessWidget {
   }
 }
 
-class _ChatTitle extends StatelessWidget {
+class _ChatTitle extends StatefulWidget {
   const _ChatTitle();
+
+  @override
+  State<_ChatTitle> createState() => _ChatTitleState();
+}
+
+class _ChatTitleState extends State<_ChatTitle> {
+  bool _editing = false;
+  final _controller = TextEditingController();
+  final _focus = FocusNode();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _startEdit(String title) {
+    _controller.text = title;
+    setState(() => _editing = true);
+    _focus.requestFocus();
+  }
+
+  void _commit() {
+    final convo = context.read<ConversationStore>().current;
+    final text = _controller.text.trim();
+    if (convo != null && text.isNotEmpty) {
+      context.read<ConversationStore>().renameConversation(convo.id, text);
+    }
+    setState(() => _editing = false);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,13 +123,32 @@ class _ChatTitle extends StatelessWidget {
     // empty/new state.
     final showTitle =
         convo != null && convo.messages.isNotEmpty && convo.title != 'New chat';
+
+    if (_editing && convo != null) {
+      return SizedBox(
+        width: 320,
+        child: TextField(
+          controller: _controller,
+          focusNode: _focus,
+          autofocus: true,
+          style: theme.textTheme.titleMedium,
+          decoration: const InputDecoration(isDense: true),
+          onSubmitted: (_) => _commit(),
+          onTapOutside: (_) => _commit(),
+        ),
+      );
+    }
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Flexible(
-          child: Text(
-            showTitle ? convo.title : 'SHIFT AI',
-            overflow: TextOverflow.ellipsis,
+          child: GestureDetector(
+            onDoubleTap: showTitle ? () => _startEdit(convo.title) : null,
+            child: Text(
+              showTitle ? convo.title : 'SHIFT AI',
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
@@ -202,6 +253,8 @@ class _ChatHeaderMenu extends StatelessWidget {
                 ConversationExport.downloadMarkdown(convo);
               case 'export_json':
                 ConversationExport.downloadJson(convo);
+              case 'export_pdf':
+                ConversationExport.exportPdf(convo);
               case 'delete':
                 store.deleteConversation(convo.id);
             }
@@ -227,6 +280,10 @@ class _ChatHeaderMenu extends StatelessWidget {
             const PopupMenuItem(
               value: 'export_json',
               child: Text('Export as JSON'),
+            ),
+            const PopupMenuItem(
+              value: 'export_pdf',
+              child: Text('Export as PDF'),
             ),
             const PopupMenuDivider(),
             const PopupMenuItem(value: 'delete', child: Text('Delete')),
@@ -385,6 +442,7 @@ class _ChatBodyState extends State<_ChatBody> {
                                 : EdgeInsets.zero,
                             child: MessageView(
                               message: messages[index],
+                              isLast: index == messages.length - 1,
                               onOpenArtifact: (ref) =>
                                   context.read<ArtifactPanelStore>().open(
                                         ref.artifactId,
@@ -547,6 +605,35 @@ class _EmptyState extends StatelessWidget {
                     Chip(
                       avatar: Icon(studio.icon, size: 16, color: studio.accent),
                       label: Text(studio.shortName),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              Text(
+                'Try one of these',
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color:
+                      theme.extension<AppSemanticColors>()!.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              Wrap(
+                spacing: AppSpacing.sm,
+                runSpacing: AppSpacing.sm,
+                alignment: WrapAlignment.center,
+                children: [
+                  for (final prompt in const [
+                    'Make a recipe card for banana bread',
+                    'Draw a flowchart of a sign-up flow',
+                    'Build a landing page for a coffee shop',
+                    'Write a haiku about the ocean',
+                  ])
+                    ActionChip(
+                      label: Text(prompt),
+                      onPressed: () {
+                        context.read<ConversationStore>().sendMessage(prompt);
+                        context.read<UsageStore>().recordMessage();
+                      },
                     ),
                 ],
               ),

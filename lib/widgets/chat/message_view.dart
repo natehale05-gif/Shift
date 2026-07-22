@@ -34,7 +34,16 @@ class MessageView extends StatefulWidget {
   /// null renders the card non-interactive.
   final void Function(ArtifactRefBlock ref)? onOpenArtifact;
 
-  const MessageView({super.key, required this.message, this.onOpenArtifact});
+  /// Whether this is the last message in the conversation — the completed
+  /// assistant reply shows follow-up suggestion chips.
+  final bool isLast;
+
+  const MessageView({
+    super.key,
+    required this.message,
+    this.onOpenArtifact,
+    this.isLast = false,
+  });
 
   @override
   State<MessageView> createState() => _MessageViewState();
@@ -55,6 +64,7 @@ class _MessageViewState extends State<MessageView> {
               message: message,
               hovering: _hovering,
               onOpenArtifact: widget.onOpenArtifact,
+              isLast: widget.isLast,
             ),
           );
   }
@@ -403,11 +413,13 @@ class _AssistantProse extends StatelessWidget {
   final ChatMessage message;
   final bool hovering;
   final void Function(ArtifactRefBlock ref)? onOpenArtifact;
+  final bool isLast;
 
   const _AssistantProse({
     required this.message,
     required this.hovering,
     this.onOpenArtifact,
+    this.isLast = false,
   });
 
   @override
@@ -455,6 +467,11 @@ class _AssistantProse extends StatelessWidget {
             child: _ContinueButton(messageId: message.id),
           ),
         _ActionRow(message: message, visible: hovering),
+        if (isLast && message.status == MessageStatus.complete)
+          const Padding(
+            padding: EdgeInsets.only(top: AppSpacing.xs),
+            child: _FollowUpChips(),
+          ),
       ],
     );
   }
@@ -698,6 +715,40 @@ class _ImageBlockView extends StatelessWidget {
     }
 
     return _placeholder(context, 'Image not saved — ${block.alt}');
+  }
+}
+
+/// Follow-up suggestion chips under the last completed reply — tap to send
+/// (Claude's suggested follow-ups). Generic in demo mode.
+class _FollowUpChips extends StatelessWidget {
+  const _FollowUpChips();
+
+  static const _suggestions = [
+    'Explain that more simply',
+    'Give me an example',
+    'What are the next steps?',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    return Wrap(
+      spacing: AppSpacing.xs,
+      runSpacing: AppSpacing.xs,
+      children: [
+        for (final suggestion in _suggestions)
+          ActionChip(
+            label: Text(suggestion),
+            labelStyle: theme.textTheme.labelSmall,
+            side: BorderSide(color: colors.border),
+            backgroundColor: Colors.transparent,
+            visualDensity: VisualDensity.compact,
+            onPressed: () =>
+                context.read<ConversationStore>().sendMessage(suggestion),
+          ),
+      ],
+    );
   }
 }
 

@@ -438,6 +438,8 @@ class _ConversationTile extends StatelessWidget {
                 ConversationExport.downloadMarkdown(conversation);
               case 'export_json':
                 ConversationExport.downloadJson(conversation);
+              case 'export_pdf':
+                ConversationExport.exportPdf(conversation);
               case 'delete':
                 store.deleteConversation(conversation.id);
             }
@@ -467,6 +469,10 @@ class _ConversationTile extends StatelessWidget {
             const PopupMenuItem(
               value: 'export_json',
               child: Text('Export as JSON'),
+            ),
+            const PopupMenuItem(
+              value: 'export_pdf',
+              child: Text('Export as PDF'),
             ),
             const PopupMenuDivider(),
             const PopupMenuItem(value: 'delete', child: Text('Delete')),
