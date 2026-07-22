@@ -1,6 +1,44 @@
 import 'artifact.dart';
 import 'chat_message.dart';
 
+/// Alternate continuations from one branch point (Claude's message editing):
+/// [tails] are the message sequences that can follow the anchor, and [active]
+/// is the one currently spliced into the conversation.
+class ConversationBranchSet {
+  final List<List<ChatMessage>> tails;
+  final int active;
+
+  const ConversationBranchSet({required this.tails, required this.active});
+
+  int get length => tails.length;
+
+  ConversationBranchSet copyWith({
+    List<List<ChatMessage>>? tails,
+    int? active,
+  }) =>
+      ConversationBranchSet(
+        tails: tails ?? this.tails,
+        active: active ?? this.active,
+      );
+
+  factory ConversationBranchSet.fromJson(Map<String, dynamic> json) =>
+      ConversationBranchSet(
+        active: json['active'] as int? ?? 0,
+        tails: (json['tails'] as List<dynamic>? ?? const [])
+            .map((tail) => (tail as List<dynamic>)
+                .map((m) => ChatMessage.fromJson(m as Map<String, dynamic>))
+                .toList())
+            .toList(),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'active': active,
+        'tails': tails
+            .map((tail) => tail.map((m) => m.toJson()).toList())
+            .toList(),
+      };
+}
+
 class Conversation {
   final String id;
   final String title;
@@ -19,6 +57,10 @@ class Conversation {
   /// persistence stays a single JSON tree until IndexedDB storage lands.
   final List<Artifact> artifacts;
 
+  /// Edit-branch history keyed by the anchor message id (the message before the
+  /// branch point, or '' for the start of the conversation).
+  final Map<String, ConversationBranchSet> branches;
+
   const Conversation({
     required this.id,
     required this.title,
@@ -30,6 +72,7 @@ class Conversation {
     this.archived = false,
     this.projectId,
     this.artifacts = const [],
+    this.branches = const {},
   });
 
   Artifact? artifactById(String artifactId) {
@@ -48,6 +91,7 @@ class Conversation {
     bool? archived,
     Object? projectId = _unset,
     List<Artifact>? artifacts,
+    Map<String, ConversationBranchSet>? branches,
   }) {
     return Conversation(
       id: id,
@@ -61,6 +105,7 @@ class Conversation {
       projectId:
           projectId == _unset ? this.projectId : projectId as String?,
       artifacts: artifacts ?? this.artifacts,
+      branches: branches ?? this.branches,
     );
   }
 
@@ -81,6 +126,12 @@ class Conversation {
         artifacts: (json['artifacts'] as List<dynamic>? ?? const [])
             .map((e) => Artifact.fromJson(e as Map<String, dynamic>))
             .toList(),
+        branches: (json['branches'] as Map<String, dynamic>? ?? const {}).map(
+          (k, v) => MapEntry(
+            k,
+            ConversationBranchSet.fromJson(v as Map<String, dynamic>),
+          ),
+        ),
       );
 
   Map<String, dynamic> toJson() => {
@@ -94,5 +145,7 @@ class Conversation {
         'archived': archived,
         'projectId': projectId,
         'artifacts': artifacts.map((e) => e.toJson()).toList(),
+        if (branches.isNotEmpty)
+          'branches': branches.map((k, v) => MapEntry(k, v.toJson())),
       };
 }

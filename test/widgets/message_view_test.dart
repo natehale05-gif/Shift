@@ -3,8 +3,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/models/chat_message.dart';
+import 'package:shift_ai/services/mock_chat_service.dart';
 import 'package:shift_ai/services/persistence_service.dart';
 import 'package:shift_ai/state/api_keys_store.dart';
+import 'package:shift_ai/state/conversation_store.dart';
 import 'package:shift_ai/theme/app_theme.dart';
 import 'package:shift_ai/widgets/chat/message_view.dart';
 
@@ -32,9 +34,19 @@ ChatMessage _assistantMessage(String text) => ChatMessage(
       timestamp: DateTime(2026, 7, 19, 12, 0),
     );
 
-Widget _harness(Widget child) => ChangeNotifierProvider<ApiKeysStore>(
-      // The assistant action row's Regenerate menu reads keyed providers.
-      create: (_) => ApiKeysStore(persistence: PersistenceService()),
+Widget _harness(Widget child) => MultiProvider(
+      providers: [
+        // The action row's Regenerate menu reads keyed providers; the user
+        // bubble reads the store for edit-branch info.
+        ChangeNotifierProvider(
+            create: (_) => ApiKeysStore(persistence: PersistenceService())),
+        ChangeNotifierProvider(
+          create: (_) => ConversationStore(
+            chatService: MockChatService(),
+            persistence: PersistenceService(),
+          ),
+        ),
+      ],
       child: MaterialApp(
         theme: AppTheme.light(),
         home: Scaffold(body: SingleChildScrollView(child: child)),

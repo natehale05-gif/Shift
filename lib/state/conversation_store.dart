@@ -154,9 +154,9 @@ class ConversationStore extends ChangeNotifier {
     }).toList();
   }
 
-  /// Replaces a user message's text and replays the conversation from that
-  /// point: everything from the edited message onward is dropped, then the
-  /// new text is sent as a fresh turn.
+  /// Replaces a user message's text and replays from that point — keeping the
+  /// previous continuation as a switchable branch (Claude's message editing).
+  /// A ‹1/2› navigator on the edited message steps between branches.
   Future<void> editAndResend(
     String messageId,
     String newText, {
@@ -167,10 +167,57 @@ class ConversationStore extends ChangeNotifier {
     final index = convo.messages.indexWhere((m) => m.id == messageId);
     if (index == -1 || convo.messages[index].role != MessageRole.user) return;
 
+    final anchorId = index == 0 ? '' : convo.messages[index - 1].id;
+    final liveTail = convo.messages.sublist(index);
+
     _mutateConversation(convo.id, (c) {
-      return c.copyWith(messages: c.messages.sublist(0, index));
+      final branches = {...c.branches};
+      final existing = branches[anchorId];
+      // Capture the tail being replaced, then append a placeholder for the new
+      // branch (its live messages are the source of truth until switched away).
+      final tails = existing == null
+          ? <List<ChatMessage>>[liveTail]
+          : ([...existing.tails]..[existing.active] = liveTail);
+      tails.add(const <ChatMessage>[]);
+      branches[anchorId] =
+          ConversationBranchSet(tails: tails, active: tails.length - 1);
+      return c.copyWith(
+        messages: c.messages.sublist(0, index),
+        branches: branches,
+      );
     });
     await sendMessage(newText, options: options);
+  }
+
+  /// Switches which edit-branch is shown at [anchorId] (the ‹1/2› navigator),
+  /// swapping the whole tail after the anchor.
+  void switchBranch(String anchorId, int target) {
+    final convo = current;
+    if (convo == null) return;
+    final set = convo.branches[anchorId];
+    if (set == null ||
+        target < 0 ||
+        target >= set.tails.length ||
+        target == set.active) {
+      return;
+    }
+    final anchorPos = anchorId.isEmpty
+        ? -1
+        : convo.messages.indexWhere((m) => m.id == anchorId);
+    final prefix = convo.messages.sublist(0, anchorPos + 1);
+    final liveTail = convo.messages.sublist(anchorPos + 1);
+    // Sync the current live tail back into its snapshot before swapping.
+    final tails = [...set.tails]..[set.active] = liveTail;
+    _mutateConversation(convo.id, (c) {
+      return c.copyWith(
+        messages: [...prefix, ...tails[target]],
+        branches: {
+          ...c.branches,
+          anchorId: set.copyWith(tails: tails, active: target),
+        },
+      );
+    });
+    _persistConversation(convo.id);
   }
 
   /// Re-runs the turn that produced [assistantMessageId], keeping the previous

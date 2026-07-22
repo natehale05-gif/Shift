@@ -115,6 +115,34 @@ void main() {
     expect(service.inputs.last, 'revised question');
   });
 
+  test('editing a message keeps the old branch and switchBranch swaps tails',
+      () async {
+    final (store, _) = await _makeStore();
+    store.startNewConversation();
+    await store.sendMessage('first question');
+    final firstUser = store.current!.messages[0];
+
+    await store.editAndResend(firstUser.id, 'second question');
+    // The active branch is the edited one.
+    expect(store.current!.messages.map((m) => m.text),
+        ['second question', 'echo: second question']);
+    final set = store.current!.branches[''];
+    expect(set, isNotNull);
+    expect(set!.length, 2);
+    expect(set.active, 1);
+
+    // Step back to the original branch.
+    store.switchBranch('', 0);
+    expect(store.current!.messages.map((m) => m.text),
+        ['first question', 'echo: first question']);
+    expect(store.current!.branches['']!.active, 0);
+
+    // And forward again to the edit.
+    store.switchBranch('', 1);
+    expect(store.current!.messages.map((m) => m.text),
+        ['second question', 'echo: second question']);
+  });
+
   test('regenerate keeps the old reply as a switchable variant', () async {
     final (store, service) = await _makeStore();
     store.startNewConversation();

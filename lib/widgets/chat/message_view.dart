@@ -109,6 +109,26 @@ class _UserBubbleState extends State<_UserBubble> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
+
+    // Is this message an edit-branch point? (Its preceding message is an
+    // anchor with more than one stored tail.)
+    final convo = context.watch<ConversationStore>().current;
+    String? branchAnchor;
+    var branchActive = 0;
+    var branchCount = 0;
+    if (convo != null) {
+      final idx = convo.messages.indexWhere((m) => m.id == message.id);
+      if (idx != -1) {
+        final anchorId = idx == 0 ? '' : convo.messages[idx - 1].id;
+        final set = convo.branches[anchorId];
+        if (set != null && set.length > 1) {
+          branchAnchor = anchorId;
+          branchActive = set.active;
+          branchCount = set.length;
+        }
+      }
+    }
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
@@ -117,6 +137,12 @@ class _UserBubbleState extends State<_UserBubble> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          if (branchAnchor != null)
+            _UserBranchNav(
+              anchorId: branchAnchor,
+              active: branchActive,
+              count: branchCount,
+            ),
           if (message.attachments.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.xs),
@@ -181,6 +207,51 @@ class _UserBubbleState extends State<_UserBubble> {
           ),
         ],
       ),
+      ),
+    );
+  }
+}
+
+/// The ‹1/2› switcher shown on an edited user message, stepping between the
+/// alternate branches that follow from it.
+class _UserBranchNav extends StatelessWidget {
+  final String anchorId;
+  final int active;
+  final int count;
+
+  const _UserBranchNav({
+    required this.anchorId,
+    required this.active,
+    required this.count,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final store = context.read<ConversationStore>();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ActionIcon(
+            tooltip: 'Previous version',
+            icon: Icons.chevron_left_rounded,
+            onPressed:
+                active > 0 ? () => store.switchBranch(anchorId, active - 1) : null,
+          ),
+          Text('${active + 1}/$count',
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: colors.textSecondary)),
+          _ActionIcon(
+            tooltip: 'Next version',
+            icon: Icons.chevron_right_rounded,
+            onPressed: active < count - 1
+                ? () => store.switchBranch(anchorId, active + 1)
+                : null,
+          ),
+        ],
       ),
     );
   }
