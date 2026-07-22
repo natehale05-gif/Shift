@@ -49,8 +49,12 @@ class ChatScreen extends StatelessWidget {
           body: Consumer<ArtifactPanelStore>(
             builder: (context, panel, _) {
               // Side-by-side panel needs real width; below that the panel
-              // covers the chat as a full overlay.
-              final sideBySide = constraints.maxWidth >= 1100;
+              // covers the chat as a full overlay. The threshold is measured
+              // against the chat area (the sidebar is already subtracted), so
+              // keep it low enough that a common desktop window with the
+              // sidebar open still shows chat + artifact together — the panel
+              // is at most 560px, leaving the chat a comfortable column.
+              final sideBySide = constraints.maxWidth >= 880;
               final panelWidth = (constraints.maxWidth * 0.42).clamp(
                 380.0,
                 560.0,
