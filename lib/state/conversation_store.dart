@@ -354,12 +354,25 @@ class ConversationStore extends ChangeNotifier {
     }
     final conversationId = _currentId!;
 
+    // Persist attachment bytes to the IndexedDB asset store so they survive a
+    // reload (and can be previewed later); the bytes stay in memory too.
+    final persistedAttachments = <Attachment>[];
+    for (final attachment in attachments) {
+      if (attachment.bytes != null && attachment.assetId == null) {
+        final assetId = _uuid.v4();
+        persistence.saveAsset(assetId, attachment.bytes!);
+        persistedAttachments.add(attachment.copyWith(assetId: assetId));
+      } else {
+        persistedAttachments.add(attachment);
+      }
+    }
+
     final userMessage = ChatMessage(
       id: _uuid.v4(),
       conversationId: conversationId,
       role: MessageRole.user,
       text: displayText,
-      attachments: attachments,
+      attachments: persistedAttachments,
       studioType: structuredRequest?.studioType,
       timestamp: DateTime.now(),
     );
@@ -393,7 +406,7 @@ class ConversationStore extends ChangeNotifier {
       assistantMessageId: assistantMessage.id,
       userInput: text,
       structuredRequest: structuredRequest,
-      attachments: attachments,
+      attachments: persistedAttachments,
       options: options,
       extractMemory: true,
     );

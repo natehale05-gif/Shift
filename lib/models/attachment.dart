@@ -14,10 +14,9 @@ enum AttachmentKind {
 
 /// A file the user attached to a message (image, PDF, or plain text).
 ///
-/// [bytes] lives in memory for the current session only. Until IndexedDB
-/// storage lands, persisted JSON records just the metadata — reloading the
-/// app shows the attachment's name but not its content, keeping big base64
-/// blobs out of the ~5MB localStorage quota.
+/// [bytes] is the in-session copy. The bytes are also persisted to the
+/// IndexedDB asset store keyed by [assetId] (mirrors generated images), so an
+/// attachment's content survives a reload and can be previewed later.
 class Attachment {
   final String id;
   final String name;
@@ -25,15 +24,28 @@ class Attachment {
   final AttachmentKind kind;
   final Uint8List? bytes;
 
+  /// Key into the IndexedDB asset store holding this attachment's bytes.
+  final String? assetId;
+
   const Attachment({
     required this.id,
     required this.name,
     required this.mimeType,
     required this.kind,
     this.bytes,
+    this.assetId,
   });
 
   int get sizeBytes => bytes?.length ?? 0;
+
+  Attachment copyWith({Uint8List? bytes, String? assetId}) => Attachment(
+        id: id,
+        name: name,
+        mimeType: mimeType,
+        kind: kind,
+        bytes: bytes ?? this.bytes,
+        assetId: assetId ?? this.assetId,
+      );
 
   factory Attachment.fromJson(Map<String, dynamic> json) => Attachment(
         id: json['id'] as String,
@@ -43,6 +55,7 @@ class Attachment {
           (e) => e.name == json['kind'],
           orElse: () => AttachmentKind.text,
         ),
+        assetId: json['assetId'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
@@ -50,6 +63,7 @@ class Attachment {
         'name': name,
         'mimeType': mimeType,
         'kind': kind.name,
-        // bytes intentionally omitted — see class doc.
+        if (assetId != null) 'assetId': assetId,
+        // bytes live in the asset store (see assetId), not inline.
       };
 }
