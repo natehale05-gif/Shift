@@ -10,14 +10,38 @@ import '../../theme/app_theme.dart';
 /// Live; removing the last one falls straight back to the mock. The list of
 /// providers is driven entirely off [ApiKeysStore.registry], so new providers
 /// appear here automatically with no change to this file.
-class ApiKeysSection extends StatelessWidget {
+///
+/// Providers are chosen from a dropdown so the card stays compact — only the
+/// selected provider's key field is shown at a time.
+class ApiKeysSection extends StatefulWidget {
   const ApiKeysSection({super.key});
+
+  @override
+  State<ApiKeysSection> createState() => _ApiKeysSectionState();
+}
+
+class _ApiKeysSectionState extends State<ApiKeysSection> {
+  String? _selectedId;
 
   @override
   Widget build(BuildContext context) {
     final keys = context.watch<ApiKeysStore>();
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
+    final providers = keys.registry.all;
+
+    // Default to the first provider that already has a key, else the first
+    // provider in the registry. Keep the selection valid if the registry
+    // changes underneath us.
+    final validSelection =
+        _selectedId != null && providers.any((p) => p.id == _selectedId);
+    final selectedId = validSelection
+        ? _selectedId!
+        : (providers.firstWhere(
+            (p) => keys.hasKey(p.id),
+            orElse: () => providers.first,
+          ).id);
+    final selected = providers.firstWhere((p) => p.id == selectedId);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -30,10 +54,40 @@ class ApiKeysSection extends StatelessWidget {
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: AppSpacing.lg),
-        for (final descriptor in keys.registry.all) ...[
-          _ProviderKeyRow(descriptor: descriptor),
-          const SizedBox(height: AppSpacing.lg),
-        ],
+        DropdownButtonFormField<String>(
+          initialValue: selectedId,
+          isExpanded: true,
+          decoration: const InputDecoration(
+            labelText: 'Provider',
+            border: OutlineInputBorder(),
+          ),
+          items: [
+            for (final descriptor in providers)
+              DropdownMenuItem(
+                value: descriptor.id,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        descriptor.displayName,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    _StatusBadge(status: keys.statusFor(descriptor.id)),
+                  ],
+                ),
+              ),
+          ],
+          onChanged: (value) {
+            if (value != null) setState(() => _selectedId = value);
+          },
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        // Fresh controller per provider so switching selection reloads the
+        // stored key for that provider.
+        _ProviderKeyRow(key: ValueKey(selected.id), descriptor: selected),
+        const SizedBox(height: AppSpacing.lg),
         Container(
           padding: const EdgeInsets.all(AppSpacing.md),
           decoration: BoxDecoration(
@@ -60,7 +114,7 @@ class ApiKeysSection extends StatelessWidget {
 class _ProviderKeyRow extends StatefulWidget {
   final ProviderDescriptor descriptor;
 
-  const _ProviderKeyRow({required this.descriptor});
+  const _ProviderKeyRow({super.key, required this.descriptor});
 
   @override
   State<_ProviderKeyRow> createState() => _ProviderKeyRowState();
