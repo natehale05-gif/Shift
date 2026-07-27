@@ -15,6 +15,10 @@ import '../data/models/usage_report.dart';
 import 'artifact_composition.dart';
 import 'audio_synth_service.dart';
 import 'chat_service.dart';
+import '../turn/plan_turn.dart';
+import '../turn/turn_input.dart';
+import '../turn/turn_plan.dart';
+import 'diagram_detection.dart';
 import 'interactive_artifacts.dart';
 import 'procedural_art.dart';
 import 'studio_clarification.dart';
@@ -54,39 +58,19 @@ class MockChatService implements ChatService {
     ChatOptions options,
   ) async {
     try {
-      // A terse follow-up to our own clarifying question ("navy blue")
-      // continues the same studio request rather than being reclassified
-      // from scratch — the studio comes from that pending question, and
-      // its answer merges into a complete prompt.
-      final pending = structuredRequest == null
-          ? findPendingClarification(conversation)
-          : null;
-      // One composition decision for the whole turn (see studio_composition).
-      // pageAssembly = "build a website with photos" (Code + Image together);
-      // editArtifact = "add a hero image to the website" (splice into an
-      // existing artifact). Everything else is a single studio.
-      final plan = (structuredRequest == null && pending == null)
-          ? planComposition(conversation, userInput)
-          : CompositionPlan.none;
-      // Interactive artifacts (recipe cards, quizzes, flashcards, checklists)
-      // are self-contained interactive widgets built by Code Studio.
-      final interactive = (structuredRequest == null && pending == null)
-          ? InteractiveArtifacts.detect(userInput)
-          : null;
-      final wantsBoth = plan.kind == CompositionKind.pageAssembly;
-      final studio = interactive != null
-          ? StudioType.codeStudio
-          : wantsBoth
-              ? StudioType.codeStudio
-              : isCopyFed(plan.kind)
-                  ? copyFedHost(plan.kind)
-                  : isMediaPair(plan.kind)
-                      ? mediaPairHost(plan.kind)
-                      : (structuredRequest?.studioType ??
-                          pending?.$1 ??
-                          StudioResponseBank.detectStudio(userInput));
-      final effectiveInput =
-          pending != null ? '${pending.$2} $userInput'.trim() : userInput;
+      // The decision half of the turn — which studio, what shape of answer —
+      // is made once, by a pure function shared with the live service. This
+      // method is now only the *execution* half: turning that plan into a
+      // simulated event stream.
+      final turn = planTurn(TurnInput(
+        conversation: conversation,
+        userInput: userInput,
+        structuredRequest: structuredRequest,
+        attachments: attachments,
+        options: options,
+      ));
+      final studio = turn.studio;
+      final effectiveInput = turn.effectiveInput;
 
       var thinking = StudioResponseBank.thinkingText(studio, effectiveInput);
       final system = options.systemPrompt ?? '';
@@ -111,43 +95,39 @@ class MockChatService implements ChatService {
         );
       }
 
-      final wantsResearch = options.deepResearch ||
-          userInput.toLowerCase().contains('deep research');
-      if (interactive != null) {
-        await _runInteractive(controller, conversation, interactive, userInput);
-      } else if (_wantsDiagram(userInput)) {
-        await _runDiagram(controller, userInput);
-      } else if (wantsResearch) {
-        await _runDeepResearch(controller, conversation, userInput);
-      } else if (studio == StudioType.middleware &&
-          (options.webSearch ||
-              StudioResponseBank.wantsWebSearch(userInput))) {
-        await _runWebSearch(controller, userInput);
-      } else if (isCopyFed(plan.kind)) {
-        await _runCopyFedMedia(controller, plan.kind, effectiveInput);
-      } else if (isMediaPair(plan.kind)) {
-        await _runMediaPair(controller, plan.kind, effectiveInput);
-      } else if (studio == StudioType.avatarStudio) {
-        // The Avatar studio is a talking-head: a portrait + a voiceover card
-        // (a real Heygen video takes a key, wired in the live service).
-        await _runMediaPair(
-            controller, CompositionKind.talkingAvatar, effectiveInput);
-      } else {
-        final composeTarget =
-            plan.kind == CompositionKind.editArtifact ? plan.editTarget : null;
-        final composeKind =
-            plan.kind == CompositionKind.editArtifact ? plan.editKind : null;
-        await _runStudioFlow(
-          controller,
-          conversation,
-          studio,
-          effectiveInput,
-          structuredRequest,
-          pending != null,
-          composeTarget,
-          composeKind,
-          wantsBoth ? plan.contributors : const <StudioType>{},
-        );
+      // Dispatch on the plan. The branch *order* that used to live here is now
+      // part of planTurn; this switch only says how each kind is performed.
+      switch (turn) {
+        case InteractiveTurn(:final kind):
+          await _runInteractive(controller, conversation, kind, userInput);
+        case DiagramTurn():
+          await _runDiagram(controller, userInput);
+        case DeepResearchTurn():
+          await _runDeepResearch(controller, conversation, userInput);
+        case WebSearchTurn():
+          await _runWebSearch(controller, userInput);
+        case CopyFedTurn(:final kind):
+          await _runCopyFedMedia(controller, kind, effectiveInput);
+        case MediaPairTurn(:final kind):
+          await _runMediaPair(controller, kind, effectiveInput);
+        case StudioTurn(
+            :final structuredRequest,
+            :final composeTarget,
+            :final composeKind,
+            :final contributors,
+            :final isAnsweringClarification,
+          ):
+          await _runStudioFlow(
+            controller,
+            conversation,
+            studio,
+            effectiveInput,
+            structuredRequest,
+            isAnsweringClarification,
+            composeTarget,
+            composeKind,
+            contributors,
+          );
       }
 
       controller.add(UsageReported(UsageReport(
@@ -295,14 +275,6 @@ class MockChatService implements ChatService {
   /// Builds an interactive artifact (recipe card / quiz / flashcards /
   /// checklist) with templated content — a self-contained interactive widget
   /// that runs live in the artifact panel, no API key required.
-  static final RegExp _diagramRe = RegExp(
-    r'\b(diagram|flow ?chart|flow ?diagram|sequence diagram|mind ?map|'
-    r'gantt|org ?chart|class diagram|state diagram|er diagram)\b',
-    caseSensitive: false,
-  );
-
-  bool _wantsDiagram(String input) => _diagramRe.hasMatch(input);
-
   /// Demo diagrams: streams a templated ```mermaid fence (rendered live by the
   /// markdown view). A real model writes its own mermaid in live mode.
   Future<void> _runDiagram(
