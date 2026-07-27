@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/ecopay_projection.dart';
+import 'package:shift_ai/data/models/ecopay_projection.dart';
 
 void main() {
   group('EcopayProjection', () {

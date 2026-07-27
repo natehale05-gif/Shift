@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../models/attachment.dart';
+import '../../data/models/attachment.dart';
 import 'dart:async';
 
 import '../../screens/chat/live_voice_overlay.dart';
@@ -14,15 +14,15 @@ import '../../services/prompt_assembler.dart';
 import '../../services/providers/provider_capability.dart';
 import '../../services/speech/speech_service.dart';
 import '../../services/web/file_intake.dart';
-import '../../state/api_keys_store.dart';
-import '../../state/conversation_store.dart';
-import '../../state/memory_store.dart';
-import '../../state/project_store.dart';
-import '../../state/styles_store.dart';
-import '../../state/usage_store.dart';
-import '../../state/user_prefs_store.dart';
-import '../../theme/app_spacing.dart';
-import '../../theme/app_theme.dart';
+import '../../data/stores/api_keys_store.dart';
+import '../../data/stores/conversation_store.dart';
+import '../../data/stores/memory_store.dart';
+import '../../data/stores/project_store.dart';
+import '../../data/stores/styles_store.dart';
+import '../../data/stores/usage_store.dart';
+import '../../data/stores/user_prefs_store.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 import '../common/liquid_glass.dart';
 import '../common/style_editor.dart';
 

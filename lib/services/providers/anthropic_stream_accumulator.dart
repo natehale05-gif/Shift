@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../../models/citation.dart';
+import '../../data/models/citation.dart';
 import '../chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'anthropic_tools.dart';

@@ -1,7 +1,3 @@
-import 'package:flutter/material.dart';
-
-import '../theme/app_colors.dart';
-
 /// A lightweight text document attached to a project as always-available
 /// context ("project knowledge"). Text-only so it persists fully in
 /// localStorage.
@@ -22,6 +18,14 @@ class KnowledgeDoc {
 /// A workspace grouping conversations under shared custom instructions and
 /// knowledge — Claude's Projects and Gemini's Gems in one concept (a "Gem"
 /// is just a project whose instructions define a persona).
+/// How many swatches a project's [Project.colorIndex] cycles through.
+///
+/// The count is domain data — it is what makes `colorIndex` meaningful and lets
+/// stores assign colours round-robin without importing the widget layer. The
+/// actual `Color` values live with the theme, in `core/theme/studio_style.dart`,
+/// which asserts its palette is this long.
+const int kProjectColorCount = 6;
+
 class Project {
   final String id;
   final String name;
@@ -37,16 +41,6 @@ class Project {
     this.colorIndex = 0,
   });
 
-  static const colors = [
-    AppColors.accent,
-    AppColors.systemIndigo,
-    AppColors.systemBlue,
-    AppColors.systemGreen,
-    AppColors.systemOrange,
-    AppColors.systemPurple,
-  ];
-
-  Color get color => colors[colorIndex % colors.length];
 
   Project copyWith({
     String? name,

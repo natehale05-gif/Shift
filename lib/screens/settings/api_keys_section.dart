@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../services/providers/provider_descriptor.dart';
-import '../../state/api_keys_store.dart';
-import '../../theme/app_spacing.dart';
-import '../../theme/app_theme.dart';
+import '../../data/stores/api_keys_store.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 
 /// BYOK key management. Adding any provider key flips chat from Simulated to
 /// Live; removing the last one falls straight back to the mock. The list of

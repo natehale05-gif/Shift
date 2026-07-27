@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shift_ai/models/chat_message.dart';
-import 'package:shift_ai/models/conversation.dart';
-import 'package:shift_ai/services/persistence_service.dart';
+import 'package:shift_ai/data/models/chat_message.dart';
+import 'package:shift_ai/data/models/conversation.dart';
+import 'package:shift_ai/data/persistence/persistence_service.dart';
 
 Conversation _conversation(String id, {DateTime? updatedAt}) => Conversation(
       id: id,

@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
-import '../models/studio_result.dart';
+import '../data/models/studio_result.dart';
 
 /// Pure helpers for the Brand Pack studio: derive a deterministic palette and
 /// type pairing from the brand name, render brand guidelines, and zip the kit

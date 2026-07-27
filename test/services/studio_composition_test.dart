@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/artifact.dart';
-import 'package:shift_ai/models/conversation.dart';
-import 'package:shift_ai/models/studio_result.dart';
-import 'package:shift_ai/models/studio_type.dart';
+import 'package:shift_ai/data/models/artifact.dart';
+import 'package:shift_ai/data/models/conversation.dart';
+import 'package:shift_ai/data/models/studio_result.dart';
+import 'package:shift_ai/data/models/studio_type.dart';
 import 'package:shift_ai/services/artifact_composition.dart';
 import 'package:shift_ai/services/studio_composition.dart';
 

@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
-import '../models/artifact.dart';
-import '../models/conversation.dart';
-import '../models/studio_result.dart';
-import '../models/studio_type.dart';
+import '../data/models/artifact.dart';
+import '../data/models/conversation.dart';
+import '../data/models/studio_result.dart';
+import '../data/models/studio_type.dart';
 import 'artifact_composition.dart';
 import 'studio_response_bank.dart';
 

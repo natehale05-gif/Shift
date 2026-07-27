@@ -4,14 +4,14 @@ import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 
-import '../models/artifact.dart';
-import '../models/attachment.dart';
-import '../models/citation.dart';
-import '../models/conversation.dart';
-import '../models/studio_request.dart';
-import '../models/studio_result.dart';
-import '../models/studio_type.dart';
-import '../state/api_keys_store.dart';
+import '../data/models/artifact.dart';
+import '../data/models/attachment.dart';
+import '../data/models/citation.dart';
+import '../data/models/conversation.dart';
+import '../data/models/studio_request.dart';
+import '../data/models/studio_result.dart';
+import '../data/models/studio_type.dart';
+import '../data/stores/api_keys_store.dart';
 import 'artifact_composition.dart';
 import 'audio_synth_service.dart';
 import 'chat_service.dart';

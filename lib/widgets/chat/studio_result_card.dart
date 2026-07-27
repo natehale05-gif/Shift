@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 
-import '../../models/studio_result.dart';
+import '../../data/models/studio_result.dart';
 import '../../services/audio_synth_service.dart';
 import '../../services/brand_pack_service.dart';
 import '../../services/deck_pptx.dart';
@@ -16,8 +16,8 @@ import '../../services/open_url.dart';
 import '../../services/procedural_art.dart';
 import '../../services/short_reels_service.dart';
 import '../../services/web_audio_player.dart';
-import '../../theme/app_spacing.dart';
-import '../../theme/app_theme.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 import 'procedural_painters.dart';
 
 /// Renders a mock studio result inline in the chat. Every visual/audio/video

@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/ecopay_projection.dart';
-import '../../state/ecopay_calculator_store.dart';
-import '../../theme/app_spacing.dart';
-import '../../theme/app_theme.dart';
+import '../../data/models/ecopay_projection.dart';
+import '../../data/stores/ecopay_calculator_store.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 import '../../widgets/common/disclaimer_banner.dart';
 
 /// A purely client-side, illustrative earnings calculator mirroring the

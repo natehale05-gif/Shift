@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/project.dart';
-import '../services/persistence_service.dart';
+import '../persistence/persistence_service.dart';
 
 const _uuid = Uuid();
 
@@ -43,7 +43,7 @@ class ProjectStore extends ChangeNotifier {
     final project = Project(
       id: _uuid.v4(),
       name: name,
-      colorIndex: _projects.length % Project.colors.length,
+      colorIndex: _projects.length % kProjectColorCount,
     );
     _projects.add(project);
     _activeProjectId = project.id;

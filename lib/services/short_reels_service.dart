@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
-import '../models/studio_result.dart';
+import '../data/models/studio_result.dart';
 
 /// Pure helpers for the ShortReels studio: parse the topic + count, build the
 /// scripts prompt, parse the model's JSON, provide a templated fallback, render

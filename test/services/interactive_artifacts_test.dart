@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/artifact.dart';
+import 'package:shift_ai/data/models/artifact.dart';
 import 'package:shift_ai/services/interactive_artifacts.dart';
 
 void main() {

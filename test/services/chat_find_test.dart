@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/chat_message.dart';
+import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/services/chat_find.dart';
 
 ChatMessage _msg(String id, MessageRole role, String text) => ChatMessage(

@@ -1,14 +1,15 @@
+import '../../core/theme/studio_style.dart';
 import 'dart:convert';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/project.dart';
-import '../../state/conversation_store.dart';
-import '../../state/project_store.dart';
-import '../../theme/app_spacing.dart';
-import '../../theme/app_typography.dart';
+import '../../data/models/project.dart';
+import '../../data/stores/conversation_store.dart';
+import '../../data/stores/project_store.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_typography.dart';
 
 /// Bottom sheet for editing a project: name, custom instructions, and
 /// text knowledge documents.

@@ -1,10 +1,10 @@
 import 'dart:convert';
 
-import '../../models/attachment.dart';
-import '../../models/chat_message.dart';
-import '../../models/citation.dart';
-import '../../models/conversation.dart';
-import '../../models/usage_report.dart';
+import '../../data/models/attachment.dart';
+import '../../data/models/chat_message.dart';
+import '../../data/models/citation.dart';
+import '../../data/models/conversation.dart';
+import '../../data/models/usage_report.dart';
 import '../chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'anthropic_api_config.dart';

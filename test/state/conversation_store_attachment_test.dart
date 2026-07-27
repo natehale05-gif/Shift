@@ -2,12 +2,12 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shift_ai/models/attachment.dart';
-import 'package:shift_ai/models/conversation.dart';
-import 'package:shift_ai/models/studio_request.dart';
+import 'package:shift_ai/data/models/attachment.dart';
+import 'package:shift_ai/data/models/conversation.dart';
+import 'package:shift_ai/data/models/studio_request.dart';
 import 'package:shift_ai/services/chat_service.dart';
-import 'package:shift_ai/services/persistence_service.dart';
-import 'package:shift_ai/state/conversation_store.dart';
+import 'package:shift_ai/data/persistence/persistence_service.dart';
+import 'package:shift_ai/data/stores/conversation_store.dart';
 
 class _EchoService implements ChatService {
   @override

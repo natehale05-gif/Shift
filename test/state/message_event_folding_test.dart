@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/chat_message.dart';
-import 'package:shift_ai/models/citation.dart';
-import 'package:shift_ai/models/message_block.dart';
-import 'package:shift_ai/models/studio_type.dart';
-import 'package:shift_ai/models/usage_report.dart';
+import 'package:shift_ai/data/models/chat_message.dart';
+import 'package:shift_ai/data/models/citation.dart';
+import 'package:shift_ai/data/models/message_block.dart';
+import 'package:shift_ai/data/models/studio_type.dart';
+import 'package:shift_ai/data/models/usage_report.dart';
 import 'package:shift_ai/services/chat_service.dart';
 import 'package:shift_ai/state/message_event_folding.dart';
 

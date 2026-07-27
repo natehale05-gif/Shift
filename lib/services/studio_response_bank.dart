@@ -1,9 +1,9 @@
 import 'dart:math';
 
-import '../models/citation.dart';
-import '../models/studio_result.dart';
-import '../models/studio_request.dart';
-import '../models/studio_type.dart';
+import '../data/models/citation.dart';
+import '../data/models/studio_result.dart';
+import '../data/models/studio_request.dart';
+import '../data/models/studio_type.dart';
 import 'artifact_composition.dart';
 import 'brand_pack_service.dart';
 import 'deck_service.dart';

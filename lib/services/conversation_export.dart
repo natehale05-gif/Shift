@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import '../models/chat_message.dart';
-import '../models/conversation.dart';
+import '../data/models/chat_message.dart';
+import '../data/models/conversation.dart';
 import 'download_service.dart';
 import 'web/print_service.dart';
 

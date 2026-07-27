@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/project.dart';
+import 'package:shift_ai/data/models/project.dart';
 import 'package:shift_ai/services/prompt_assembler.dart';
 
 void main() {

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../models/artifact.dart';
-import '../../theme/app_spacing.dart';
+import '../../data/models/artifact.dart';
+import '../../core/theme/app_spacing.dart';
 import '../chat/markdown_message.dart';
 import 'artifact_code_view.dart';
 import 'iframe_view_stub.dart'

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../services/js_sandbox_service.dart';
-import '../../theme/app_spacing.dart';
+import '../../core/theme/app_spacing.dart';
 
 /// Console drawer under an artifact preview, showing output captured from a
 /// sandboxed JavaScript run.

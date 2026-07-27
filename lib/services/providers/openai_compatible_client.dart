@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import '../../models/attachment.dart';
-import '../../models/chat_message.dart';
-import '../../models/conversation.dart';
-import '../../models/usage_report.dart';
+import '../../data/models/attachment.dart';
+import '../../data/models/chat_message.dart';
+import '../../data/models/conversation.dart';
+import '../../data/models/usage_report.dart';
 import '../chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'openai_compatible_config.dart';

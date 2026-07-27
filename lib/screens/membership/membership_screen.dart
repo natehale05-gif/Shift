@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/membership_tier.dart';
-import '../../state/app_settings_store.dart';
-import '../../theme/app_spacing.dart';
+import '../../data/models/membership_tier.dart';
+import '../../data/stores/app_settings_store.dart';
+import '../../core/theme/app_spacing.dart';
 import '../../widgets/common/disclaimer_banner.dart';
 import '../../widgets/common/glass_app_bar.dart';
 import '../../widgets/common/home_menu_button.dart';

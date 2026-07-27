@@ -1,10 +1,10 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/artifact.dart';
-import 'package:shift_ai/models/chat_message.dart';
-import 'package:shift_ai/models/conversation.dart';
-import 'package:shift_ai/models/message_block.dart';
+import 'package:shift_ai/data/models/artifact.dart';
+import 'package:shift_ai/data/models/chat_message.dart';
+import 'package:shift_ai/data/models/conversation.dart';
+import 'package:shift_ai/data/models/message_block.dart';
 
 void main() {
   test('v1 message JSON (no blocks) migrates to a single TextBlock', () {

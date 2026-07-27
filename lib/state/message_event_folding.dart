@@ -1,5 +1,5 @@
-import '../models/chat_message.dart';
-import '../models/message_block.dart';
+import '../data/models/chat_message.dart';
+import '../data/models/message_block.dart';
 import '../services/chat_service.dart';
 
 /// Stable block id for the deep-research progress chip (one per message).

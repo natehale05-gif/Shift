@@ -1,4 +1,4 @@
-import '../models/project.dart';
+import '../data/models/project.dart';
 
 /// Budget for inlined project knowledge, in characters — roughly 4k tokens.
 /// Real providers get the same assembled prompt, so the budget applies

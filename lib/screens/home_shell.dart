@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../state/conversation_store.dart';
-import '../state/home_shell_controller.dart';
+import '../data/stores/conversation_store.dart';
+import '../core/state/home_shell_controller.dart';
 import '../widgets/common/app_sidebar.dart';
 import '../widgets/common/command_palette.dart';
 import '../widgets/common/keyboard_shortcuts_sheet.dart';

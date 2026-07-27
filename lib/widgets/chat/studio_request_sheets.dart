@@ -1,8 +1,9 @@
+import '../../core/theme/studio_style.dart';
 import 'package:flutter/material.dart';
 
-import '../../models/studio_request.dart';
-import '../../models/studio_type.dart';
-import '../../theme/app_spacing.dart';
+import '../../data/models/studio_request.dart';
+import '../../data/models/studio_type.dart';
+import '../../core/theme/app_spacing.dart';
 
 /// Opens the structured-input bottom sheet for [studioType] and returns the
 /// submitted [StudioRequest], or null if the user dismissed it.

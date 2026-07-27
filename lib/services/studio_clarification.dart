@@ -1,6 +1,6 @@
-import '../models/chat_message.dart';
-import '../models/conversation.dart';
-import '../models/studio_type.dart';
+import '../data/models/chat_message.dart';
+import '../data/models/conversation.dart';
+import '../data/models/studio_type.dart';
 
 /// If the previous assistant turn asked a clarifying question about a
 /// studio request, returns the studio and the original request text — so a

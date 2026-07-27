@@ -9,9 +9,9 @@ import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../models/message_block.dart';
 import '../models/studio_request.dart';
-import '../services/chat_service.dart';
-import '../services/persistence_service.dart';
-import 'message_event_folding.dart';
+import '../../services/chat_service.dart';
+import '../persistence/persistence_service.dart';
+import '../../state/message_event_folding.dart';
 
 const _uuid = Uuid();
 

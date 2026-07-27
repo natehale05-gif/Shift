@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/artifact.dart';
+import 'package:shift_ai/data/models/artifact.dart';
 import 'package:shift_ai/services/js_sandbox_service.dart';
-import 'package:shift_ai/state/artifact_panel_store.dart';
+import 'package:shift_ai/core/state/artifact_panel_store.dart';
 
 void main() {
   group('parseSandboxMessage', () {

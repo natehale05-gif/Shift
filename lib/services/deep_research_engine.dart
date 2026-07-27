@@ -1,7 +1,7 @@
 import 'package:uuid/uuid.dart';
 
-import '../models/artifact.dart';
-import '../models/citation.dart';
+import '../data/models/artifact.dart';
+import '../data/models/citation.dart';
 import 'chat_service.dart';
 
 const _uuid = Uuid();

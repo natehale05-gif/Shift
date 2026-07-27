@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../models/studio_result.dart';
+import '../data/models/studio_result.dart';
 
 /// Pure helpers for the Deck studio: pull the topic + slide count from a
 /// request, build the outline prompt, parse the model's JSON outline, provide a

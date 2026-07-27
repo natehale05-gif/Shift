@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 
-import '../../theme/app_spacing.dart';
+import '../../core/theme/app_spacing.dart';
 
 /// The artifact panel's "Code" tab: highlighted read-only source on the
 /// same fixed dark chrome as chat code blocks. Single-direction scrolling

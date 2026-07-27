@@ -1,13 +1,14 @@
+import '../../core/theme/studio_style.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/conversation.dart';
-import '../../models/project.dart';
+import '../../data/models/conversation.dart';
+import '../../data/models/project.dart';
 import '../../services/conversation_export.dart';
-import '../../state/conversation_store.dart';
-import '../../state/project_store.dart';
-import '../../theme/app_spacing.dart';
-import '../../theme/app_theme.dart';
+import '../../data/stores/conversation_store.dart';
+import '../../data/stores/project_store.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 import 'project_detail_sheet.dart';
 
 class ConversationSidebar extends StatefulWidget {

@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 
 import '../models/writing_style.dart';
-import '../services/persistence_service.dart';
+import '../persistence/persistence_service.dart';
 
 const _uuid = Uuid();
 

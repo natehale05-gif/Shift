@@ -1,13 +1,13 @@
 import 'dart:typed_data';
 
-import '../models/artifact.dart';
-import '../models/attachment.dart';
-import '../models/citation.dart';
-import '../models/conversation.dart';
-import '../models/studio_request.dart';
-import '../models/studio_result.dart';
-import '../models/studio_type.dart';
-import '../models/usage_report.dart';
+import '../data/models/artifact.dart';
+import '../data/models/attachment.dart';
+import '../data/models/citation.dart';
+import '../data/models/conversation.dart';
+import '../data/models/studio_request.dart';
+import '../data/models/studio_result.dart';
+import '../data/models/studio_type.dart';
+import '../data/models/usage_report.dart';
 
 sealed class ChatEvent {
   const ChatEvent();

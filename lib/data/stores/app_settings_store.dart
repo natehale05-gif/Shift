@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/membership_tier.dart';
-import '../services/persistence_service.dart';
+import '../persistence/persistence_service.dart';
 
 /// App-wide settings: theme mode and the demo-only "selected membership
 /// tier" (never a real purchase — see [MembershipTier]).

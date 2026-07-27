@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../services/persistence_service.dart';
+import '../persistence/persistence_service.dart';
 
 /// The user's global personalization — what to call them, what they do, the
 /// traits SHIFT AI should have, a response style, and standing custom

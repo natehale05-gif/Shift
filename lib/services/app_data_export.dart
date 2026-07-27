@@ -3,9 +3,9 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
-import '../models/conversation.dart';
-import '../models/memory_entry.dart';
-import '../models/project.dart';
+import '../data/models/conversation.dart';
+import '../data/models/memory_entry.dart';
+import '../data/models/project.dart';
 import 'download_service.dart';
 
 /// Bundles everything the app stores for this user into one downloadable

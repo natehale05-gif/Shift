@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
-import '../models/studio_result.dart';
+import '../data/models/studio_result.dart';
 
 /// Builds a real, openable `.pptx` (OOXML presentation) from a [DeckResult].
 ///

@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-import '../services/persistence_service.dart';
+import '../persistence/persistence_service.dart';
 
 /// A demo-only usage counter, modelled on Claude's plan-limit indicator. It
 /// counts messages sent per day against an illustrative cap and rolls over at

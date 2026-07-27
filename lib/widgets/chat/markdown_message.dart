@@ -5,8 +5,8 @@ import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../../services/mermaid_service.dart';
-import '../../theme/app_spacing.dart';
-import '../../theme/app_theme.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 import '../artifacts/iframe_view_stub.dart'
     if (dart.library.html) '../artifacts/iframe_view_web.dart';
 

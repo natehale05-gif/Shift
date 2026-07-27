@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/models/studio_result.dart';
+import 'package:shift_ai/data/models/studio_result.dart';
 import 'package:shift_ai/services/deck_pptx.dart';
 
 void main() {

@@ -3,11 +3,11 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
-import '../../models/attachment.dart';
-import '../../models/chat_message.dart';
-import '../../models/citation.dart';
-import '../../models/conversation.dart';
-import '../../models/usage_report.dart';
+import '../../data/models/attachment.dart';
+import '../../data/models/chat_message.dart';
+import '../../data/models/citation.dart';
+import '../../data/models/conversation.dart';
+import '../../data/models/usage_report.dart';
 import '../chat_service.dart';
 import '../streaming/http_client_stub.dart'
     if (dart.library.html) '../streaming/http_client_web.dart';

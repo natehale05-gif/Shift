@@ -5,13 +5,13 @@ import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 
-import '../models/artifact.dart';
-import '../models/attachment.dart';
-import '../models/conversation.dart';
-import '../models/studio_request.dart';
-import '../models/studio_result.dart';
-import '../models/studio_type.dart';
-import '../models/usage_report.dart';
+import '../data/models/artifact.dart';
+import '../data/models/attachment.dart';
+import '../data/models/conversation.dart';
+import '../data/models/studio_request.dart';
+import '../data/models/studio_result.dart';
+import '../data/models/studio_type.dart';
+import '../data/models/usage_report.dart';
 import 'artifact_composition.dart';
 import 'audio_synth_service.dart';
 import 'chat_service.dart';

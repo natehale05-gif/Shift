@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../state/home_shell_controller.dart';
+import '../../core/state/home_shell_controller.dart';
 
 /// The one hamburger control every top-level screen uses to reach the
 /// shell's sidebar: on wide layouts it toggles the persistent collapsible

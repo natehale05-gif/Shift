@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shift_ai/models/artifact.dart';
-import 'package:shift_ai/models/message_block.dart';
+import 'package:shift_ai/data/models/artifact.dart';
+import 'package:shift_ai/data/models/message_block.dart';
 import 'package:shift_ai/services/mock_chat_service.dart';
-import 'package:shift_ai/services/persistence_service.dart';
-import 'package:shift_ai/state/conversation_store.dart';
+import 'package:shift_ai/data/persistence/persistence_service.dart';
+import 'package:shift_ai/data/stores/conversation_store.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import '../models/artifact.dart';
+import '../data/models/artifact.dart';
 
 /// The kinds of interactive artifact SHIFT AI can build — self-contained
 /// HTML+CSS+JS widgets that run live in the artifact panel's sandboxed iframe,

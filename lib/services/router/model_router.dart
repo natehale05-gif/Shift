@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-import '../../models/studio_type.dart';
-import '../../state/api_keys_store.dart';
+import '../../data/models/studio_type.dart';
+import '../../data/stores/api_keys_store.dart';
 import '../providers/anthropic_api_config.dart';
 import '../providers/anthropic_client.dart';
 import '../providers/gemini_client.dart';

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../models/membership_tier.dart';
-import '../../theme/app_spacing.dart';
-import '../../theme/app_theme.dart';
+import '../../data/models/membership_tier.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 
 class PayoutStreamCard extends StatelessWidget {
   final PayoutStream stream;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_spacing.dart';
-import '../../theme/app_theme.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_theme.dart';
 import '../../widgets/common/glass_app_bar.dart';
 import '../../widgets/common/home_menu_button.dart';
 

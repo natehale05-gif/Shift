@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/memory_entry.dart';
+import '../../data/models/memory_entry.dart';
 import '../../services/app_data_export.dart';
-import '../../state/app_settings_store.dart';
-import '../../state/conversation_store.dart';
-import '../../state/memory_store.dart';
-import '../../state/project_store.dart';
-import '../../state/styles_store.dart';
-import '../../state/user_prefs_store.dart';
+import '../../data/stores/app_settings_store.dart';
+import '../../data/stores/conversation_store.dart';
+import '../../data/stores/memory_store.dart';
+import '../../data/stores/project_store.dart';
+import '../../data/stores/styles_store.dart';
+import '../../data/stores/user_prefs_store.dart';
 import '../../widgets/common/style_editor.dart';
-import '../../theme/app_spacing.dart';
+import '../../core/theme/app_spacing.dart';
 import 'api_keys_section.dart';
-import '../../theme/app_theme.dart';
+import '../../core/theme/app_theme.dart';
 import '../../widgets/common/glass_app_bar.dart';
 import '../../widgets/common/home_menu_button.dart';
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_spacing.dart';
+import '../../core/theme/app_spacing.dart';
 
 /// Create/edit dialog for a custom response style. Returns (name, instructions)
 /// or null if cancelled. Shared by the composer style picker and Settings.
