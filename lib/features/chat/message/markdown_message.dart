@@ -4,11 +4,11 @@ import 'package:flutter_highlight/flutter_highlight.dart';
 import 'package:flutter_highlight/themes/atom-one-dark.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 
-import '../../services/mermaid_service.dart';
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_theme.dart';
-import '../artifacts/iframe_view_stub.dart'
-    if (dart.library.html) '../artifacts/iframe_view_web.dart';
+import '../../../services/mermaid_service.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../widgets/artifacts/iframe_view_stub.dart'
+    if (dart.library.html) '../../../widgets/artifacts/iframe_view_web.dart';
 
 /// Renders assistant markdown. This is the only file that touches the
 /// markdown package directly — if gpt_markdown ever needs replacing, the

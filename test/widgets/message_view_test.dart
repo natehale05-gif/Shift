@@ -8,7 +8,7 @@ import 'package:shift_ai/data/persistence/persistence_service.dart';
 import 'package:shift_ai/data/stores/api_keys_store.dart';
 import 'package:shift_ai/data/stores/conversation_store.dart';
 import 'package:shift_ai/core/theme/app_theme.dart';
-import 'package:shift_ai/widgets/chat/message_view.dart';
+import 'package:shift_ai/features/chat/message/message_view.dart';
 
 const _markdownFixture = '''
 # Release notes

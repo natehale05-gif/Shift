@@ -18,10 +18,8 @@ import 'chat_service.dart';
 import '../turn/plan_turn.dart';
 import '../turn/turn_input.dart';
 import '../turn/turn_plan.dart';
-import 'diagram_detection.dart';
 import 'interactive_artifacts.dart';
 import 'procedural_art.dart';
-import 'studio_clarification.dart';
 import 'studio_composition.dart';
 import 'studio_response_bank.dart';
 

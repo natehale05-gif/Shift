@@ -5,7 +5,7 @@ import '../../data/stores/user_prefs_store.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
-import '../chat/conversation_sidebar.dart';
+import '../../features/chat/conversation_sidebar.dart';
 import 'liquid_glass.dart';
 
 class SidebarDestination {

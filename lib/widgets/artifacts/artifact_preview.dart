@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../data/models/artifact.dart';
 import '../../core/theme/app_spacing.dart';
-import '../chat/markdown_message.dart';
+import '../../features/chat/message/markdown_message.dart';
 import 'artifact_code_view.dart';
 import 'iframe_view_stub.dart'
     if (dart.library.html) 'iframe_view_web.dart';

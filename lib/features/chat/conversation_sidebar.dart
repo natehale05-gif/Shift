@@ -9,7 +9,7 @@ import '../../data/stores/conversation_store.dart';
 import '../../data/stores/project_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
-import 'project_detail_sheet.dart';
+import '../../widgets/chat/project_detail_sheet.dart';
 
 class ConversationSidebar extends StatefulWidget {
   /// Called after "New chat" is pressed or a conversation is selected —

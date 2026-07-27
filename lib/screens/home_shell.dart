@@ -7,7 +7,7 @@ import '../core/state/home_shell_controller.dart';
 import '../widgets/common/app_sidebar.dart';
 import '../widgets/common/command_palette.dart';
 import '../widgets/common/keyboard_shortcuts_sheet.dart';
-import 'chat/chat_screen.dart';
+import '../features/chat/chat_screen.dart';
 import 'culture/culture_screen.dart';
 import 'membership/membership_screen.dart';
 import 'settings/settings_screen.dart';

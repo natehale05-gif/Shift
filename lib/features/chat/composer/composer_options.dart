@@ -1,0 +1,65 @@
+import '../../../data/stores/conversation_store.dart';
+import '../../../data/stores/memory_store.dart';
+import '../../../data/stores/project_store.dart';
+import '../../../data/stores/styles_store.dart';
+import '../../../data/stores/user_prefs_store.dart';
+import '../../../services/chat_service.dart';
+import '../../../services/prompt_assembler.dart';
+
+/// The per-turn choices the composer collects — model pin, writing style, and
+/// the tool toggles — plus the rule for turning them into [ChatOptions].
+///
+/// Kept out of the composer widget deliberately: [build] resolves the active
+/// writing style (built-in or custom) and assembles the system prompt, and that
+/// logic is worth testing on its own rather than only through a pumped widget.
+class ComposerOptions {
+  /// Exact model id pinned from the model chip; null = auto-route.
+  String? modelPin;
+
+  /// Per-conversation style override; null = use the global setting.
+  String? styleOverride;
+
+  // Tool toggles (mirror Claude's tools/plus menu). All feed the per-turn
+  // ChatOptions and drive real behaviour in both live and demo modes.
+  bool webSearch = false;
+  bool deepResearch = false;
+  bool codeExecution = false;
+  bool extendedThinking = true;
+
+  /// Builds the options for one turn.
+  ///
+  /// The system prompt follows the same precedence the UI implies: the
+  /// conversation's own project wins; otherwise the sidebar's active project
+  /// applies. A *custom* style passes its instructions through
+  /// `styleInstruction` and reports itself as 'normal', so a user-authored
+  /// style overrides the built-in clauses rather than stacking with them.
+  ChatOptions build({
+    required UserPrefsStore prefs,
+    required ProjectStore projects,
+    required ConversationStore conversations,
+    required MemoryStore memory,
+    required StylesStore styles,
+  }) {
+    final project = projects.projectById(conversations.current?.projectId) ??
+        projects.activeProject;
+    final styleId = styleOverride ?? prefs.responseStyle;
+    final customStyle = styles.styleById(styleId);
+    return ChatOptions(
+      modelPin: modelPin,
+      webSearch: webSearch,
+      deepResearch: deepResearch,
+      codeExecution: codeExecution,
+      extendedThinking: extendedThinking,
+      systemPrompt: assembleSystemPrompt(
+        nickname: prefs.nickname,
+        role: prefs.role,
+        traits: prefs.traits,
+        responseStyle: customStyle == null ? styleId : 'normal',
+        styleInstruction: customStyle?.instructions ?? '',
+        customInstructions: prefs.customInstructions,
+        project: project,
+        memories: memory.activeTexts,
+      ),
+    );
+  }
+}
