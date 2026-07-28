@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/services/procedural_art.dart';
+import 'package:shift_ai/features/studios/media/procedural_art.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

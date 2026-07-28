@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/services/short_reels_service.dart';
+import 'package:shift_ai/features/studios/short_reels/short_reels_service.dart';
 
 void main() {
   group('parseReelsRequest', () {

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/services/deck_service.dart';
+import 'package:shift_ai/features/studios/deck/deck_service.dart';
 
 void main() {
   group('parseDeckRequest', () {

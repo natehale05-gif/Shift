@@ -5,11 +5,11 @@ import '../data/models/studio_result.dart';
 import '../data/models/studio_request.dart';
 import '../data/models/studio_type.dart';
 import '../features/artifacts/artifact_composition.dart';
-import 'brand_pack_service.dart';
-import 'deck_service.dart';
+import '../features/studios/brand_pack/brand_pack_service.dart';
+import '../features/studios/deck/deck_service.dart';
 import 'download_service.dart';
-import 'short_reels_service.dart';
-import 'translate_service.dart';
+import '../features/studios/short_reels/short_reels_service.dart';
+import '../features/studios/translate/translate_service.dart';
 
 /// Canned templates and keyword tables backing [MockChatService]. Every
 /// "generated" asset here is fabricated client-side — there is no real
@@ -17,77 +17,7 @@ import 'translate_service.dart';
 class StudioResponseBank {
   StudioResponseBank._();
 
-  static const Map<StudioType, List<String>> _keywords = {
-    // The new deliverable/specific studios are checked first so they win over
-    // the broader Image/Video/Music keywords.
-    StudioType.translateStudio: [
-      'translate', 'translation', 'translated', 'localize', 'localise',
-      'localization', 'localisation',
-    ],
-    StudioType.deckStudio: [
-      'slide deck', 'slides', 'powerpoint', 'power point', 'pptx', 'keynote',
-      'pitch deck', 'presentation', 'deck',
-    ],
-    StudioType.brandPackStudio: [
-      'brand pack', 'brand kit', 'brand bundle', 'brand assets',
-      'brand identity', 'brand guidelines', 'logo pack', 'style guide',
-      'brand book',
-    ],
-    StudioType.shortReelsStudio: [
-      'shortreels', 'short reels', 'reels pack', 'short-form', 'short form',
-      'shorts', 'tiktok', 'tiktoks', 'batch of reels', 'reels for',
-    ],
-    StudioType.avatarStudio: [
-      'avatar', 'talking head', 'talking-head', 'spokesperson',
-      'presenter video', 'digital human',
-    ],
-    StudioType.voiceStudio: [
-      'voiceover', 'voice over', 'voice-over', 'narrate', 'narration',
-      'read aloud', 'text to speech', 'text-to-speech', 'tts',
-      'clone my voice', 'dub', 'voice',
-    ],
-    StudioType.imageStudio: [
-      'image', 'photo', 'picture', 'logo', 'product shot', 'ad creative',
-      'poster', 'graphic', 'illustration', 'thumbnail', 'banner',
-    ],
-    StudioType.videoStudio: [
-      'video', 'clip', 'reel', 'movie', 'trailer', 'ad video',
-      'commercial', 'footage',
-    ],
-    StudioType.musicStudio: [
-      'music', 'song', 'beat', 'soundtrack', 'jingle', 'track', 'audio bed',
-    ],
-    StudioType.copyScriptsStudio: [
-      // Note: a compound phrase containing "video" (e.g. "video script")
-      // would still match videoStudio's bare "video" keyword first, since
-      // that studio is checked earlier below — reasonable, since wanting a
-      // video script often does mean wanting the video itself.
-      'caption', 'hook', 'sales letter', 'ad copy', 'headline', 'tagline',
-      'email copy', 'ad script', 'sales script',
-    ],
-    StudioType.codeStudio: [
-      'code', 'function', 'algorithm', 'debug', 'refactor', 'programming',
-      'python', 'javascript', 'typescript', 'dart', 'swift', 'sql query',
-      'regex', 'bug fix', 'unit test', 'api endpoint', 'shell script',
-      'script', // bare "script" reads as a programming script in this app
-      // Page-building requests are code requests (they produce runnable
-      // HTML artifacts).
-      'landing page', 'website', 'web page', 'webpage', 'html', 'homepage',
-    ],
-  };
 
-  /// Keyword/regex intent detection over free-form chat text. Returns
-  /// [StudioType.middleware] when nothing matches — the middleware AI
-  /// answers directly rather than routing anywhere.
-  static StudioType detectStudio(String input) {
-    final lower = input.toLowerCase();
-    for (final entry in _keywords.entries) {
-      for (final keyword in entry.value) {
-        if (lower.contains(keyword)) return entry.key;
-      }
-    }
-    return StudioType.middleware;
-  }
 
   /// A direct, simulated answer — no "middleware" framing, no talk of routing
   /// or studios. In demo mode this stands in for whichever model would answer.
@@ -322,29 +252,9 @@ class StudioResponseBank {
         (acc, c) => (acc * 31 + c) & 0x7fffffff,
       );
 
-  static const _searchKeywords = [
-    'search', 'news', 'latest', 'today', 'this week', 'current',
-    'what happened', 'who won', 'look up', 'find out', 'research',
-  ];
 
-  /// Whether the prompt reads like it wants fresh information from the web
-  /// (drives the mock's simulated web-search tool pass).
-  static bool wantsWebSearch(String input) {
-    final lower = input.toLowerCase();
-    return _searchKeywords.any(lower.contains);
-  }
 
-  static const _htmlArtifactKeywords = [
-    'landing page', 'website', 'web page', 'webpage', 'html page',
-    'portfolio page', 'homepage',
-  ];
 
-  /// Whether a code-routed prompt should produce a runnable HTML artifact
-  /// rather than a plain code file.
-  static bool wantsHtmlArtifact(String input) {
-    final lower = input.toLowerCase();
-    return _htmlArtifactKeywords.any(lower.contains);
-  }
 
   /// Short simulated reasoning, streamed into the collapsed thinking
   /// disclosure before the reply.

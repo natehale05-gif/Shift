@@ -1,3 +1,4 @@
+import '../../turn/studio_detection.dart';
 import 'dart:convert';
 
 import '../../data/models/studio_type.dart';
@@ -103,9 +104,9 @@ ChatRoute routeForStudio(StudioType studio) => switch (studio) {
 /// Maps the existing keyword tables onto routes — the no-key (and
 /// LLM-parse-failure) fallback, so routing never breaks.
 ChatRoute keywordRoute(String input) {
-  final studio = StudioResponseBank.detectStudio(input);
+  final studio = StudioDetection.detectStudio(input);
   if (studio == StudioType.middleware) {
-    return StudioResponseBank.wantsWebSearch(input)
+    return StudioDetection.wantsWebSearch(input)
         ? ChatRoute.webSearch
         : ChatRoute.chat;
   }

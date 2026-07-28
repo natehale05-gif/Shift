@@ -1,10 +1,11 @@
-import 'dart:convert';
 
-import '../data/models/studio_result.dart';
 
 /// Pure helpers for the Deck studio: pull the topic + slide count from a
 /// request, build the outline prompt, parse the model's JSON outline, provide a
 /// templated fallback, and render an HTML deck for the artifact panel.
+import '../../../data/models/studio_result.dart';
+import 'dart:convert';
+
 class DeckService {
   DeckService._();
 

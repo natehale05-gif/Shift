@@ -5,7 +5,7 @@ import '../../../data/models/chat_message.dart';
 import '../../../data/models/message_block.dart';
 import '../../../core/theme/app_spacing.dart';
 import 'markdown_message.dart';
-import '../../../widgets/chat/studio_result_card.dart';
+import '../../studios/studio_result_card.dart';
 import 'typing_indicator.dart';
 
 /// Claude-style message layout: user turns are compact right-aligned bubbles;

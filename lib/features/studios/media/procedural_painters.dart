@@ -1,11 +1,12 @@
-import 'dart:math';
-import 'package:flutter/material.dart';
 
-import '../../services/procedural_art.dart';
 
 /// Paints a seeded abstract gradient composition standing in for a real
 /// diffusion-model image. Fully procedural — no network image, no bundled
 /// stock asset, no licensing concerns.
+import 'dart:math';
+import 'package:flutter/material.dart';
+import 'procedural_art.dart';
+
 class GradientArtPainter extends CustomPainter {
   final int seed;
   final List<Color> palette;

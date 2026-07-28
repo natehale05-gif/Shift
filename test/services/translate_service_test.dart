@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/services/translate_service.dart';
+import 'package:shift_ai/features/studios/translate/translate_service.dart';
 
 void main() {
   group('parseTargetLanguage', () {

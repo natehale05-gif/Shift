@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:math';
-import 'dart:typed_data';
 
 /// Synthesizes a short, deterministic mono WAV file from a seed — a
 /// procedurally generated tone sequence standing in for real AI-generated
@@ -8,6 +5,10 @@ import 'dart:typed_data';
 /// Deterministic (same seed -> same bytes) so nothing needs to be persisted:
 /// [AudioResult] only stores the seed/params, and both playback and
 /// download regenerate the same audio on demand.
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+
 class AudioSynthService {
   AudioSynthService._();
 

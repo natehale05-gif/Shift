@@ -1,3 +1,4 @@
+import '../turn/studio_detection.dart';
 import '../features/artifacts/interactive/interactive_render.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -14,13 +15,13 @@ import '../data/models/studio_result.dart';
 import '../data/models/studio_type.dart';
 import '../data/models/usage_report.dart';
 import '../features/artifacts/artifact_composition.dart';
-import 'audio_synth_service.dart';
+import '../features/studios/media/audio_synth_service.dart';
 import 'chat_service.dart';
 import '../turn/plan_turn.dart';
 import '../turn/turn_input.dart';
 import '../turn/turn_plan.dart';
 import '../features/artifacts/interactive/interactive_content.dart';
-import 'procedural_art.dart';
+import '../features/studios/media/procedural_art.dart';
 import 'studio_composition.dart';
 import 'studio_response_bank.dart';
 
@@ -514,7 +515,7 @@ class MockChatService implements ChatService {
     StudioResult result, {
     Set<StudioType> pageContributors = const {},
   }) async {
-    final wantsHtml = StudioResponseBank.wantsHtmlArtifact(userInput);
+    final wantsHtml = StudioDetection.wantsHtmlArtifact(userInput);
     final now = DateTime.now();
 
     final existing =

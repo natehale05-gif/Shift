@@ -1,10 +1,11 @@
+
+
+
+import '../../../core/theme/app_colors.dart';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-
 import 'package:flutter/material.dart';
-
-import '../core/theme/app_colors.dart';
 
 const proceduralArtPalette = [
   AppColors.accent,

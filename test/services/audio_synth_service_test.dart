@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/services/audio_synth_service.dart';
+import 'package:shift_ai/features/studios/media/audio_synth_service.dart';
 
 void main() {
   group('AudioSynthService.synthesizeWav', () {

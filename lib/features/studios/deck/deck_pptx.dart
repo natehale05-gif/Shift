@@ -1,9 +1,5 @@
-import 'dart:convert';
-import 'dart:typed_data';
 
-import 'package:archive/archive.dart';
 
-import '../data/models/studio_result.dart';
 
 /// Builds a real, openable `.pptx` (OOXML presentation) from a [DeckResult].
 ///
@@ -11,6 +7,11 @@ import '../data/models/studio_result.dart';
 /// theme, one slide master + layout, and one slide per [DeckSlide] with a title
 /// shape and a bulleted body shape. Pure — no I/O — so it is unit-testable by
 /// decoding the returned bytes.
+import '../../../data/models/studio_result.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+import 'package:archive/archive.dart';
+
 class DeckPptx {
   DeckPptx._();
 

@@ -1,3 +1,4 @@
+import 'studio_detection.dart';
 import '../data/models/studio_type.dart';
 import '../services/diagram_detection.dart';
 import '../features/artifacts/interactive/interactive_content.dart';
@@ -58,7 +59,7 @@ TurnPlan planTurn(TurnInput input) {
                   ? mediaPairHost(plan.kind)
                   : (structuredRequest?.studioType ??
                       pending?.$1 ??
-                      StudioResponseBank.detectStudio(userInput));
+                      StudioDetection.detectStudio(userInput));
 
   final effectiveInput =
       pending != null ? '${pending.$2} $userInput'.trim() : userInput;
@@ -92,7 +93,7 @@ TurnPlan planTurn(TurnInput input) {
   }
 
   if (studio == StudioType.middleware &&
-      (options.webSearch || StudioResponseBank.wantsWebSearch(userInput))) {
+      (options.webSearch || StudioDetection.wantsWebSearch(userInput))) {
     return WebSearchTurn(
       studio: studio,
       effectiveInput: effectiveInput,

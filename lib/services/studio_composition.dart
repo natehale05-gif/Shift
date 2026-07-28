@@ -1,3 +1,4 @@
+import '../turn/studio_detection.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -75,7 +76,7 @@ class CompositionPlan {
 
 // Per-contributor trigger phrases, tuned for *explicit* multi-studio
 // requests. These are intentionally separate from
-// `StudioResponseBank.detectStudio`'s single-studio keyword tables: a combo
+// `StudioDetection.detectStudio`'s single-studio keyword tables: a combo
 // only fires when the user clearly names the contributor, so a plain
 // "build me a landing page" stays code-only.
 const _imageTriggers = [
@@ -110,12 +111,12 @@ bool _mentions(String lower, List<String> triggers) =>
 
 /// Every studio a prompt *explicitly* names (multi-label), used to decide
 /// which studios collaborate on a turn. Unlike
-/// `StudioResponseBank.detectStudio` (first-match, single studio), this
+/// `StudioDetection.detectStudio` (first-match, single studio), this
 /// returns the full set.
 Set<StudioType> detectStudios(String input) {
   final lower = input.toLowerCase();
   return {
-    if (StudioResponseBank.wantsHtmlArtifact(input)) StudioType.codeStudio,
+    if (StudioDetection.wantsHtmlArtifact(input)) StudioType.codeStudio,
     if (_mentions(lower, _imageTriggers)) StudioType.imageStudio,
     if (_mentions(lower, _copyTriggers)) StudioType.copyScriptsStudio,
     if (_mentions(lower, _musicTriggers)) StudioType.musicStudio,
