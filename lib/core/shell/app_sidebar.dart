@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/stores/user_prefs_store.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_theme.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_theme.dart';
 import '../../features/chat/conversation_sidebar.dart';
-import 'liquid_glass.dart';
+import '../widgets/liquid_glass.dart';
 
 class SidebarDestination {
   final IconData icon;

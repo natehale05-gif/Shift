@@ -8,7 +8,7 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/citation.dart';
 import '../../data/models/conversation.dart';
 import '../../data/models/usage_report.dart';
-import '../../services/chat_service.dart';
+import '../../turn/chat_service.dart';
 import '../streaming/http_client_stub.dart'
     if (dart.library.html) '../streaming/http_client_web.dart';
 import '../streaming/sse_client.dart';

@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/models/message_block.dart';
-import '../../../services/download_service.dart';
+import '../../../core/platform/download_service.dart';
 import '../../../data/stores/conversation_store.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';

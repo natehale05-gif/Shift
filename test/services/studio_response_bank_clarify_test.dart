@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
-import 'package:shift_ai/services/studio_response_bank.dart';
+import 'package:shift_ai/features/studios/studio_response_bank.dart';
 
 void main() {
   group('clarifyingQuestion', () {

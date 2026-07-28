@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models/artifact.dart';
-import '../../services/download_service.dart';
+import '../../core/platform/download_service.dart';
 import 'js_sandbox_service.dart';
 import '../../core/state/artifact_panel_store.dart';
 import '../../data/stores/conversation_store.dart';

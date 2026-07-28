@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/services/live/live_audio_utils.dart';
+import 'package:shift_ai/features/voice/live_audio_utils.dart';
 
 void main() {
   test('downsample 48k→16k produces one sample per three inputs', () {

@@ -3,9 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/data/models/attachment.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/studio_request.dart';
-import 'package:shift_ai/services/chat_service.dart';
+import 'package:shift_ai/turn/chat_service.dart';
 import 'package:shift_ai/data/persistence/persistence_service.dart';
-import 'package:shift_ai/services/real_chat_service.dart';
+import 'package:shift_ai/turn/backends/live_backend.dart';
 import 'package:shift_ai/data/stores/api_keys_store.dart';
 
 class _MarkerService implements ChatService {

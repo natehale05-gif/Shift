@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/memory_entry.dart';
 import 'package:shift_ai/data/models/project.dart';
-import 'package:shift_ai/services/app_data_export.dart';
+import 'package:shift_ai/features/settings/app_data_export.dart';
 
 void main() {
   test('buildZip produces a valid archive with all data parts', () {

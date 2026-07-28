@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/conversation.dart';
-import 'package:shift_ai/services/chat_service.dart';
+import 'package:shift_ai/turn/chat_service.dart';
 import 'package:shift_ai/providers/clients/anthropic_client.dart';
 import 'package:shift_ai/providers/clients/anthropic_stream_accumulator.dart';
 import 'package:shift_ai/providers/streaming/sse_client.dart';

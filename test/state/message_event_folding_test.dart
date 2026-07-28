@@ -6,8 +6,8 @@ import 'package:shift_ai/data/models/citation.dart';
 import 'package:shift_ai/data/models/message_block.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
 import 'package:shift_ai/data/models/usage_report.dart';
-import 'package:shift_ai/services/chat_service.dart';
-import 'package:shift_ai/state/message_event_folding.dart';
+import 'package:shift_ai/turn/chat_service.dart';
+import 'package:shift_ai/turn/message_event_folding.dart';
 
 ChatMessage _empty() => ChatMessage(
       id: 'm1',

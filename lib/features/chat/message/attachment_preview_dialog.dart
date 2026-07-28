@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../data/models/attachment.dart';
-import '../../../services/download_service.dart';
+import '../../../core/platform/download_service.dart';
 import '../../../data/persistence/persistence_service.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';

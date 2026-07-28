@@ -1,7 +1,7 @@
 import '../data/models/attachment.dart';
 import '../data/models/conversation.dart';
 import '../data/models/studio_request.dart';
-import '../services/chat_service.dart' show ChatOptions;
+import 'chat_service.dart' show ChatOptions;
 
 /// Everything one conversational turn is given.
 ///

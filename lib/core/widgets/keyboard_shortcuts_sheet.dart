@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_theme.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_theme.dart';
 
 /// Shows the keyboard-shortcuts cheat sheet (⌘/ or Ctrl+/), like Claude's.
 Future<void> showKeyboardShortcuts(BuildContext context) {

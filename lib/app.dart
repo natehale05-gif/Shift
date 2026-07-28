@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'screens/home_shell.dart';
-import 'services/memory_service.dart';
-import 'services/mock_chat_service.dart';
+import 'core/shell/home_shell.dart';
+import 'features/memory/memory_service.dart';
+import 'turn/backends/mock_backend.dart';
 import 'data/persistence/persistence_service.dart';
-import 'services/real_chat_service.dart';
+import 'turn/backends/live_backend.dart';
 import 'data/stores/api_keys_store.dart';
 import 'data/stores/app_settings_store.dart';
 import 'core/state/artifact_panel_store.dart';

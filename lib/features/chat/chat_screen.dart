@@ -6,8 +6,8 @@ import 'package:provider/provider.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/conversation.dart';
 import '../../data/models/studio_type.dart';
-import '../../services/chat_find.dart';
-import '../../services/conversation_export.dart';
+import 'chat_find.dart';
+import 'conversation_export.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../core/state/artifact_panel_store.dart';
 import '../../data/stores/conversation_store.dart';
@@ -18,8 +18,8 @@ import '../../core/theme/app_typography.dart';
 import '../artifacts/artifact_panel.dart';
 import 'composer/chat_input_bar.dart';
 import 'message/message_view.dart';
-import '../../widgets/common/glass_app_bar.dart';
-import '../../widgets/common/home_menu_button.dart';
+import '../../core/widgets/glass_app_bar.dart';
+import '../../core/shell/home_menu_button.dart';
 
 /// The message column and composer share this width so the conversation
 /// reads as a single centered prose column, like the Claude app.

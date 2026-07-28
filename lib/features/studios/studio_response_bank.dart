@@ -1,15 +1,15 @@
 import 'dart:math';
 
-import '../data/models/citation.dart';
-import '../data/models/studio_result.dart';
-import '../data/models/studio_request.dart';
-import '../data/models/studio_type.dart';
-import '../features/artifacts/artifact_composition.dart';
-import '../features/studios/brand_pack/brand_pack_service.dart';
-import '../features/studios/deck/deck_service.dart';
-import 'download_service.dart';
-import '../features/studios/short_reels/short_reels_service.dart';
-import '../features/studios/translate/translate_service.dart';
+import '../../data/models/citation.dart';
+import '../../data/models/studio_result.dart';
+import '../../data/models/studio_request.dart';
+import '../../data/models/studio_type.dart';
+import '../artifacts/artifact_composition.dart';
+import 'brand_pack/brand_pack_service.dart';
+import 'deck/deck_service.dart';
+import '../../core/platform/download_service.dart';
+import 'short_reels/short_reels_service.dart';
+import 'translate/translate_service.dart';
 
 /// Canned templates and keyword tables backing [MockChatService]. Every
 /// "generated" asset here is fabricated client-side — there is no real

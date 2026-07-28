@@ -1,9 +1,9 @@
 import 'dart:convert';
 
-import '../data/models/chat_message.dart';
-import '../data/models/conversation.dart';
-import 'download_service.dart';
-import 'web/print_service.dart';
+import '../../data/models/chat_message.dart';
+import '../../data/models/conversation.dart';
+import '../../core/platform/download_service.dart';
+import '../../core/platform/print_service.dart';
 
 /// Renders a conversation for export. The markdown/json builders are pure
 /// (unit-tested); the download wrappers hand off to [DownloadService].

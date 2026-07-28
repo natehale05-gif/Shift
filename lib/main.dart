@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app.dart';
-import 'services/web/boot_splash.dart';
+import 'core/platform/boot_splash.dart';
 
 void main() {
   runApp(const ShiftAiApp());

@@ -4,7 +4,7 @@ import '../../data/models/attachment.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/conversation.dart';
 import '../../data/models/usage_report.dart';
-import '../../services/chat_service.dart';
+import '../../turn/chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'openai_compatible_config.dart';
 

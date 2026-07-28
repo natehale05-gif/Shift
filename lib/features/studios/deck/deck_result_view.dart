@@ -10,7 +10,7 @@
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/studio_result.dart';
-import '../../../services/download_service.dart';
+import '../../../core/platform/download_service.dart';
 import '../shared/result_shell.dart';
 import '../shared/studio_badge.dart';
 import 'deck_pptx.dart';

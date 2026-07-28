@@ -7,7 +7,7 @@ import 'package:shift_ai/data/stores/project_store.dart';
 import 'package:shift_ai/data/stores/styles_store.dart';
 import 'package:shift_ai/data/stores/user_prefs_store.dart';
 import 'package:shift_ai/features/chat/composer/composer_options.dart';
-import 'package:shift_ai/services/mock_chat_service.dart';
+import 'package:shift_ai/turn/backends/mock_backend.dart';
 
 /// The style-resolution rule used to live inside `_ChatInputBarState`, where it
 /// could only be reached by pumping the whole composer. Extracted, it is a

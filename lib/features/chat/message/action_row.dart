@@ -4,7 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/models/chat_message.dart';
-import '../../../services/speech/speech_service.dart';
+import '../../voice/speech_service.dart';
 import '../../../data/stores/app_settings_store.dart';
 import '../../../data/stores/conversation_store.dart';
 import '../../../core/theme/app_spacing.dart';

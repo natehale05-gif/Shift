@@ -3,8 +3,8 @@ import 'package:shift_ai/data/models/artifact.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
-import 'package:shift_ai/services/chat_service.dart';
-import 'package:shift_ai/services/mock_chat_service.dart';
+import 'package:shift_ai/turn/chat_service.dart';
+import 'package:shift_ai/turn/backends/mock_backend.dart';
 
 Conversation _withHtmlArtifact() => Conversation(
       id: 'c1',

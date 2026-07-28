@@ -3,7 +3,7 @@ import '../data/models/studio_request.dart';
 import '../data/models/studio_type.dart';
 import '../features/artifacts/artifact_composition.dart' show ArtifactMediaKind;
 import '../features/artifacts/interactive/interactive_content.dart' show InteractiveKind;
-import '../services/studio_composition.dart' show CompositionKind;
+import 'studio_composition.dart' show CompositionKind;
 
 /// What kind of turn this is, decided before anything is generated.
 ///

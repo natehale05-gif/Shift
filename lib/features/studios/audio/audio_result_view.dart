@@ -10,8 +10,8 @@
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/studio_result.dart';
-import '../../../services/download_service.dart';
-import '../../../services/web_audio_player.dart';
+import '../../../core/platform/download_service.dart';
+import '../../../core/platform/web_audio_player.dart';
 import '../media/audio_synth_service.dart';
 import '../media/procedural_painters.dart';
 import '../shared/result_shell.dart';

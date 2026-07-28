@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import '../../../services/speech/speech_service.dart';
+import '../../voice/speech_service.dart';
 
 /// Voice dictation for the composer: owns the speech subscription and the
 /// text-restore point, so the widget only has to say "toggle".

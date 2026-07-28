@@ -3,8 +3,8 @@ import '../../../data/stores/memory_store.dart';
 import '../../../data/stores/project_store.dart';
 import '../../../data/stores/styles_store.dart';
 import '../../../data/stores/user_prefs_store.dart';
-import '../../../services/chat_service.dart';
-import '../../../services/prompt_assembler.dart';
+import '../../../turn/chat_service.dart';
+import '../../../turn/prompt_assembler.dart';
 
 /// The per-turn choices the composer collects — model pin, writing style, and
 /// the tool toggles — plus the rule for turning them into [ChatOptions].

@@ -2,7 +2,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../data/models/attachment.dart';
-import '../../../services/web/file_intake.dart';
+import '../../../core/platform/file_intake.dart';
 
 const _uuid = Uuid();
 

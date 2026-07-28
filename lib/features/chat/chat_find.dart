@@ -1,4 +1,4 @@
-import '../data/models/chat_message.dart';
+import '../../data/models/chat_message.dart';
 
 /// Indices of the [messages] whose visible text contains [query]
 /// (case-insensitive). Pure so the in-chat find bar's matching is testable.

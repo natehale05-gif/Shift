@@ -4,11 +4,11 @@ import 'package:provider/provider.dart';
 import '../../data/models/membership_tier.dart';
 import '../../data/stores/app_settings_store.dart';
 import '../../core/theme/app_spacing.dart';
-import '../../widgets/common/disclaimer_banner.dart';
-import '../../widgets/common/glass_app_bar.dart';
-import '../../widgets/common/home_menu_button.dart';
-import '../../widgets/membership/payout_stream_card.dart';
-import '../../widgets/membership/tier_card.dart';
+import '../../core/widgets/disclaimer_banner.dart';
+import '../../core/widgets/glass_app_bar.dart';
+import '../../core/shell/home_menu_button.dart';
+import 'payout_stream_card.dart';
+import 'tier_card.dart';
 import 'ecopay_calculator_screen.dart';
 
 class MembershipScreen extends StatelessWidget {

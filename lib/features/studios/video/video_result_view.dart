@@ -9,8 +9,8 @@
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/models/studio_result.dart';
-import '../../../services/download_service.dart';
-import '../../../services/open_url.dart';
+import '../../../core/platform/download_service.dart';
+import '../../../core/platform/open_url.dart';
 import '../media/procedural_art.dart';
 import '../media/procedural_painters.dart';
 import '../shared/result_media.dart';

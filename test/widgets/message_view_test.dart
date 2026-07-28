@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
-import 'package:shift_ai/services/mock_chat_service.dart';
+import 'package:shift_ai/turn/backends/mock_backend.dart';
 import 'package:shift_ai/data/persistence/persistence_service.dart';
 import 'package:shift_ai/data/stores/api_keys_store.dart';
 import 'package:shift_ai/data/stores/conversation_store.dart';

@@ -4,7 +4,7 @@
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/stores/styles_store.dart';
-import '../../../widgets/common/style_editor.dart';
+import '../../styles/style_editor.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';

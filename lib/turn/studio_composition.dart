@@ -1,4 +1,4 @@
-import '../turn/studio_detection.dart';
+import 'studio_detection.dart';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
@@ -8,7 +8,7 @@ import '../data/models/conversation.dart';
 import '../data/models/studio_result.dart';
 import '../data/models/studio_type.dart';
 import '../features/artifacts/artifact_composition.dart';
-import 'studio_response_bank.dart';
+import '../features/studios/studio_response_bank.dart';
 
 /// How a single prompt asks two or more studios to work together. The
 /// middleware picks exactly one plan per turn; [CompositionKind.none] is the

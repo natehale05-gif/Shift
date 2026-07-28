@@ -2,15 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
-import '../data/stores/conversation_store.dart';
-import '../core/state/home_shell_controller.dart';
-import '../widgets/common/app_sidebar.dart';
-import '../widgets/common/command_palette.dart';
-import '../widgets/common/keyboard_shortcuts_sheet.dart';
-import '../features/chat/chat_screen.dart';
-import 'culture/culture_screen.dart';
-import 'membership/membership_screen.dart';
-import 'settings/settings_screen.dart';
+import '../../data/stores/conversation_store.dart';
+import '../state/home_shell_controller.dart';
+import 'app_sidebar.dart';
+import '../widgets/command_palette.dart';
+import '../widgets/keyboard_shortcuts_sheet.dart';
+import '../../features/chat/chat_screen.dart';
+import '../../features/culture/culture_screen.dart';
+import '../../features/membership/membership_screen.dart';
+import '../../features/settings/settings_screen.dart';
 
 /// Single-route app shell. Navigation between sections is purely local
 /// state (an [IndexedStack] index) — the browser URL never changes, which

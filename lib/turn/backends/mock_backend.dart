@@ -1,5 +1,5 @@
-import '../turn/studio_detection.dart';
-import '../features/artifacts/interactive/interactive_render.dart';
+import '../studio_detection.dart';
+import '../../features/artifacts/interactive/interactive_render.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -7,23 +7,23 @@ import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 
-import '../data/models/artifact.dart';
-import '../data/models/attachment.dart';
-import '../data/models/conversation.dart';
-import '../data/models/studio_request.dart';
-import '../data/models/studio_result.dart';
-import '../data/models/studio_type.dart';
-import '../data/models/usage_report.dart';
-import '../features/artifacts/artifact_composition.dart';
-import '../features/studios/media/audio_synth_service.dart';
-import 'chat_service.dart';
-import '../turn/plan_turn.dart';
-import '../turn/turn_input.dart';
-import '../turn/turn_plan.dart';
-import '../features/artifacts/interactive/interactive_content.dart';
-import '../features/studios/media/procedural_art.dart';
-import 'studio_composition.dart';
-import 'studio_response_bank.dart';
+import '../../data/models/artifact.dart';
+import '../../data/models/attachment.dart';
+import '../../data/models/conversation.dart';
+import '../../data/models/studio_request.dart';
+import '../../data/models/studio_result.dart';
+import '../../data/models/studio_type.dart';
+import '../../data/models/usage_report.dart';
+import '../../features/artifacts/artifact_composition.dart';
+import '../../features/studios/media/audio_synth_service.dart';
+import '../chat_service.dart';
+import '../plan_turn.dart';
+import '../turn_input.dart';
+import '../turn_plan.dart';
+import '../../features/artifacts/interactive/interactive_content.dart';
+import '../../features/studios/media/procedural_art.dart';
+import '../studio_composition.dart';
+import '../../features/studios/studio_response_bank.dart';
 
 const _uuid = Uuid();
 

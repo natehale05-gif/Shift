@@ -1,10 +1,10 @@
 import 'studio_detection.dart';
 import '../data/models/studio_type.dart';
-import '../services/diagram_detection.dart';
+import 'diagram_detection.dart';
 import '../features/artifacts/interactive/interactive_content.dart';
-import '../services/studio_clarification.dart';
-import '../services/studio_composition.dart';
-import '../services/studio_response_bank.dart';
+import 'studio_clarification.dart';
+import 'studio_composition.dart';
+import '../features/studios/studio_response_bank.dart';
 import 'turn_input.dart';
 import 'turn_plan.dart';
 

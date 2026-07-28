@@ -2,19 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models/memory_entry.dart';
-import '../../services/app_data_export.dart';
+import 'app_data_export.dart';
 import '../../data/stores/app_settings_store.dart';
 import '../../data/stores/conversation_store.dart';
 import '../../data/stores/memory_store.dart';
 import '../../data/stores/project_store.dart';
 import '../../data/stores/styles_store.dart';
 import '../../data/stores/user_prefs_store.dart';
-import '../../widgets/common/style_editor.dart';
+import '../styles/style_editor.dart';
 import '../../core/theme/app_spacing.dart';
 import 'api_keys_section.dart';
 import '../../core/theme/app_theme.dart';
-import '../../widgets/common/glass_app_bar.dart';
-import '../../widgets/common/home_menu_button.dart';
+import '../../core/widgets/glass_app_bar.dart';
+import '../../core/shell/home_menu_button.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});

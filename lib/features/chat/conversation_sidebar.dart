@@ -4,12 +4,12 @@ import 'package:provider/provider.dart';
 
 import '../../data/models/conversation.dart';
 import '../../data/models/project.dart';
-import '../../services/conversation_export.dart';
+import 'conversation_export.dart';
 import '../../data/stores/conversation_store.dart';
 import '../../data/stores/project_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
-import '../../widgets/chat/project_detail_sheet.dart';
+import '../projects/project_detail_sheet.dart';
 
 class ConversationSidebar extends StatefulWidget {
   /// Called after "New chat" is pressed or a conversation is selected —

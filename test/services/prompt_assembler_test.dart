@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/project.dart';
-import 'package:shift_ai/services/prompt_assembler.dart';
+import 'package:shift_ai/turn/prompt_assembler.dart';
 
 void main() {
   group('assembleSystemPrompt', () {

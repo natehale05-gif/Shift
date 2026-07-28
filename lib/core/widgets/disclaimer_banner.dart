@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_theme.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_theme.dart';
 
 /// A prominent warning banner used anywhere payout/earnings figures are
 /// shown. Mirrors the real site's own calculator disclaimer — nothing on

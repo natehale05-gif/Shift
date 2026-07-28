@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
-import 'package:shift_ai/services/studio_clarification.dart';
+import 'package:shift_ai/turn/studio_clarification.dart';
 
 ChatMessage _msg({
   required String id,

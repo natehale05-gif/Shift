@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/models/chat_message.dart';
-import '../../../services/chat_service.dart';
+import '../../../turn/chat_service.dart';
 import '../../../providers/clients/provider_capability.dart';
 import '../../../data/stores/api_keys_store.dart';
 import '../../../data/stores/conversation_store.dart';

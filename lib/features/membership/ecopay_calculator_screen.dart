@@ -7,7 +7,7 @@ import '../../data/models/ecopay_projection.dart';
 import '../../data/stores/ecopay_calculator_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
-import '../../widgets/common/disclaimer_banner.dart';
+import '../../core/widgets/disclaimer_banner.dart';
 
 /// A purely client-side, illustrative earnings calculator mirroring the
 /// real site's own "EcoPay Usage Calculator." All math runs locally in
