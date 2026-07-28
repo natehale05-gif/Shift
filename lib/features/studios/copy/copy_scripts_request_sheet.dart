@@ -38,7 +38,7 @@ Future<StudioRequest?> showStudioRequestSheet(
 
 
 class CopyScriptsRequestSheet extends StatefulWidget {
-  const CopyScriptsRequestSheet();
+  const CopyScriptsRequestSheet({super.key});
 
   @override
   State<CopyScriptsRequestSheet> createState() => _CopyScriptsRequestSheetState();

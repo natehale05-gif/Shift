@@ -2,6 +2,7 @@
 
 /// Opens the structured-input bottom sheet for [studioType] and returns the
 /// submitted [StudioRequest], or null if the user dismissed it.
+library;
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/models/studio_request.dart';
 import '../../../data/models/studio_type.dart';
@@ -41,7 +42,7 @@ Future<StudioRequest?> showStudioRequestSheet(
 
 
 class ImageRequestSheet extends StatefulWidget {
-  const ImageRequestSheet();
+  const ImageRequestSheet({super.key});
 
   @override
   State<ImageRequestSheet> createState() => _ImageRequestSheetState();

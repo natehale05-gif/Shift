@@ -5,6 +5,7 @@
 /// Deterministic (same seed -> same bytes) so nothing needs to be persisted:
 /// [AudioResult] only stores the seed/params, and both playback and
 /// download regenerate the same audio on demand.
+library;
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';

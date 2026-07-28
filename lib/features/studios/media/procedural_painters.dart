@@ -3,6 +3,7 @@
 /// Paints a seeded abstract gradient composition standing in for a real
 /// diffusion-model image. Fully procedural — no network image, no bundled
 /// stock asset, no licensing concerns.
+library;
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'procedural_art.dart';

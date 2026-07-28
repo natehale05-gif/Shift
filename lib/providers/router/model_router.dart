@@ -9,7 +9,6 @@ import '../clients/gemini_client.dart';
 import '../clients/openai_compatible_client.dart';
 import '../clients/provider_capability.dart';
 import '../clients/provider_registry.dart';
-import '../../features/studios/studio_response_bank.dart';
 
 /// What kind of executor a prompt needs — the middleware AI's routing
 /// decision, independent of which provider ends up serving it.

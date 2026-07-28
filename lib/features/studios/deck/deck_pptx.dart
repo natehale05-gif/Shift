@@ -7,6 +7,7 @@
 /// theme, one slide master + layout, and one slide per [DeckSlide] with a title
 /// shape and a bulleted body shape. Pure — no I/O — so it is unit-testable by
 /// decoding the returned bytes.
+library;
 import '../../../data/models/studio_result.dart';
 import 'dart:convert';
 import 'dart:typed_data';

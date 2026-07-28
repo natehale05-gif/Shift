@@ -4,7 +4,6 @@ import 'diagram_detection.dart';
 import '../features/artifacts/interactive/interactive_content.dart';
 import 'studio_clarification.dart';
 import 'studio_composition.dart';
-import '../features/studios/studio_response_bank.dart';
 import 'turn_input.dart';
 import 'turn_plan.dart';
 

@@ -4,6 +4,7 @@
 /// Pure helpers for the Brand Pack studio: derive a deterministic palette and
 /// type pairing from the brand name, render brand guidelines, and zip the kit
 /// (logo + palette + guidelines + tokens) into a real downloadable .zip.
+library;
 import '../../../data/models/studio_result.dart';
 import 'dart:convert';
 import 'dart:typed_data';

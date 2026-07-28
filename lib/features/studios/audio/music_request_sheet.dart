@@ -38,7 +38,7 @@ Future<StudioRequest?> showStudioRequestSheet(
 
 
 class MusicRequestSheet extends StatefulWidget {
-  const MusicRequestSheet();
+  const MusicRequestSheet({super.key});
 
   @override
   State<MusicRequestSheet> createState() => _MusicRequestSheetState();

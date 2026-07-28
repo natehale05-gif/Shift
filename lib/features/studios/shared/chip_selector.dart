@@ -2,6 +2,7 @@
 
 /// Opens the structured-input bottom sheet for [studioType] and returns the
 /// submitted [StudioRequest], or null if the user dismissed it.
+library;
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/models/studio_request.dart';
 import '../../../data/models/studio_type.dart';
@@ -46,7 +47,7 @@ class ChipSelector<T> extends StatelessWidget {
   final String Function(T) labelBuilder;
   final ValueChanged<T> onSelected;
 
-  const ChipSelector({
+  const ChipSelector({super.key, 
     required this.label,
     required this.options,
     required this.selected,

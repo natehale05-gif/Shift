@@ -6,6 +6,7 @@
 /// where "shared between two views" was implicit. Splitting the file made the
 /// sharing explicit — and Dart's per-library privacy meant they could not stay
 /// private once the two views moved into separate folders.
+library;
 
 import 'dart:typed_data';
 import 'dart:ui' as ui;

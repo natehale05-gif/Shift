@@ -6,6 +6,7 @@
 /// real diffusion/video model output. Audio is a real (synthesized) WAV file
 /// so playback and download both work; images/video download a real PNG
 /// snapshot of the rendered art/thumbnail.
+library;
 
 import '../../data/models/studio_result.dart';
 import 'audio/audio_result_view.dart';

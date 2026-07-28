@@ -9,7 +9,10 @@ import '../../core/widgets/glass_app_bar.dart';
 import '../../core/shell/home_menu_button.dart';
 import 'payout_stream_card.dart';
 import 'tier_card.dart';
-import 'ecopay_calculator_screen.dart';
+// Deferred: the EcoPay tab is the app's only fl_chart consumer, and it
+// sits behind a tab the user has to choose. Splitting it keeps the
+// charting library out of the initial download.
+import 'ecopay_calculator_screen.dart' deferred as ecopay;
 
 class MembershipScreen extends StatelessWidget {
   const MembershipScreen({super.key});
@@ -32,7 +35,7 @@ class MembershipScreen extends StatelessWidget {
         body: const TabBarView(
           children: [
             _PlansTab(),
-            EcopayCalculatorScreen(),
+            _DeferredEcopayTab(),
           ],
         ),
       ),
@@ -103,6 +106,28 @@ class _PlansTab extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Loads the EcoPay calculator (and with it `fl_chart`) the first time the tab
+/// is shown, rather than shipping the charting library in the initial bundle.
+class _DeferredEcopayTab extends StatelessWidget {
+  const _DeferredEcopayTab();
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<void>(
+      future: ecopay.loadLibrary(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return const Center(child: Text("Couldn't load the calculator."));
+        }
+        return ecopay.EcopayCalculatorScreen();
+      },
     );
   }
 }

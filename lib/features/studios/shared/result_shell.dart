@@ -6,6 +6,7 @@
 /// real diffusion/video model output. Audio is a real (synthesized) WAV file
 /// so playback and download both work; images/video download a real PNG
 /// snapshot of the rendered art/thumbnail.
+library;
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';

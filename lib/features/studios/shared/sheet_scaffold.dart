@@ -2,6 +2,7 @@
 
 /// Opens the structured-input bottom sheet for [studioType] and returns the
 /// submitted [StudioRequest], or null if the user dismissed it.
+library;
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/studio_style.dart';
 import '../../../data/models/studio_request.dart';
@@ -46,7 +47,7 @@ class SheetScaffold extends StatelessWidget {
   final VoidCallback onSubmit;
   final bool canSubmit;
 
-  const SheetScaffold({
+  const SheetScaffold({super.key, 
     required this.studioType,
     required this.fields,
     required this.onSubmit,

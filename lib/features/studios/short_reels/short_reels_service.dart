@@ -4,6 +4,7 @@
 /// Pure helpers for the ShortReels studio: parse the topic + count, build the
 /// scripts prompt, parse the model's JSON, provide a templated fallback, render
 /// an HTML storyboard, and zip the pack (posters + scripts + storyboard).
+library;
 import '../../../data/models/studio_result.dart';
 import 'dart:convert';
 import 'dart:typed_data';
