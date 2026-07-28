@@ -2,13 +2,13 @@ import 'dart:convert';
 
 import '../../data/models/studio_type.dart';
 import '../../data/stores/api_keys_store.dart';
-import '../providers/anthropic_api_config.dart';
-import '../providers/anthropic_client.dart';
-import '../providers/gemini_client.dart';
-import '../providers/openai_compatible_client.dart';
-import '../providers/provider_capability.dart';
-import '../providers/provider_registry.dart';
-import '../studio_response_bank.dart';
+import '../clients/anthropic_api_config.dart';
+import '../clients/anthropic_client.dart';
+import '../clients/gemini_client.dart';
+import '../clients/openai_compatible_client.dart';
+import '../clients/provider_capability.dart';
+import '../clients/provider_registry.dart';
+import '../../services/studio_response_bank.dart';
 
 /// What kind of executor a prompt needs — the middleware AI's routing
 /// decision, independent of which provider ends up serving it.

@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/services/providers/provider_capability.dart';
-import 'package:shift_ai/services/providers/provider_descriptor.dart';
-import 'package:shift_ai/services/providers/provider_registry.dart';
+import 'package:shift_ai/providers/clients/provider_capability.dart';
+import 'package:shift_ai/providers/clients/provider_descriptor.dart';
+import 'package:shift_ai/providers/clients/provider_registry.dart';
 
 void main() {
   final registry = ProviderRegistry.defaults();

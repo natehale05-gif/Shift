@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
-import 'package:shift_ai/services/router/model_router.dart';
+import 'package:shift_ai/providers/router/model_router.dart';
 
 void main() {
   group('parseRouteJson', () {

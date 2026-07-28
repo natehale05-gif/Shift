@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/services/chat_service.dart';
-import 'package:shift_ai/services/providers/anthropic_client.dart';
-import 'package:shift_ai/services/providers/anthropic_stream_accumulator.dart';
-import 'package:shift_ai/services/streaming/sse_client.dart';
+import 'package:shift_ai/providers/clients/anthropic_client.dart';
+import 'package:shift_ai/providers/clients/anthropic_stream_accumulator.dart';
+import 'package:shift_ai/providers/streaming/sse_client.dart';
 
 /// First round of a web-search turn that pauses mid-loop.
 const _pausedRound = '''

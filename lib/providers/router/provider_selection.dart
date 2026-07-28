@@ -1,5 +1,5 @@
-import '../providers/provider_capability.dart';
-import '../providers/provider_registry.dart';
+import '../clients/provider_capability.dart';
+import '../clients/provider_registry.dart';
 import 'model_router.dart';
 
 /// The provider capability a routed request needs. This is the bridge between

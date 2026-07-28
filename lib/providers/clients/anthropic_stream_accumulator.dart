@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import '../../data/models/citation.dart';
-import '../chat_service.dart';
+import '../../services/chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'anthropic_tools.dart';
 

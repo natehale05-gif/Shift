@@ -5,8 +5,8 @@ import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/studio_result.dart';
 import 'package:shift_ai/services/chat_service.dart';
 import 'package:shift_ai/data/persistence/persistence_service.dart';
-import 'package:shift_ai/services/providers/anthropic_client.dart';
-import 'package:shift_ai/services/providers/heygen_client.dart';
+import 'package:shift_ai/providers/clients/anthropic_client.dart';
+import 'package:shift_ai/providers/clients/heygen_client.dart';
 import 'package:shift_ai/services/real_chat_service.dart';
 import 'package:shift_ai/data/stores/api_keys_store.dart';
 

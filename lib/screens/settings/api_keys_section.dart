@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../services/providers/provider_descriptor.dart';
+import '../../providers/clients/provider_descriptor.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';

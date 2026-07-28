@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:shift_ai/services/providers/heygen_client.dart';
+import 'package:shift_ai/providers/clients/heygen_client.dart';
 
 void main() {
   HeygenClient client(http.Client Function() factory) => HeygenClient(

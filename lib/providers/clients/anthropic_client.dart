@@ -5,7 +5,7 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/citation.dart';
 import '../../data/models/conversation.dart';
 import '../../data/models/usage_report.dart';
-import '../chat_service.dart';
+import '../../services/chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'anthropic_api_config.dart';
 import 'anthropic_stream_accumulator.dart';

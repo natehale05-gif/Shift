@@ -2,9 +2,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/services/chat_service.dart';
-import 'package:shift_ai/services/providers/openai_compatible_client.dart';
-import 'package:shift_ai/services/providers/openai_compatible_config.dart';
-import 'package:shift_ai/services/streaming/sse_client.dart';
+import 'package:shift_ai/providers/clients/openai_compatible_client.dart';
+import 'package:shift_ai/providers/clients/openai_compatible_config.dart';
+import 'package:shift_ai/providers/streaming/sse_client.dart';
 
 Conversation _history() => Conversation(
       id: 'c1',

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../persistence/persistence_service.dart';
-import '../../services/providers/provider_registry.dart';
+import '../../providers/clients/provider_registry.dart';
 
 enum KeyStatus { none, untested, testing, valid, invalid }
 

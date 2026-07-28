@@ -2,10 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/services/chat_service.dart';
-import 'package:shift_ai/services/providers/gemini_api_config.dart';
-import 'package:shift_ai/services/providers/gemini_client.dart';
+import 'package:shift_ai/providers/clients/gemini_api_config.dart';
+import 'package:shift_ai/providers/clients/gemini_client.dart';
 import 'package:shift_ai/services/real_chat_service.dart';
-import 'package:shift_ai/services/router/model_router.dart';
+import 'package:shift_ai/providers/router/model_router.dart';
 
 Conversation _history() => Conversation(
       id: 'c1',

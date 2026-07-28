@@ -4,7 +4,7 @@ import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/services/chat_service.dart';
 import 'package:shift_ai/data/persistence/persistence_service.dart';
-import 'package:shift_ai/services/providers/openai_compatible_client.dart';
+import 'package:shift_ai/providers/clients/openai_compatible_client.dart';
 import 'package:shift_ai/services/real_chat_service.dart';
 import 'package:shift_ai/data/stores/api_keys_store.dart';
 

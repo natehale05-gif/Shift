@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shift_ai/services/chat_service.dart';
-import 'package:shift_ai/services/providers/flux_client.dart';
+import 'package:shift_ai/providers/clients/flux_client.dart';
 
 void main() {
   final png = Uint8List.fromList([137, 80, 78, 71, 1, 2, 3]);

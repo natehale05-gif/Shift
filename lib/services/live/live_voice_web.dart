@@ -5,7 +5,7 @@ import 'dart:html' as html;
 import 'dart:js_util' as js_util;
 import 'dart:typed_data';
 
-import '../providers/gemini_api_config.dart';
+import '../../providers/clients/gemini_api_config.dart';
 import 'live_audio_utils.dart';
 import 'live_voice_controller.dart';
 
