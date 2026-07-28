@@ -268,6 +268,34 @@ void main() {
     });
   });
 
+  group('canonical branch order', () {
+    // Before the pipeline existed, the live service evaluated deep research
+    // BEFORE interactive detection while the demo service did the opposite, so
+    // the same prompt could answer two different ways depending on whether the
+    // user had keys. planTurn's order is now the single answer, and these pin
+    // it. Changing either expectation is a deliberate product decision, not a
+    // refactor.
+    test('interactive detection outranks the deep-research toggle', () {
+      final turn = _plan('make a recipe card for banana bread',
+          options: const ChatOptions(deepResearch: true));
+      expect(turn, isA<InteractiveTurn>(),
+          reason: 'demo mode has always answered this with a recipe card; '
+              'live mode now agrees');
+    });
+
+    test('a diagram request outranks the deep-research toggle', () {
+      final turn = _plan('draw a flowchart of a sign-up flow',
+          options: const ChatOptions(deepResearch: true));
+      expect(turn, isA<DiagramTurn>());
+    });
+
+    test('deep research still outranks plain web search', () {
+      final turn = _plan('what is happening with fusion',
+          options: const ChatOptions(deepResearch: true, webSearch: true));
+      expect(turn, isA<DeepResearchTurn>());
+    });
+  });
+
   test('a plain question is an ordinary middleware studio turn', () {
     final turn = _plan('hello there, tell me something');
     expect(turn, isA<StudioTurn>());

@@ -15,6 +15,9 @@ import '../data/stores/api_keys_store.dart';
 import 'artifact_composition.dart';
 import 'audio_synth_service.dart';
 import 'chat_service.dart';
+import '../turn/turn_plan.dart';
+import '../turn/turn_input.dart';
+import '../turn/plan_turn.dart';
 import 'deep_research_engine.dart';
 import 'mock_chat_service.dart';
 import 'procedural_art.dart';
@@ -37,7 +40,6 @@ import '../providers/clients/provider_descriptor.dart';
 import '../providers/clients/provider_registry.dart';
 import '../providers/router/model_router.dart';
 import '../providers/router/provider_selection.dart';
-import 'studio_clarification.dart';
 import 'studio_response_bank.dart';
 
 const _uuid = Uuid();
@@ -134,9 +136,59 @@ class RealChatService implements ChatService {
     ChatOptions options,
   ) async {
     try {
-      // A structured Image Studio form runs real generation when a Google
-      // key exists; other structured forms and deep research keep their
-      // simulated flows until their live executors ship.
+      // One decision for the turn, made by the same pure function the demo
+      // backend uses. Live and simulated answers now differ only in how a plan
+      // is *performed*, never in what the plan is.
+      final turn = planTurn(TurnInput(
+        conversation: conversation,
+        userInput: userInput,
+        structuredRequest: structuredRequest,
+        attachments: attachments,
+        options: options,
+      ));
+
+      switch (turn) {
+        case InteractiveTurn(:final kind):
+          await _runInteractive(controller, conversation, kind, userInput);
+          await controller.close();
+          return;
+
+        case DeepResearchTurn():
+          // Nothing to research with if the user has no keys at all.
+          if (keys.isLive) {
+            await _runDeepResearch(controller, conversation, userInput);
+          } else {
+            await _delegateToMock(controller, conversation, userInput, null,
+                attachments, options);
+            return;
+          }
+          await controller.close();
+          return;
+
+        case CopyFedTurn(:final kind):
+          await _runCopyFedMedia(controller, kind, turn.effectiveInput);
+          await controller.close();
+          return;
+
+        case MediaPairTurn(:final kind):
+          await _runMediaPair(controller, kind, turn.effectiveInput,
+              studio: turn.studio == StudioType.avatarStudio
+                  ? StudioType.avatarStudio
+                  : null);
+          await controller.close();
+          return;
+
+        // A diagram or a grounded question is just a chat turn for a live
+        // model — it writes its own mermaid, and web search is a tool on the
+        // normal chat path. Both fall through to the routing tail below.
+        case DiagramTurn():
+        case WebSearchTurn():
+        case StudioTurn():
+          break;
+      }
+
+      // A structured studio form runs real generation only for images with a
+      // key; every other form still has a simulated executor.
       if (structuredRequest != null) {
         if (structuredRequest is ImageRequest) {
           final imageId = chooseProvider(ChatRoute.imageGen,
@@ -150,74 +202,21 @@ class RealChatService implements ChatService {
             structuredRequest, attachments, options);
         return;
       }
-      if (options.deepResearch) {
-        if (keys.isLive) {
-          await _runDeepResearch(controller, conversation, userInput);
-        } else {
-          await _delegateToMock(controller, conversation, userInput, null,
-              attachments, options);
-        }
-        return;
-      }
-
-      // A terse follow-up to our own clarifying question ("navy blue")
-      // continues the same studio request rather than being reclassified
-      // from scratch — regardless of whether the question was asked by the
-      // mock or a live provider (both end their questions with '?').
-      final pending = findPendingClarification(conversation);
-
-      // One composition decision for the turn (see studio_composition).
-      // pageAssembly ("build a website with photos") forces Code Studio
-      // directly rather than trusting the classifier to prefer it over the
-      // image keywords in the same prompt — _runAnthropicChat below embeds
-      // the photos once the page exists.
-      final plan = pending == null
-          ? planComposition(conversation, userInput)
-          : CompositionPlan.none;
-      final wantsBoth = plan.kind == CompositionKind.pageAssembly;
-
-      // Interactive artifacts (recipe cards, quizzes, flashcards, checklists):
-      // Code Studio builds the widget, the best text provider fills its real
-      // content, and Image Studio can supply a hero photo — several studios in
-      // one interactive deliverable.
-      final interactive = pending == null
-          ? InteractiveArtifacts.detect(userInput)
-          : null;
-      if (interactive != null) {
-        await _runInteractive(controller, conversation, interactive, userInput);
-        await controller.close();
-        return;
-      }
-
-      // Copy & Scripts writes a script, then a media studio produces from it.
-      // The write step is real (Claude/Gemini); the voice/video/music is
-      // synthesized, since no live provider generates those.
-      if (isCopyFed(plan.kind)) {
-        await _runCopyFedMedia(controller, plan.kind, userInput);
-        await controller.close();
-        return;
-      }
-
-      // Media pairs: a talking avatar (portrait + voice) or scored narration
-      // (voice over a music bed). The portrait is real (Gemini) when a Google
-      // key exists; the voiceover script is real (Claude/Gemini); the audio
-      // itself is synthesized.
-      if (isMediaPair(plan.kind)) {
-        await _runMediaPair(controller, plan.kind, userInput);
-        await controller.close();
-        return;
-      }
 
       // "Add background music / a video to the website": audio and video are
       // always synthesized (no live provider), so the mock performs the embed
       // into the existing artifact. Image edits keep the live image path
       // below (Gemini/Flux, or the mock when no image key exists).
-      if (plan.kind == CompositionKind.editArtifact &&
-          plan.editKind != ArtifactMediaKind.image) {
+      if (turn is StudioTurn &&
+          turn.composeTarget != null &&
+          turn.composeKind != ArtifactMediaKind.image) {
         await _delegateToMock(
             controller, conversation, userInput, null, attachments, options);
         return;
       }
+
+      final wantsBoth =
+          turn is StudioTurn && turn.contributors.isNotEmpty;
 
       // An explicit model pin bypasses routing entirely and dispatches to the
       // pinned model's provider (as long as the user has that key). Claude
@@ -245,8 +244,8 @@ class RealChatService implements ChatService {
 
       final route = pin != null
           ? ChatRoute.chat // an explicit model pin bypasses routing
-          : pending != null
-              ? routeForStudio(pending.$1)
+          : turn.isAnsweringClarification
+              ? routeForStudio(turn.studio)
               : wantsBoth
                   ? ChatRoute.code
                   : await _router.route(
@@ -304,9 +303,8 @@ class RealChatService implements ChatService {
           chooseProvider(route, registry: _registry, hasKey: keys.hasKey);
       final provider = providerId == null ? null : _registry.byId(providerId);
 
-      final pageContributors = plan.kind == CompositionKind.pageAssembly
-          ? plan.contributors
-          : const <StudioType>{};
+      final pageContributors =
+          turn is StudioTurn ? turn.contributors : const <StudioType>{};
 
       switch (provider?.clientKind) {
         case ProviderClientKind.anthropic:
@@ -314,8 +312,9 @@ class RealChatService implements ChatService {
               attachments, options, route, pageContributors);
         case ProviderClientKind.gemini:
           if (route == ChatRoute.imageGen) {
-            await _runImageWithClarification(
-                controller, conversation, userInput, pending, 'gemini');
+            await _runImageWithClarification(controller, conversation,
+                userInput, turn.effectiveInput,
+                turn.isAnsweringClarification, 'gemini');
           } else {
             await _runGeminiChat(controller, conversation, userInput,
                 attachments, options, route);
@@ -323,8 +322,8 @@ class RealChatService implements ChatService {
         case ProviderClientKind.flux:
           // Flux only serves the image capability, so this is always the
           // image route.
-          await _runImageWithClarification(
-              controller, conversation, userInput, pending, 'flux');
+          await _runImageWithClarification(controller, conversation, userInput,
+              turn.effectiveInput, turn.isAnsweringClarification, 'flux');
         case ProviderClientKind.openAiCompatible:
           await _runOpenAiChat(controller, conversation, userInput, attachments,
               options, provider!, model: _autoModelFor(provider, route));
@@ -936,11 +935,15 @@ class RealChatService implements ChatService {
     StreamController<ChatEvent> controller,
     Conversation conversation,
     String userInput,
-    (StudioType, String)? pending,
+    String effectiveInput,
+    bool isAnsweringClarification,
     String providerId,
   ) async {
     controller.add(const RoutingDetected(StudioType.imageStudio));
-    if (pending == null) {
+    // Ask before guessing — but never twice: an answer to our own question
+    // proceeds straight to generating. The merge of question-and-answer was
+    // already done by planTurn, which is why effectiveInput arrives ready.
+    if (!isAnsweringClarification) {
       final question = StudioResponseBank.clarifyingQuestion(
           StudioType.imageStudio, userInput);
       if (question != null) {
@@ -949,8 +952,6 @@ class RealChatService implements ChatService {
         return;
       }
     }
-    final effectiveInput =
-        pending != null ? '${pending.$2} $userInput'.trim() : userInput;
 
     // "Add a hero image to the website": the image provider generates the
     // asset, then it's spliced into the artifact a prior turn already built —
