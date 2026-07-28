@@ -6,7 +6,7 @@ import 'package:shift_ai/data/models/artifact.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/studio_result.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
-import 'package:shift_ai/services/artifact_composition.dart';
+import 'package:shift_ai/features/artifacts/artifact_composition.dart';
 import 'package:shift_ai/services/studio_composition.dart';
 
 Artifact _htmlArtifact() => Artifact(

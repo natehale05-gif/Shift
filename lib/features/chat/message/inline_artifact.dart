@@ -7,7 +7,7 @@ import '../../../services/download_service.dart';
 import '../../../data/stores/conversation_store.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../widgets/artifacts/artifact_preview.dart';
+import '../../artifacts/artifact_preview.dart';
 
 /// Claude-style message layout: user turns are compact right-aligned bubbles;
 /// assistant turns are open prose — an ordered sequence of thinking, tool,

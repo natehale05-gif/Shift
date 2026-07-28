@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/services/chat_service.dart';
-import 'package:shift_ai/services/mermaid_service.dart';
+import 'package:shift_ai/features/artifacts/mermaid_service.dart';
 import 'package:shift_ai/services/mock_chat_service.dart';
 
 Conversation _empty() => Conversation(

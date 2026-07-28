@@ -15,7 +15,7 @@ import '../../data/stores/usage_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
-import '../../widgets/artifacts/artifact_panel.dart';
+import '../artifacts/artifact_panel.dart';
 import 'composer/chat_input_bar.dart';
 import 'message/message_view.dart';
 import '../../widgets/common/glass_app_bar.dart';

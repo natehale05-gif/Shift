@@ -1,6 +1,6 @@
 import '../data/models/studio_type.dart';
 import '../services/diagram_detection.dart';
-import '../services/interactive_artifacts.dart';
+import '../features/artifacts/interactive/interactive_content.dart';
 import '../services/studio_clarification.dart';
 import '../services/studio_composition.dart';
 import '../services/studio_response_bank.dart';

@@ -1,8 +1,8 @@
 import '../data/models/artifact.dart';
 import '../data/models/studio_request.dart';
 import '../data/models/studio_type.dart';
-import '../services/artifact_composition.dart' show ArtifactMediaKind;
-import '../services/interactive_artifacts.dart' show InteractiveKind;
+import '../features/artifacts/artifact_composition.dart' show ArtifactMediaKind;
+import '../features/artifacts/interactive/interactive_content.dart' show InteractiveKind;
 import '../services/studio_composition.dart' show CompositionKind;
 
 /// What kind of turn this is, decided before anything is generated.

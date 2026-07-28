@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/models/artifact.dart';
 import '../../services/download_service.dart';
-import '../../services/js_sandbox_service.dart';
+import 'js_sandbox_service.dart';
 import '../../core/state/artifact_panel_store.dart';
 import '../../data/stores/conversation_store.dart';
 import '../../core/theme/app_spacing.dart';

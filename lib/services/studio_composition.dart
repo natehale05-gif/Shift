@@ -6,7 +6,7 @@ import '../data/models/artifact.dart';
 import '../data/models/conversation.dart';
 import '../data/models/studio_result.dart';
 import '../data/models/studio_type.dart';
-import 'artifact_composition.dart';
+import '../features/artifacts/artifact_composition.dart';
 import 'studio_response_bank.dart';
 
 /// How a single prompt asks two or more studios to work together. The

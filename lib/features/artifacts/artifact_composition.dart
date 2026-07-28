@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../data/models/artifact.dart';
-import '../data/models/conversation.dart';
+import '../../data/models/artifact.dart';
+import '../../data/models/conversation.dart';
 
 const _imageKeywords = [
   'image', 'photo', 'picture', 'logo', 'graphic', 'illustration',

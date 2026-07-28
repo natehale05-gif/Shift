@@ -1,6 +1,7 @@
+import 'package:shift_ai/features/artifacts/interactive/interactive_render.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/artifact.dart';
-import 'package:shift_ai/services/interactive_artifacts.dart';
+import 'package:shift_ai/features/artifacts/interactive/interactive_content.dart';
 
 void main() {
   group('detect', () {
@@ -37,7 +38,7 @@ void main() {
 
   group('renderers produce runnable, interactive HTML', () {
     test('build marks the artifact interactive (so the panel hides code)', () {
-      final artifact = InteractiveArtifacts.build(
+      final artifact = InteractiveRender.build(
         kind: InteractiveKind.recipe,
         conversationId: 'c1',
         title: 'Pancakes',
@@ -49,7 +50,7 @@ void main() {
     });
 
     test('recipe embeds ingredients, steps, a timer and a servings scaler', () {
-      final html = InteractiveArtifacts.renderRecipe(
+      final html = InteractiveRender.renderRecipe(
           InteractiveArtifacts.templatedRecipe('cookies'),
           heroImageDataUri: 'data:image/png;base64,AA==');
       expect(html, contains('<!DOCTYPE html>'));
@@ -61,7 +62,7 @@ void main() {
     });
 
     test('quiz embeds questions, options and scoring JS', () {
-      final html = InteractiveArtifacts.renderQuiz(
+      final html = InteractiveRender.renderQuiz(
           InteractiveArtifacts.templatedQuiz('space'), 'Space Quiz');
       expect(html, contains('data-answer='));
       expect(html, contains('Check answers'));
@@ -69,14 +70,14 @@ void main() {
     });
 
     test('flashcards embed the cards as JSON and a flip handler', () {
-      final html = InteractiveArtifacts.renderFlashcards(
+      final html = InteractiveRender.renderFlashcards(
           InteractiveArtifacts.templatedFlashcards('verbs'), 'Verbs');
       expect(html, contains('const cards=['));
       expect(html, contains('flip'));
     });
 
     test('checklist embeds items, a progress bar and an add control', () {
-      final html = InteractiveArtifacts.renderChecklist(
+      final html = InteractiveRender.renderChecklist(
           InteractiveArtifacts.templatedChecklist('camping'), 'Camping');
       expect(html, contains('class="it"'));
       expect(html, contains('id="fill"'));
@@ -84,7 +85,7 @@ void main() {
     });
 
     test('HTML-escapes content', () {
-      final html = InteractiveArtifacts.renderChecklist(
+      final html = InteractiveRender.renderChecklist(
           ['buy <bread> & milk'], 'Groceries & <b>');
       expect(html, contains('buy &lt;bread&gt; &amp; milk'));
       expect(html, isNot(contains('<bread>')));

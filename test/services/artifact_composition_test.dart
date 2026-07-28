@@ -4,7 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/artifact.dart';
 import 'package:shift_ai/data/models/conversation.dart';
-import 'package:shift_ai/services/artifact_composition.dart';
+import 'package:shift_ai/features/artifacts/artifact_composition.dart';
 
 Artifact _htmlArtifact({String content = '<!DOCTYPE html><html><body><h1>Hi</h1></body></html>'}) =>
     Artifact(

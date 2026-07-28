@@ -1,3 +1,4 @@
+import '../features/artifacts/interactive/interactive_render.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -12,7 +13,7 @@ import '../data/models/studio_request.dart';
 import '../data/models/studio_result.dart';
 import '../data/models/studio_type.dart';
 import '../data/stores/api_keys_store.dart';
-import 'artifact_composition.dart';
+import '../features/artifacts/artifact_composition.dart';
 import 'audio_synth_service.dart';
 import 'chat_service.dart';
 import '../turn/turn_plan.dart';
@@ -23,7 +24,7 @@ import 'mock_chat_service.dart';
 import 'procedural_art.dart';
 import 'brand_pack_service.dart';
 import 'deck_service.dart';
-import 'interactive_artifacts.dart';
+import '../features/artifacts/interactive/interactive_content.dart';
 import 'short_reels_service.dart';
 import 'studio_composition.dart';
 import 'translate_service.dart';
@@ -771,7 +772,7 @@ class RealChatService implements ChatService {
 
     final (html, title, live) =
         _renderInteractive(kind, reply, topic, heroUri);
-    controller.add(ArtifactCreated(InteractiveArtifacts.build(
+    controller.add(ArtifactCreated(InteractiveRender.build(
       kind: kind,
       conversationId: conversation.id,
       title: title,
@@ -802,27 +803,27 @@ class RealChatService implements ChatService {
         final parsed = InteractiveArtifacts.parseRecipeJson(reply, topic);
         final recipe = parsed ?? InteractiveArtifacts.templatedRecipe(topic);
         return (
-          InteractiveArtifacts.renderRecipe(recipe, heroImageDataUri: heroUri),
+          InteractiveRender.renderRecipe(recipe, heroImageDataUri: heroUri),
           recipe.title,
           parsed != null,
         );
       case InteractiveKind.quiz:
         final parsed = InteractiveArtifacts.parseQuizJson(reply);
         final qs = parsed ?? InteractiveArtifacts.templatedQuiz(topic);
-        return (InteractiveArtifacts.renderQuiz(qs, '$t Quiz'), '$t Quiz',
+        return (InteractiveRender.renderQuiz(qs, '$t Quiz'), '$t Quiz',
             parsed != null);
       case InteractiveKind.flashcards:
         final parsed = InteractiveArtifacts.parseFlashcardsJson(reply);
         final cards = parsed ?? InteractiveArtifacts.templatedFlashcards(topic);
         return (
-          InteractiveArtifacts.renderFlashcards(cards, '$t Flashcards'),
+          InteractiveRender.renderFlashcards(cards, '$t Flashcards'),
           '$t Flashcards',
           parsed != null
         );
       case InteractiveKind.checklist:
         final parsed = InteractiveArtifacts.parseChecklistJson(reply);
         final items = parsed ?? InteractiveArtifacts.templatedChecklist(topic);
-        return (InteractiveArtifacts.renderChecklist(items, t), t,
+        return (InteractiveRender.renderChecklist(items, t), t,
             parsed != null);
     }
   }

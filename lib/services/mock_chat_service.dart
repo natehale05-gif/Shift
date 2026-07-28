@@ -1,3 +1,4 @@
+import '../features/artifacts/interactive/interactive_render.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -12,13 +13,13 @@ import '../data/models/studio_request.dart';
 import '../data/models/studio_result.dart';
 import '../data/models/studio_type.dart';
 import '../data/models/usage_report.dart';
-import 'artifact_composition.dart';
+import '../features/artifacts/artifact_composition.dart';
 import 'audio_synth_service.dart';
 import 'chat_service.dart';
 import '../turn/plan_turn.dart';
 import '../turn/turn_input.dart';
 import '../turn/turn_plan.dart';
-import 'interactive_artifacts.dart';
+import '../features/artifacts/interactive/interactive_content.dart';
 import 'procedural_art.dart';
 import 'studio_composition.dart';
 import 'studio_response_bank.dart';
@@ -356,14 +357,14 @@ class MockChatService implements ChatService {
     }
 
     final html = switch (kind) {
-      InteractiveKind.recipe => InteractiveArtifacts.renderRecipe(
+      InteractiveKind.recipe => InteractiveRender.renderRecipe(
           InteractiveArtifacts.templatedRecipe(topic),
           heroImageDataUri: heroUri),
-      InteractiveKind.quiz => InteractiveArtifacts.renderQuiz(
+      InteractiveKind.quiz => InteractiveRender.renderQuiz(
           InteractiveArtifacts.templatedQuiz(topic), '${_titleCase(topic)} Quiz'),
-      InteractiveKind.flashcards => InteractiveArtifacts.renderFlashcards(
+      InteractiveKind.flashcards => InteractiveRender.renderFlashcards(
           InteractiveArtifacts.templatedFlashcards(topic), '${_titleCase(topic)} Flashcards'),
-      InteractiveKind.checklist => InteractiveArtifacts.renderChecklist(
+      InteractiveKind.checklist => InteractiveRender.renderChecklist(
           InteractiveArtifacts.templatedChecklist(topic), _titleCase(topic)),
     };
     final title = switch (kind) {
@@ -372,7 +373,7 @@ class MockChatService implements ChatService {
       InteractiveKind.flashcards => '${_titleCase(topic)} Flashcards',
       InteractiveKind.checklist => _titleCase(topic),
     };
-    controller.add(ArtifactCreated(InteractiveArtifacts.build(
+    controller.add(ArtifactCreated(InteractiveRender.build(
       kind: kind,
       conversationId: conversation.id,
       title: title,
