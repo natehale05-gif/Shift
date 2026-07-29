@@ -163,6 +163,14 @@ jobs:
           name: android
           path: dist/SHIFT-AI-android.apk
 
+  # Every asset the README's install buttons point at. Kept here as the single
+  # list the verify job checks, so renaming an asset without updating the
+  # README fails the release instead of shipping a dead button.
+  #
+  # This job exists because a rename did exactly that: the README was pointed
+  # at SHIFT-AI-windows-setup.exe and SHIFT-AI-linux-amd64.deb one release
+  # before those assets existed, and both buttons 404'd on the live page.
+
   release:
     needs: [macos, windows, linux, android]
     runs-on: ubuntu-latest
@@ -224,3 +232,42 @@ jobs:
             inline. Everything else — chats, projects, artifacts, downloads,
             bring-your-own-key providers — works the same, and chats now persist
             between launches.
+
+  verify:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      # Follows redirects deliberately. `releases/latest/download/<name>`
+      # answers 302 whether or not the asset exists — a missing one redirects
+      # to a 404 page — so checking headers alone reports success for a dead
+      # link. That is exactly how two broken buttons shipped, so this asks for
+      # the first byte and insists on 200/206.
+      - name: Every download button must resolve
+        run: |
+          assets="
+            SHIFT-AI-macos.dmg
+            SHIFT-AI-windows-setup.exe
+            SHIFT-AI-linux-amd64.deb
+            SHIFT-AI-android.apk
+            SHIFT-AI-windows.zip
+            SHIFT-AI-linux-x64.tar.gz
+          "
+          base="https://github.com/${{ github.repository }}/releases/latest/download"
+          fail=0
+          for a in $assets; do
+            code=000
+            # `latest` can lag a moment behind the publish.
+            for attempt in 1 2 3 4 5; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' -L -r 0-0 "$base/$a" || echo 000)
+              case "$code" in 200|206) break ;; esac
+              sleep 10
+            done
+            case "$code" in
+              200|206) printf '  ok    %-32s %s\n' "$a" "$code" ;;
+              *)       printf '  FAIL  %-32s %s\n' "$a" "$code"; fail=1 ;;
+            esac
+          done
+          if [ "$fail" -ne 0 ]; then
+            echo "::error::A download button in README.md points at an asset this release does not publish."
+            exit 1
+          fi
