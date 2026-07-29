@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,6 +16,7 @@ import 'api_keys_section.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/glass_app_bar.dart';
 import '../../core/shell/home_menu_button.dart';
+import '../../core/platform/open_url.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -55,6 +57,8 @@ class SettingsScreen extends StatelessWidget {
           const _StylesCard(),
           const SizedBox(height: AppSpacing.lg),
           const _MemoryCard(),
+          const SizedBox(height: AppSpacing.lg),
+          const _GetTheAppCard(),
           const SizedBox(height: AppSpacing.lg),
           const _FeaturePreviewCard(),
           const SizedBox(height: AppSpacing.lg),
@@ -198,6 +202,51 @@ class SettingsScreen extends StatelessWidget {
 }
 
 /// Feature-preview toggles (Claude's "Feature preview" settings).
+/// Desktop and Android downloads, for people who found the app in a browser.
+/// Hidden on the desktop/Android builds themselves — you already have it.
+class _GetTheAppCard extends StatelessWidget {
+  const _GetTheAppCard();
+
+  static const _releases =
+      'https://github.com/natehale05-gif/Shift/releases/latest';
+
+  @override
+  Widget build(BuildContext context) {
+    if (!kIsWeb) return const SizedBox.shrink();
+    return _SectionCard(
+      title: 'Get the app',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Native builds for macOS, Windows, Linux and Android. Chats are '
+            'kept on your device between launches.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              for (final (label, icon) in const [
+                ('macOS', Icons.laptop_mac_rounded),
+                ('Windows', Icons.desktop_windows_rounded),
+                ('Linux', Icons.dns_rounded),
+                ('Android', Icons.phone_android_rounded),
+              ])
+                OutlinedButton.icon(
+                  onPressed: () => openUrl(_releases),
+                  icon: Icon(icon, size: 18),
+                  label: Text(label),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _FeaturePreviewCard extends StatelessWidget {
   const _FeaturePreviewCard();
 

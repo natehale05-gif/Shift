@@ -1,12 +1,12 @@
 {
-    "name": "shift_ai",
-    "short_name": "shift_ai",
+    "name": "SHIFT AI",
+    "short_name": "SHIFT AI",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#F5F4EF",
+    "theme_color": "#AF52DE",
+    "description": "One studio. Every AI tool. Routes your request to the right specialized studio automatically.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

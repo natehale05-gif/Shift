@@ -1,0 +1,166 @@
+name: Release desktop and Android builds
+
+# Tag-triggered so releases are deliberate, and so the Pages deploy on every
+# push stays untouched. `workflow_dispatch` is here for dry runs.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to publish as (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  FLUTTER_VERSION: 3.35.5
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - run: flutter pub get
+      - run: flutter build macos --release
+
+      # Signing is wired but inert: with no certificate secret the app ships
+      # unsigned and Gatekeeper asks for a one-time override (documented in the
+      # release notes). Adding a certificate later is a secrets change, not a
+      # workflow rewrite.
+      - name: Sign (skipped without a certificate)
+        if: ${{ env.MACOS_CERTIFICATE != '' }}
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+        run: echo "Certificate present — add codesign steps here."
+
+      - name: Package .dmg
+        run: |
+          APP="build/macos/Build/Products/Release/SHIFT AI.app"
+          test -d "$APP" || APP="$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' | head -1)"
+          mkdir -p dist staging
+          cp -R "$APP" staging/
+          ln -s /Applications staging/Applications
+          hdiutil create -volname "SHIFT AI" -srcfolder staging -ov -format UDZO dist/SHIFT-AI-macos.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/SHIFT-AI-macos.dmg
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - run: flutter pub get
+      - run: flutter build windows --release
+      - name: Package .zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath dist/SHIFT-AI-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: dist/SHIFT-AI-windows.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The Linux desktop embedder is GTK-based; the runner image does not
+      # ship the dev headers.
+      - name: Install GTK build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev ninja-build clang cmake pkg-config
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - run: flutter pub get
+      - run: flutter build linux --release
+      - name: Package .tar.gz
+        run: |
+          mkdir -p dist
+          tar -czf dist/SHIFT-AI-linux-x64.tar.gz -C build/linux/x64/release/bundle .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: dist/SHIFT-AI-linux-x64.tar.gz
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - run: flutter pub get
+      # No upload keystore, so this is signed with the debug key: installable
+      # from a file manager with "unknown sources" enabled, not Play-ready.
+      - run: flutter build apk --release
+      - name: Stage .apk
+        run: |
+          mkdir -p dist
+          cp build/app/outputs/flutter-apk/app-release.apk dist/SHIFT-AI-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: dist/SHIFT-AI-android.apk
+
+  release:
+    needs: [macos, windows, linux, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -lh dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: SHIFT AI ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: dist/*
+          body: |
+            Download the build for your platform below, or use the app in your
+            browser at https://natehale05-gif.github.io/Shift/
+
+            ### First launch
+
+            These builds are **unsigned** — signing certificates cost money and
+            this project does not have them yet. Your OS will object once:
+
+            - **macOS** — right-click the app → **Open** → **Open**. If it says
+              the app is "damaged", run
+              `xattr -dr com.apple.quarantine "/Applications/SHIFT AI.app"`.
+            - **Windows** — SmartScreen shows a blue box: **More info** →
+              **Run anyway**.
+            - **Android** — allow installs from unknown sources for your file
+              manager when prompted.
+            - **Linux** — extract the archive and run `./shift_ai`.
+
+            ### What differs from the web version
+
+            Dictation, live voice, paste/drag-drop intake and printing are
+            browser APIs and stay browser-only. Artifact previews and generated
+            audio open in your system browser and audio player rather than
+            inline. Everything else — chats, projects, artifacts, downloads,
+            bring-your-own-key providers — works the same, and chats now persist
+            between launches.
