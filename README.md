@@ -17,6 +17,12 @@ install, no key required. Demo mode simulates every studio.
 Every button points at `releases/latest`, so it always fetches the newest build.
 All builds are on the [Releases page](https://github.com/natehale05-gif/Shift/releases).
 
+**You only download once.** The app checks for new releases daily and installs
+them itself — silently on Linux and Windows, applied the next time you open it.
+On macOS and Android it downloads the update and hands it to the OS installer,
+which asks you to confirm; unsigned software cannot install without that prompt.
+Turn it off in **Settings → Updates**. The browser version updates on reload.
+
 ### First launch
 
 These builds are **unsigned** — code-signing certificates cost money and this
@@ -41,6 +47,9 @@ they are browser APIs:
   desktop app embeds no browser engine. The Code tab shows the source in-app.
 - **Generated audio** opens in your system audio player rather than playing
   inline.
+
+In exchange, the desktop and Android builds keep your chats between launches and
+update themselves.
 
 ## Bring your own key
 

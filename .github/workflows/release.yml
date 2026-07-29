@@ -142,6 +142,13 @@ jobs:
             Download the build for your platform below, or use the app in your
             browser at https://natehale05-gif.github.io/Shift/
 
+            **You only have to download once.** The app checks for new releases
+            daily and installs them itself — silently on Linux and Windows,
+            applied the next time you open it. On macOS and Android it downloads
+            the update and hands it to the system installer, which asks you to
+            confirm, because unsigned software cannot install without that
+            prompt. Turn it off in Settings → Updates.
+
             ### First launch
 
             These builds are **unsigned** — signing certificates cost money and
