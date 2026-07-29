@@ -15,6 +15,7 @@ import '../../data/models/studio_type.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../features/artifacts/artifact_composition.dart';
 import '../request_title.dart';
+import '../studio_detection.dart';
 import '../../features/studios/media/audio_synth_service.dart';
 import '../chat_service.dart';
 import '../turn_plan.dart';
@@ -221,24 +222,38 @@ class RealChatService implements ChatService {
       final wantsBoth =
           turn is StudioTurn && turn.contributors.isNotEmpty;
 
-      // An explicit model pin bypasses routing entirely and dispatches to the
+      // An explicit model pin bypasses studio routing and dispatches to the
       // pinned model's provider (as long as the user has that key). Claude
       // pins fall through to the existing Anthropic path below, which already
       // reads options.modelPin.
+      //
+      // A pin says *which model* answers, not *what kind of answer* it is.
+      // Pinning must not hand the turn to Image Studio — but a page or code
+      // request still has to produce an artifact, so the pinned turn picks
+      // between the two routes a text model can actually serve. It used to be
+      // hardcoded to chat, which silently dropped the deliverable and left a
+      // fenced block in the message.
       final pin = options.modelPin;
+      final pinnedRoute =
+          StudioDetection.detectStudio(userInput) == StudioType.codeStudio
+              ? ChatRoute.code
+              : ChatRoute.chat;
       if (pin != null) {
         final provider = _registry.providerForModel(pin);
         if (provider != null && keys.hasKey(provider.id)) {
+          final reviseTarget =
+              turn is StudioTurn ? turn.reviseTarget : null;
           if (provider.clientKind == ProviderClientKind.openAiCompatible) {
             await _runOpenAiChat(controller, conversation, userInput,
                 attachments, options, provider,
-                model: pin);
+                model: pin, route: pinnedRoute, reviseTarget: reviseTarget);
             await controller.close();
             return;
           }
           if (provider.id == 'gemini') {
             await _runGeminiChat(controller, conversation, userInput,
-                attachments, options, ChatRoute.chat, model: pin);
+                attachments, options, pinnedRoute,
+                model: pin, reviseTarget: reviseTarget);
             await controller.close();
             return;
           }
@@ -246,7 +261,7 @@ class RealChatService implements ChatService {
       }
 
       final route = pin != null
-          ? ChatRoute.chat // an explicit model pin bypasses routing
+          ? pinnedRoute
           : turn.isAnsweringClarification
               ? routeForStudio(turn.studio)
               : wantsBoth

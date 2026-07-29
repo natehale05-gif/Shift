@@ -212,6 +212,55 @@ void main() {
     });
   });
 
+  group('pinned model', () {
+    test('a pinned model still produces an artifact for a page request',
+        () async {
+      // A pin says which model answers, not what kind of answer it is. It used
+      // to force ChatRoute.chat, so "pin a model, ask for a landing page"
+      // dropped the deliverable and left a fenced block in the chat.
+      final keys = await _keysFor('openai', 'test-openai-key');
+      final openAi = _FakeOpenAiClient();
+      final service = RealChatService(
+        keys: keys,
+        openAiClient: openAi,
+        router: _ForcedRouter(),
+      );
+      final events = await service
+          .sendMessage(
+            conversation: _conversation('build me a landing page', const []),
+            userInput: 'build me a landing page',
+            options: const ChatOptions(modelPin: 'gpt-4o'),
+          )
+          .toList();
+
+      expect(openAi.callCount, 1);
+      expect(events.whereType<ArtifactCreated>().single.artifact.kind,
+          ArtifactKind.html);
+    });
+
+    test('a pinned model on a plain question still produces no artifact',
+        () async {
+      // The pin must not start routing ordinary chat into studios.
+      final keys = await _keysFor('openai', 'test-openai-key');
+      final openAi = _FakeOpenAiClient();
+      final service = RealChatService(
+        keys: keys,
+        openAiClient: openAi,
+        router: _ForcedRouter(),
+      );
+      final events = await service
+          .sendMessage(
+            conversation: _conversation('what is the capital of France', const []),
+            userInput: 'what is the capital of France',
+            options: const ChatOptions(modelPin: 'gpt-4o'),
+          )
+          .toList();
+
+      expect(openAi.callCount, 1);
+      expect(events.whereType<ArtifactCreated>(), isEmpty);
+    });
+  });
+
   group('OpenAI-compatible user', () {
     test('a code-routed reply becomes an artifact', () async {
       // These providers already advertised code, so they were selected -- but
