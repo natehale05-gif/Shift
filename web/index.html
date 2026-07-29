@@ -178,6 +178,26 @@
     <p class="boot__hint">Starting up — the first visit loads the engine, then it's cached.</p>
   </div>
 
+  <script>
+    // Flutter's service worker serves the PREVIOUS build on the first visit
+    // after a deploy, and only swaps the new one in on the visit after that.
+    // That is normally invisible, but it breaks "Add to Home Screen": Safari
+    // reads the apple-touch-icon link out of whatever HTML it was served, so a
+    // stale index.html pins a stale icon — and iOS then caches that icon by
+    // URL essentially forever.
+    //
+    // Reload once, the moment a new worker takes control, so a visitor is
+    // never more than a beat behind the deployed build. The guard makes the
+    // reload strictly once per page load, so this cannot loop.
+    if ('serviceWorker' in navigator) {
+      var shiftReloading = false;
+      navigator.serviceWorker.addEventListener('controllerchange', function () {
+        if (shiftReloading) return;
+        shiftReloading = true;
+        window.location.reload();
+      });
+    }
+  </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
