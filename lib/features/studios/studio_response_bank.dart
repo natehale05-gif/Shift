@@ -173,6 +173,23 @@ class StudioResponseBank {
         'version. Ask for a different $noun or position anytime.';
   }
 
+  /// After demo mode applies an edit to an existing artifact. Deliberately
+  /// does not quote the artifact's title — titles are the raw prompt
+  /// ("build me a landing page for my bakery"), which reads badly mid-sentence.
+  static String revisionFollowUp(String summary) =>
+      'Done — $summary. That\'s a new version of the artifact; use the arrows '
+      'in the panel to compare it with the one before.';
+
+  /// After demo mode recognises no edit it can perform. It says so rather than
+  /// producing a version that changed nothing — there is no model behind demo
+  /// mode, so the edits it can do are a fixed, small set.
+  static const String revisionNotSimulated =
+      'I left the artifact as it is — in demo mode I can only apply a few '
+      'specific edits, and that one is not among them. Try "make the heading '
+      'bigger", "make the button navy", "change the heading to …", or "add a '
+      'footer". With an API key added in Settings, a real model applies any '
+      'edit you describe.';
+
   static (String, String) _composeWords(ArtifactMediaKind kind) =>
       switch (kind) {
         ArtifactMediaKind.image => ('Image Studio', 'image'),

@@ -1,4 +1,5 @@
 import '../studio_detection.dart';
+import 'mock_revision.dart';
 import '../../features/artifacts/interactive/interactive_render.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -197,6 +198,10 @@ class MockChatService implements ChatService {
         ? StudioResponseBank.buildResult(structuredRequest)
         : StudioResponseBank.buildResultFromFreeform(studio, userInput);
 
+    // Set when this turn revised an existing artifact: a short phrase naming
+    // the edit that was applied, or null when demo mode recognised none.
+    String? revisionSummary;
+
     if (composeTarget != null) {
       // Two studios in one turn: a studio's output gets woven into the
       // artifact another studio already built, instead of standing alone.
@@ -212,7 +217,8 @@ class MockChatService implements ChatService {
     } else if (studio == StudioType.codeStudio) {
       // Code output ships as an artifact (side panel), not an inline card —
       // the artifact IS the deliverable, with copy/download/versions there.
-      await _emitCodeArtifact(controller, conversation, userInput, result,
+      revisionSummary = await _emitCodeArtifact(
+          controller, conversation, userInput, result,
           pageContributors: pageContributors, reviseTarget: reviseTarget);
     } else {
       controller.add(StudioResultReady(result));
@@ -223,7 +229,11 @@ class MockChatService implements ChatService {
         : composeTarget != null
             ? StudioResponseBank.compositionFollowUp(composeTarget.title,
                 composeKind ?? ArtifactMediaKind.image)
-            : StudioResponseBank.studioFollowUp(studio);
+            : reviseTarget != null
+                ? (revisionSummary != null
+                    ? StudioResponseBank.revisionFollowUp(revisionSummary)
+                    : StudioResponseBank.revisionNotSimulated)
+                : StudioResponseBank.studioFollowUp(studio);
     if (followUp.isNotEmpty) {
       await _streamText(controller, '\n\n$followUp');
     }
@@ -516,7 +526,12 @@ class MockChatService implements ChatService {
   /// Studio on this same request — their outputs (photos, copy, an audio
   /// player, a video block) are woven into the page before the artifact is
   /// even created, rather than added in later turns.
-  Future<void> _emitCodeArtifact(
+  /// Returns a short phrase naming the edit that was applied when this turn
+  /// revised an artifact, or null when it created one — or when it recognised
+  /// no edit and deliberately emitted nothing. A version identical to the one
+  /// before it is worse than no version: the panel's navigator would imply
+  /// something changed.
+  Future<String?> _emitCodeArtifact(
     StreamController<ChatEvent> controller,
     Conversation conversation,
     String userInput,
@@ -528,15 +543,24 @@ class MockChatService implements ChatService {
     final now = DateTime.now();
 
     if (reviseTarget != null) {
-      // Demo mode has no model to actually apply the edit, so the revision is
-      // still templated — but it is templated from what the user just asked
-      // for, not from the artifact's own stale title.
-      final content = reviseTarget.kind == ArtifactKind.html
-          ? StudioResponseBank.htmlArtifactContent(
-              '${reviseTarget.title} — ${userInput.trim()}')
-          : (result is CodeResult ? result.code : userInput);
+      if (reviseTarget.kind == ArtifactKind.html) {
+        // Demo mode has no model, so it applies the handful of edits it can do
+        // exactly — to the artifact's *current* content, so revisions build on
+        // each other — and admits it when the request isn't one of them. It
+        // used to rebuild the page from the template every time, which put the
+        // request itself in the <h1> and threw away the previous version.
+        final revision =
+            applyMockRevision(reviseTarget.latest.content, userInput);
+        if (revision == null) return null;
+        controller.add(
+            ArtifactUpdated(reviseTarget.withNewVersion(revision.html, now)));
+        return revision.summary;
+      }
+      // A code artifact has no stable anchors to edit, so demo mode replaces it
+      // with a freshly generated file — plausible for a simulation.
+      final content = result is CodeResult ? result.code : userInput;
       controller.add(ArtifactUpdated(reviseTarget.withNewVersion(content, now)));
-      return;
+      return 'rewrote the file';
     }
 
     if (wantsHtml) {
@@ -565,6 +589,7 @@ class MockChatService implements ChatService {
         ],
       )));
     }
+    return null;
   }
 
   Future<void> _runWebSearch(

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/artifact.dart';
 import 'package:shift_ai/data/models/conversation.dart';
+import 'package:shift_ai/features/studios/studio_response_bank.dart';
 import 'package:shift_ai/turn/chat_service.dart';
 import 'package:shift_ai/turn/backends/mock_backend.dart';
 
@@ -75,7 +76,7 @@ void main() {
       kind: ArtifactKind.html,
       versions: [
         ArtifactVersion(
-          content: '<html>v1</html>',
+          content: StudioResponseBank.htmlArtifactContent('bakery landing page'),
           createdAt: DateTime(2026, 7, 19),
         ),
       ],
@@ -144,6 +145,33 @@ void main() {
         isNot('recipe1'));
   }, timeout: const Timeout(Duration(minutes: 2)));
 
+  test('an unrecognised edit creates no version and says so', () async {
+    // A v2 identical to v1 is worse than no v2: the panel's version navigator
+    // would imply something changed. Demo mode has no model, so it admits the
+    // edit is outside the set it can simulate.
+    final existing = Artifact(
+      id: 'a1',
+      conversationId: 'c1',
+      title: 'bakery landing page',
+      kind: ArtifactKind.html,
+      versions: [
+        ArtifactVersion(
+          content: StudioResponseBank.htmlArtifactContent('bakery landing page'),
+          createdAt: DateTime(2026, 7, 19),
+        ),
+      ],
+    );
+    final events = await _collect(
+      'change the code to make it more professional',
+      conversation: _conversation(artifacts: [existing]),
+    );
+
+    expect(events.whereType<ArtifactUpdated>(), isEmpty);
+    expect(events.whereType<ArtifactCreated>(), isEmpty);
+    final text = events.whereType<MessageDelta>().map((e) => e.chunk).join();
+    expect(text, contains('demo mode'));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test('a revision reflects what was asked for, not the old title', () async {
     // The revised version used to be generated from '<old title> — revised',
     // discarding the user's request entirely.
@@ -154,7 +182,7 @@ void main() {
       kind: ArtifactKind.html,
       versions: [
         ArtifactVersion(
-          content: '<html>v1</html>',
+          content: StudioResponseBank.htmlArtifactContent('bakery landing page'),
           createdAt: DateTime(2026, 7, 19),
         ),
       ],
