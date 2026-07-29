@@ -1,14 +1,13 @@
 import 'dart:typed_data';
 
-import 'web_audio_player_stub.dart'
+import 'web_audio_player_io.dart'
     if (dart.library.html) 'web_audio_player_web.dart' as impl;
 
-/// Thin cross-platform wrapper over browser audio playback. The real
-/// implementation (`web_audio_player_web.dart`, an `html.AudioElement`
-/// backed by a Blob URL) only compiles in for the web target; the stub
-/// keeps this interface (and anything that references it) compiling under
-/// `flutter test`'s VM target, where `dart:html` doesn't exist — this app
-/// only ever ships to web, so the stub is never exercised at runtime.
+/// Thin cross-platform wrapper over audio playback. On the web an
+/// `html.AudioElement` backed by a Blob URL plays inline with a live
+/// transport; off-web the WAV is written out and handed to the system player
+/// (see `web_audio_player_io.dart` for why inline playback was not adopted
+/// there).
 abstract class WebAudioPlayer {
   bool get isPlaying;
 

@@ -1,31 +1,36 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'download_target_stub.dart' if (dart.library.html) 'download_target_web.dart' as target;
+import 'download_target_io.dart'
+    if (dart.library.html) 'download_target_web.dart' as target;
 
-/// Triggers a real browser file download — this app is web-only, so a
-/// Blob + anchor-click (in `download_target_web.dart`) is the simplest
-/// correct approach. The actual `dart:html` usage lives behind a
-/// conditional import so pure-logic code that calls into this service
-/// (e.g. [StudioResponseBank]) still compiles and runs under `flutter
-/// test`'s VM target, which has no `dart:html`.
+/// Saves a file to wherever "saving a file" means on this platform: a
+/// Blob + anchor-click in the browser, a native save dialog everywhere else.
+///
+/// Asynchronous because it has to be. The browser can fire a download
+/// synchronously, but a desktop save dialog cannot — and this used to be
+/// `void`, which is why the desktop path could only ever be the no-op it was.
+/// Callers are all button handlers, so awaiting costs them nothing.
 class DownloadService {
   DownloadService._();
 
-  static void downloadBytes(
+  /// Returns the path written on platforms that have one, or null on the web
+  /// (the browser owns the destination) and when the user cancels the dialog.
+  static Future<String?> downloadBytes(
     Uint8List bytes,
     String filename, {
     String mimeType = 'application/octet-stream',
   }) {
-    target.triggerDownload(bytes, filename, mimeType);
+    return target.triggerDownload(bytes, filename, mimeType);
   }
 
-  static void downloadText(
+  static Future<String?> downloadText(
     String text,
     String filename, {
     String mimeType = 'text/plain;charset=utf-8',
   }) {
-    downloadBytes(Uint8List.fromList(utf8.encode(text)), filename, mimeType: mimeType);
+    return downloadBytes(Uint8List.fromList(utf8.encode(text)), filename,
+        mimeType: mimeType);
   }
 
   /// lower_snake_case filename stem derived from free text.

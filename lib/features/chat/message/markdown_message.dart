@@ -7,7 +7,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import '../../artifacts/mermaid_service.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../artifacts/iframe_view_stub.dart'
+import '../../artifacts/iframe_view_io.dart'
     if (dart.library.html) '../../artifacts/iframe_view_web.dart';
 
 /// Renders assistant markdown. This is the only file that touches the

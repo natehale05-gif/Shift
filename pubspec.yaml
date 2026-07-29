@@ -52,6 +52,11 @@ dependencies:
   # ZIP encoder for real deliverables: .pptx decks and .zip brand/reel packs
   # are OOXML/ZIP containers assembled in-browser.
   archive: ^3.6.1
+  # Desktop/Android only: locates the per-app directory the sembast
+  # database lives in, so a downloaded app keeps its data across restarts.
+  path_provider: ^2.1.4
+  # Opens links and artifact previews in the system browser off-web.
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:

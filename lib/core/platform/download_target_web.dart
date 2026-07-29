@@ -2,9 +2,10 @@
 import 'dart:html' as html;
 import 'dart:typed_data';
 
-/// Real implementation — only compiled in when targeting web (selected via
-/// the conditional import in download_service.dart).
-void triggerDownload(Uint8List bytes, String filename, String mimeType) {
+/// Browser implementation: a Blob plus a synthetic anchor click. The browser
+/// owns the destination, so there is no path to hand back.
+Future<String?> triggerDownload(
+    Uint8List bytes, String filename, String mimeType) async {
   final blob = html.Blob([bytes], mimeType);
   final url = html.Url.createObjectUrlFromBlob(blob);
   final anchor = html.AnchorElement(href: url)
@@ -14,4 +15,5 @@ void triggerDownload(Uint8List bytes, String filename, String mimeType) {
   anchor.click();
   anchor.remove();
   html.Url.revokeObjectUrl(url);
+  return null;
 }

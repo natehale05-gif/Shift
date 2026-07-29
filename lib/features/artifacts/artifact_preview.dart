@@ -4,7 +4,7 @@ import '../../data/models/artifact.dart';
 import '../../core/theme/app_spacing.dart';
 import '../chat/message/markdown_message.dart';
 import 'artifact_code_view.dart';
-import 'iframe_view_stub.dart'
+import 'iframe_view_io.dart'
     if (dart.library.html) 'iframe_view_web.dart';
 
 /// Renders one artifact version's "Preview" tab. HTML/SVG go through a

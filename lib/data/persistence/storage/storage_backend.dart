@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:idb_shim/idb.dart';
 
-import 'idb_factory_stub.dart' if (dart.library.html) 'idb_factory_web.dart';
+import 'idb_factory_io.dart' if (dart.library.html) 'idb_factory_web.dart';
 
 /// IndexedDB-backed storage (via idb_shim): a `kv` store for small strings,
 /// a `conversations` store with one record per conversation (so saving a
