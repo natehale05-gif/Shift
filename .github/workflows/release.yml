@@ -54,7 +54,12 @@ jobs:
           path: dist/SHIFT-AI-macos.dmg
 
   windows:
-    runs-on: windows-latest
+    # Pinned, not `windows-latest`. On the latest image Flutter could not
+    # detect any Visual Studio install, and its toolchain lookup falls back to
+    # the "Visual Studio 16 2019" CMake generator when detection returns
+    # nothing — so the build died with "could not find any instance of Visual
+    # Studio" rather than a useful message about the toolchain.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -62,6 +67,9 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
       - run: flutter pub get
+      # Prints the detected Visual Studio and Windows SDK. If this job ever
+      # fails on the toolchain again, this is the step that says why.
+      - run: flutter doctor -v
       - run: flutter build windows --release
       - name: Package .zip
         shell: pwsh
