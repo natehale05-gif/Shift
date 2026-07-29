@@ -14,6 +14,7 @@ import '../../data/models/studio_result.dart';
 import '../../data/models/studio_type.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../features/artifacts/artifact_composition.dart';
+import '../../features/artifacts/artifact_title.dart';
 import '../../features/studios/media/audio_synth_service.dart';
 import '../chat_service.dart';
 import '../turn_plan.dart';
@@ -1138,8 +1139,9 @@ class RealChatService implements ChatService {
         // an artifact, mirroring the mock's behavior. (A model pin forces the
         // chat route, so pinned models deliberately produce no artifact.)
         if (route == ChatRoute.code) {
-          var artifact =
-              extractCodeArtifact(buffer.toString(), conversation.id);
+          var artifact = extractCodeArtifact(
+              buffer.toString(), conversation.id,
+              title: artifactTitleFor(userInput));
           if (artifact != null) {
             if (pageContributors.isNotEmpty &&
                 artifact.kind == ArtifactKind.html) {
@@ -1241,7 +1243,16 @@ class RealChatService implements ChatService {
 
   /// Pulls the first substantial fenced code block out of a completed reply
   /// as an artifact. Returns null when there's nothing artifact-worthy.
-  static Artifact? extractCodeArtifact(String text, String conversationId) {
+  ///
+  /// [title] names the result. Without it every artifact was called "Generated
+  /// page", which is also the download filename — so a second download
+  /// collided with the first and the sidebar showed a column of identical
+  /// names.
+  static Artifact? extractCodeArtifact(
+    String text,
+    String conversationId, {
+    String? title,
+  }) {
     final match =
         RegExp(r'```([A-Za-z0-9+#_-]*)\n([\s\S]*?)```').firstMatch(text);
     if (match == null) return null;
@@ -1252,7 +1263,10 @@ class RealChatService implements ChatService {
     return Artifact(
       id: _uuid.v4(),
       conversationId: conversationId,
-      title: isHtml ? 'Generated page' : 'Generated ${language.isEmpty ? 'code' : language}',
+      title: title ??
+          (isHtml
+              ? 'Generated page'
+              : 'Generated ${language.isEmpty ? 'code' : language}'),
       kind: isHtml ? ArtifactKind.html : ArtifactKind.code,
       language: language.isEmpty ? null : language,
       versions: [ArtifactVersion(content: code, createdAt: DateTime.now())],

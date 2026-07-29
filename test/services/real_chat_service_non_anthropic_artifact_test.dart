@@ -161,6 +161,21 @@ void main() {
       expect(created.artifact.latest.content, contains('Not written by Claude'));
     });
 
+    test('two prompts get two titles, not "Generated page" twice', () async {
+      // Every live artifact used to carry the same constant title, which is
+      // also the download filename -- so a second download collided with the
+      // first and the sidebar showed a column of identical names.
+      final (first, _) = await run('build me a landing page for my bakery');
+      final (second, _) = await run('build me a landing page for a law firm');
+
+      final a = first.whereType<ArtifactCreated>().single.artifact.title;
+      final b = second.whereType<ArtifactCreated>().single.artifact.title;
+
+      expect(a, isNot(b));
+      expect(a, isNot('Generated page'));
+      expect(a, contains('bakery'));
+    });
+
     test('honours the create-vs-revise decision', () async {
       final (events, _) = await run(
         'change the code so the heading is bigger',

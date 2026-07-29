@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/artifact.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/features/studios/studio_response_bank.dart';
+import 'package:shift_ai/core/platform/download_service.dart';
 import 'package:shift_ai/turn/chat_service.dart';
 import 'package:shift_ai/turn/backends/mock_backend.dart';
 
@@ -57,6 +58,33 @@ void main() {
     expect(created.artifact.kind, ArtifactKind.html);
     expect(created.artifact.latest.content, contains('<!DOCTYPE html>'));
     expect(events.whereType<ArtifactUpdated>(), isEmpty);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('a page is named, not quoted back, and its heading matches', () async {
+    // The title is also the download filename (via DownloadService.slugify,
+    // which keeps six words), so the raw prompt used to yield
+    // "build_me_a_landing_page" -- the subject dropped.
+    final events = await _collect('build me a landing page for my bakery');
+    final artifact = events.whereType<ArtifactCreated>().single.artifact;
+
+    expect(artifact.title, 'Landing page for my bakery');
+    expect(artifact.latest.content, contains('<h1>Landing page for my bakery</h1>'));
+    expect(artifact.latest.content, isNot(contains('build me a')));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('two page requests get two distinct download filenames', () async {
+    final a = (await _collect('build me a landing page for my bakery'))
+        .whereType<ArtifactCreated>()
+        .single
+        .artifact;
+    final b = (await _collect('build me a landing page for a law firm'))
+        .whereType<ArtifactCreated>()
+        .single
+        .artifact;
+
+    expect(DownloadService.slugify(a.title),
+        isNot(DownloadService.slugify(b.title)));
+    expect(DownloadService.slugify(a.title), contains('bakery'));
   }, timeout: const Timeout(Duration(minutes: 2)));
 
   test('plain code prompt creates a code artifact', () async {
