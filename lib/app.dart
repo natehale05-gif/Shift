@@ -15,6 +15,7 @@ import 'data/stores/styles_store.dart';
 import 'data/stores/usage_store.dart';
 import 'data/stores/ecopay_calculator_store.dart';
 import 'data/stores/project_store.dart';
+import 'data/stores/update_store.dart';
 import 'data/stores/user_prefs_store.dart';
 import 'core/theme/app_theme.dart';
 
@@ -36,6 +37,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
   late final MemoryStore _memoryStore;
   late final StylesStore _stylesStore;
   late final UsageStore _usageStore;
+  late final UpdateStore _updateStore;
 
   @override
   void initState() {
@@ -69,6 +71,10 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
     _appSettingsStore = AppSettingsStore(persistence: _persistence)..load();
     _projectStore = ProjectStore(persistence: _persistence)..load();
     _userPrefsStore = UserPrefsStore(persistence: _persistence)..load();
+    // Reads the running version and the stored check state, then looks for a
+    // newer release once the first frame is up — never on the boot path.
+    _updateStore = UpdateStore(persistence: _persistence);
+    _updateStore.load().then((_) => _updateStore.checkIfDue());
   }
 
   @override
@@ -85,6 +91,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
         ChangeNotifierProvider.value(value: _stylesStore),
         ChangeNotifierProvider.value(value: _usageStore),
         ChangeNotifierProvider.value(value: _apiKeysStore),
+        ChangeNotifierProvider.value(value: _updateStore),
       ],
       child: Consumer<AppSettingsStore>(
         builder: (context, settings, _) {

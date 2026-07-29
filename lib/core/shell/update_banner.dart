@@ -1,0 +1,60 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../../data/stores/update_store.dart';
+import '../platform/open_url.dart';
+import '../theme/app_spacing.dart';
+import '../theme/app_theme.dart';
+
+/// A one-line strip above the whole shell when a newer release exists.
+///
+/// Dismissal is per-version, so saying "not now" once does not silence every
+/// future update. Renders nothing on web, where the service worker already
+/// swaps builds in without asking.
+class UpdateBanner extends StatelessWidget {
+  const UpdateBanner({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final store = context.watch<UpdateStore>();
+    if (!store.shouldPrompt) return const SizedBox.shrink();
+
+    final colors = Theme.of(context).extension<AppSemanticColors>()!;
+    final release = store.latest!;
+
+    return Material(
+      color: colors.warningSurface,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.md,
+          vertical: AppSpacing.sm,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.system_update_rounded,
+                size: 18, color: colors.warningText),
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Text(
+                'SHIFT AI ${release.tag} is available.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.warningText,
+                      fontWeight: FontWeight.w500,
+                    ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => openUrl(release.pageUrl),
+              child: const Text('Get it'),
+            ),
+            IconButton(
+              tooltip: 'Dismiss',
+              onPressed: store.dismiss,
+              icon: Icon(Icons.close_rounded, size: 18, color: colors.warningText),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

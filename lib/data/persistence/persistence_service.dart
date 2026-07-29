@@ -27,6 +27,7 @@ class PersistenceService {
   static const _stylesKey = 'shift_ai.custom_styles.v1';
   static const _userPrefsKey = 'shift_ai.user_prefs.v1';
   static const _migratedFlagKey = 'shift_ai.migrated_to_idb.v1';
+  static const _updateStateKey = 'shift_ai.update_state.v1';
   static const maxStoredConversations = 50;
 
   /// Generated images kept before oldest are pruned.
@@ -180,6 +181,21 @@ class PersistenceService {
 
   Future<void> saveUsageCounter(Map<String, dynamic> value) =>
       _putKv(_usageCounterKey, jsonEncode(value));
+
+  /// Updater state: `{checkedAt: iso8601, dismissed: tag, auto: bool}`.
+  /// One blob rather than three keys — it is written as a unit every time.
+  Future<Map<String, dynamic>> loadUpdateState() async {
+    final raw = await _getKv(_updateStateKey);
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  Future<void> saveUpdateState(Map<String, dynamic> value) =>
+      _putKv(_updateStateKey, jsonEncode(value));
 
   Future<String?> loadSelectedTier() => _getKv(_selectedTierKey);
 

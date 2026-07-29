@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../data/stores/conversation_store.dart';
 import '../state/home_shell_controller.dart';
 import 'app_sidebar.dart';
+import 'update_banner.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/keyboard_shortcuts_sheet.dart';
 import '../../features/chat/chat_screen.dart';
@@ -88,7 +89,12 @@ class _HomeShellState extends State<HomeShell> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 720;
-        final body = IndexedStack(index: _index, children: _screens);
+        final body = Column(
+          children: [
+            const UpdateBanner(),
+            Expanded(child: IndexedStack(index: _index, children: _screens)),
+          ],
+        );
         final controller = HomeShellController(
           openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
           toggleSidebar: () => setState(() => _sidebarOpen = !_sidebarOpen),

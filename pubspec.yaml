@@ -57,6 +57,10 @@ dependencies:
   path_provider: ^2.1.4
   # Opens links and artifact previews in the system browser off-web.
   url_launcher: ^6.3.0
+  # The running build's own version, read from the packaged manifest rather
+  # than a constant that would drift from the `version:` field above. The
+  # updater compares it against the newest GitHub release.
+  package_info_plus: ^9.0.1
 
 dev_dependencies:
   flutter_test:

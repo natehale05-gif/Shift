@@ -13,6 +13,7 @@ import '../../data/stores/user_prefs_store.dart';
 import '../styles/style_editor.dart';
 import '../../core/theme/app_spacing.dart';
 import 'api_keys_section.dart';
+import 'update_card.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/glass_app_bar.dart';
 import '../../core/shell/home_menu_button.dart';
@@ -59,6 +60,7 @@ class SettingsScreen extends StatelessWidget {
           const _MemoryCard(),
           const SizedBox(height: AppSpacing.lg),
           const _GetTheAppCard(),
+          const UpdateCard(),
           const SizedBox(height: AppSpacing.lg),
           const _FeaturePreviewCard(),
           const SizedBox(height: AppSpacing.lg),
