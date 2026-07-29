@@ -47,8 +47,16 @@ class UpdateCheck {
   static const repoSlug = 'natehale05-gif/Shift';
   static const releasesPage = 'https://github.com/$repoSlug/releases/latest';
 
-  static final _endpoint =
-      Uri.parse('https://api.github.com/repos/$repoSlug/releases/latest');
+  /// Overridable at build time so the whole updater — check, download, stage,
+  /// swap — can be exercised against a local server instead of waiting on a
+  /// published release. Compile-time only: a shipped binary cannot be pointed
+  /// somewhere else at runtime.
+  static const endpointUrl = String.fromEnvironment(
+    'SHIFT_UPDATE_API',
+    defaultValue: 'https://api.github.com/repos/$repoSlug/releases/latest',
+  );
+
+  static final _endpoint = Uri.parse(endpointUrl);
 
   final http.Client Function() _clientFactory;
   final Duration timeout;

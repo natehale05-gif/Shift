@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../data/stores/update_store.dart';
 import '../platform/open_url.dart';
+import '../update/update_installer.dart' show InstallMode;
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
 
@@ -21,6 +22,7 @@ class UpdateBanner extends StatelessWidget {
 
     final colors = Theme.of(context).extension<AppSemanticColors>()!;
     final release = store.latest!;
+    final downloading = store.status == UpdateStatus.downloading;
 
     return Material(
       color: colors.warningSurface,
@@ -36,22 +38,51 @@ class UpdateBanner extends StatelessWidget {
             const SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text(
-                'SHIFT AI ${release.tag} is available.',
+                switch (store.status) {
+                  UpdateStatus.downloading =>
+                    'Downloading SHIFT AI ${release.tag}…',
+                  UpdateStatus.readyToRestart =>
+                    'SHIFT AI ${release.tag} is ready — it installs next time '
+                        'you open the app.',
+                  UpdateStatus.handedOff =>
+                    'SHIFT AI ${release.tag} downloaded. Finish in the '
+                        'installer.',
+                  _ => 'SHIFT AI ${release.tag} is available.',
+                },
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: colors.warningText,
                       fontWeight: FontWeight.w500,
                     ),
               ),
             ),
-            TextButton(
-              onPressed: () => openUrl(release.pageUrl),
-              child: const Text('Get it'),
-            ),
-            IconButton(
-              tooltip: 'Dismiss',
-              onPressed: store.dismiss,
-              icon: Icon(Icons.close_rounded, size: 18, color: colors.warningText),
-            ),
+            if (downloading)
+              SizedBox(
+                width: 60,
+                child: LinearProgressIndicator(
+                  value: store.progress > 0 ? store.progress : null,
+                ),
+              )
+            else if (store.status == UpdateStatus.readyToRestart)
+              TextButton(
+                onPressed: store.restartAndUpdate,
+                child: const Text('Restart now'),
+              )
+            else if (store.status == UpdateStatus.available)
+              TextButton(
+                onPressed: store.mode == InstallMode.unsupported
+                    ? () => openUrl(release.pageUrl)
+                    : store.install,
+                child: const Text('Get it'),
+              ),
+            // A download already paid for is not dismissible -- there would
+            // be nothing left to bring it back.
+            if (store.status == UpdateStatus.available)
+              IconButton(
+                tooltip: 'Dismiss',
+                onPressed: store.dismiss,
+                icon: Icon(Icons.close_rounded,
+                    size: 18, color: colors.warningText),
+              ),
           ],
         ),
       ),
