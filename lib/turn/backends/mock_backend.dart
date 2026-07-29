@@ -1,6 +1,6 @@
 import '../studio_detection.dart';
 import 'mock_revision.dart';
-import '../../features/artifacts/artifact_title.dart';
+import '../request_title.dart';
 import '../../features/artifacts/interactive/interactive_render.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -415,7 +415,7 @@ class MockChatService implements ChatService {
     Set<StudioType> contributors,
   ) async {
     final seed = StudioResponseBank.seedFromString(prompt);
-    final base = StudioResponseBank.htmlArtifactContent(artifactTitleFor(prompt));
+    final base = StudioResponseBank.htmlArtifactContent(titleFromRequest(prompt));
 
     var images = const <Uint8List>[];
     if (contributors.contains(StudioType.imageStudio)) {
@@ -567,7 +567,7 @@ class MockChatService implements ChatService {
     if (wantsHtml) {
       // The page is named the same way in both backends, and the page's own
       // <title>/<h1> use that name rather than quoting the request back.
-      final title = artifactTitleFor(userInput);
+      final title = titleFromRequest(userInput);
       var content = StudioResponseBank.htmlArtifactContent(title);
       if (pageContributors.isNotEmpty) {
         content = await _assembleMockPage(userInput, pageContributors);

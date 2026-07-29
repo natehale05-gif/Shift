@@ -14,7 +14,7 @@ import '../../data/models/studio_result.dart';
 import '../../data/models/studio_type.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../features/artifacts/artifact_composition.dart';
-import '../../features/artifacts/artifact_title.dart';
+import '../request_title.dart';
 import '../../features/studios/media/audio_synth_service.dart';
 import '../chat_service.dart';
 import '../turn_plan.dart';
@@ -1141,7 +1141,7 @@ class RealChatService implements ChatService {
         if (route == ChatRoute.code) {
           var artifact = extractCodeArtifact(
               buffer.toString(), conversation.id,
-              title: artifactTitleFor(userInput));
+              title: titleFromRequest(userInput));
           if (artifact != null) {
             if (pageContributors.isNotEmpty &&
                 artifact.kind == ArtifactKind.html) {

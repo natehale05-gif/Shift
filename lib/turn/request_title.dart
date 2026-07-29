@@ -1,12 +1,19 @@
-/// How a request becomes the name of the thing it produces.
+/// How a request becomes a short human label for what it produced.
 ///
-/// Shared by both backends deliberately. They used to name artifacts
-/// independently and both got it wrong: demo mode used the raw prompt ("build
-/// me a landing page for my bakery"), and the live path used the constant
-/// "Generated page" for everything. Titles are not decoration — they become the
-/// download filename via `DownloadService.slugify`, which keeps only the first
-/// six words, so the prompt version lost its subject and the live version
-/// collided with every other download.
+/// One rule, three consumers: both backends naming an artifact, and the
+/// conversation store naming a chat. All three used to do it themselves and
+/// all three did it differently — demo mode used the raw prompt ("build me a
+/// landing page for my bakery"), the live path used the constant "Generated
+/// page" for everything, and a conversation was the first message chopped at
+/// 40 characters.
+///
+/// For artifacts this is not decoration: the title becomes the download
+/// filename via `DownloadService.slugify`, which keeps only the first six
+/// words, so the prompt version lost its subject and the live version collided
+/// with every other download.
+///
+/// Lives in `turn/` rather than with the artifact code because `data/` needs it
+/// too and `data/` does not import `features/`.
 library;
 
 /// Politeness and request framing that carries no information about the thing
@@ -39,7 +46,7 @@ const _maxChars = 60;
 /// Pure: the same request always names the same thing, whichever backend runs
 /// it. Casing after the first letter is left exactly as typed, so "SaaS",
 /// "iOS" and proper nouns survive.
-String artifactTitleFor(String userInput, {String fallback = 'Untitled page'}) {
+String titleFromRequest(String userInput, {String fallback = 'Untitled page'}) {
   var text = userInput.trim();
 
   // Peel openers one at a time — "build me a landing page" needs three passes

@@ -10,6 +10,7 @@ import '../models/conversation.dart';
 import '../models/message_block.dart';
 import '../models/studio_request.dart';
 import '../../turn/chat_service.dart';
+import '../../turn/request_title.dart';
 import '../persistence/persistence_service.dart';
 import '../../turn/message_event_folding.dart';
 
@@ -390,9 +391,10 @@ class ConversationStore extends ChangeNotifier {
       final messages = [...convo.messages, userMessage, assistantMessage];
       var title = convo.title;
       if (title == 'New chat') {
-        title = displayText.length > 40
-            ? '${displayText.substring(0, 40)}…'
-            : displayText;
+        // Named by the same rule that names artifacts, so a chat reads
+        // "Landing page for my bakery" rather than the request chopped at 40
+        // characters ("build me a landing page for my b…").
+        title = titleFromRequest(displayText, fallback: 'New chat');
       }
       return convo.copyWith(
         messages: messages,

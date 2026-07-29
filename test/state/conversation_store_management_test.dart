@@ -44,6 +44,29 @@ Future<(ConversationStore, _EchoChatService)> _makeStore() async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('a new chat is named by the same rule that names artifacts', () async {
+    // The title used to be the first message chopped at 40 characters, so the
+    // sidebar read "build me a landing page for my b…".
+    final (store, _) = await _makeStore();
+    store.startNewConversation();
+
+    await store.sendMessage('build me a landing page for my bakery');
+
+    expect(store.current!.title, 'Landing page for my bakery');
+  });
+
+  test('an explicit rename still wins over the derived title', () async {
+    final (store, _) = await _makeStore();
+    store.startNewConversation();
+    final id = store.current!.id;
+
+    await store.sendMessage('build me a landing page for my bakery');
+    store.renameConversation(id, 'Bakery plans');
+    await store.sendMessage('and add a contact form');
+
+    expect(store.current!.title, 'Bakery plans');
+  });
+
   test('rename, star, and project assignment persist on the conversation',
       () async {
     final (store, _) = await _makeStore();
