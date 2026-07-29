@@ -30,6 +30,29 @@ void main() {
           'mistral');
     });
 
+    test('a Gemini-only user can build (code no longer falls to the mock)', () {
+      // Gemini used not to advertise the code capability, so chooseProvider
+      // returned null for a page request and the live backend delegated to the
+      // mock -- the user got the simulated demo page while paying for a key.
+      expect(chooseProvider(ChatRoute.code, registry: registry, hasKey: only({'gemini'})),
+          'gemini');
+    });
+
+    test('code preference order holds: Claude, then OpenAI, then Gemini', () {
+      String? pick(Set<String> keys) =>
+          chooseProvider(ChatRoute.code, registry: registry, hasKey: only(keys));
+
+      expect(pick({'anthropic', 'openai', 'gemini'}), 'anthropic');
+      expect(pick({'openai', 'gemini'}), 'openai');
+      expect(pick({'gemini', 'groq'}), 'gemini');
+      expect(pick({'groq', 'mistral'}), 'groq');
+      expect(pick({'mistral', 'openrouter'}), 'mistral');
+      expect(pick({'openrouter'}), 'openrouter');
+      // No text key at all still means the mock.
+      expect(pick({'flux', 'heygen'}), isNull);
+      expect(pick({}), isNull);
+    });
+
     test('image only ever resolves to Gemini (or nothing)', () {
       expect(chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only({'gemini'})),
           'gemini');

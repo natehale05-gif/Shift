@@ -56,11 +56,17 @@ void main() {
           textOrder);
     });
 
-    test('code/writing/routing follow the same order minus Gemini', () {
-      // Gemini does not advertise code/writing/routing.
-      const noGemini = ['anthropic', 'openai', 'groq', 'mistral', 'openrouter'];
+    test('code follows the same order as chat', () {
+      // Gemini advertises code alongside chat: without it, a Gemini-only user
+      // asking for a page matched no code-capable provider and fell through to
+      // the simulated demo page.
       expect(registry.providersFor(ProviderCapability.code).map((d) => d.id),
-          noGemini);
+          textOrder);
+    });
+
+    test('writing/routing follow the same order minus Gemini', () {
+      // Gemini does not advertise writing/routing.
+      const noGemini = ['anthropic', 'openai', 'groq', 'mistral', 'openrouter'];
       expect(registry.providersFor(ProviderCapability.writing).map((d) => d.id),
           noGemini);
       expect(registry.providersFor(ProviderCapability.routing).map((d) => d.id),

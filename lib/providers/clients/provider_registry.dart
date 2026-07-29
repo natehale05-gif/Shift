@@ -85,6 +85,7 @@ final geminiDescriptor = ProviderDescriptor(
   clientKind: ProviderClientKind.gemini,
   capabilities: const {
     ProviderCapability.chat,
+    ProviderCapability.code,
     ProviderCapability.image,
     ProviderCapability.search,
   },
@@ -92,12 +93,16 @@ final geminiDescriptor = ProviderDescriptor(
     ProviderModel(
       id: GeminiApiConfig.flashModel,
       displayName: 'Gemini 2.5 Flash',
-      capabilities: {ProviderCapability.chat, ProviderCapability.routing},
+      capabilities: {
+        ProviderCapability.chat,
+        ProviderCapability.code,
+        ProviderCapability.routing,
+      },
     ),
     ProviderModel(
       id: GeminiApiConfig.proModel,
       displayName: 'Gemini 2.5 Pro',
-      capabilities: {ProviderCapability.chat},
+      capabilities: {ProviderCapability.chat, ProviderCapability.code},
     ),
     ProviderModel(
       id: GeminiApiConfig.imageModel,
@@ -106,10 +111,14 @@ final geminiDescriptor = ProviderDescriptor(
     ),
   ],
   // Gemini leads on image; it is a fallback for text and search behind Claude.
+  // Code sits at the same rank as chat: without it, a Gemini-only user asking
+  // for a page matched no code-capable provider at all and silently got the
+  // simulated demo page instead of their own key's answer.
   preferenceRanks: const {
     ProviderCapability.image: 0,
     ProviderCapability.search: 1,
     ProviderCapability.chat: 2,
+    ProviderCapability.code: 2,
   },
   hintPrefix: 'AIza',
   guidanceText:

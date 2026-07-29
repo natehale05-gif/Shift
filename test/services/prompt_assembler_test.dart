@@ -83,4 +83,24 @@ void main() {
       expect(prompt.length, lessThan(knowledgeCharBudget + 2000));
     });
   });
+
+  group('systemPromptForCodeTurn', () {
+    test('leaves a non-code turn untouched', () {
+      expect(systemPromptForCodeTurn('base', isCode: false), 'base');
+      expect(systemPromptForCodeTurn(null, isCode: false), isNull);
+    });
+
+    test('appends the artifact instruction on a code turn', () {
+      final out = systemPromptForCodeTurn('base', isCode: true)!;
+      expect(out, startsWith('base'));
+      expect(out, contains(codeArtifactInstruction));
+    });
+
+    test('still instructs when there is no personalization', () {
+      // A turn with no nickname/project/style has an empty prompt, and the
+      // instruction matters most there.
+      expect(systemPromptForCodeTurn(null, isCode: true), codeArtifactInstruction);
+      expect(systemPromptForCodeTurn('   ', isCode: true), codeArtifactInstruction);
+    });
+  });
 }

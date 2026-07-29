@@ -19,6 +19,7 @@ import '../chat_service.dart';
 import '../turn_plan.dart';
 import '../turn_input.dart';
 import '../plan_turn.dart';
+import '../prompt_assembler.dart';
 import '../deep_research_engine.dart';
 import 'mock_backend.dart';
 import '../../features/studios/media/procedural_art.dart';
@@ -319,7 +320,9 @@ class RealChatService implements ChatService {
                 turn.isAnsweringClarification, 'gemini');
           } else {
             await _runGeminiChat(controller, conversation, userInput,
-                attachments, options, route);
+                attachments, options, route,
+                pageContributors: pageContributors,
+                reviseTarget: reviseTarget);
           }
         case ProviderClientKind.flux:
           // Flux only serves the image capability, so this is always the
@@ -328,7 +331,11 @@ class RealChatService implements ChatService {
               turn.effectiveInput, turn.isAnsweringClarification, 'flux');
         case ProviderClientKind.openAiCompatible:
           await _runOpenAiChat(controller, conversation, userInput, attachments,
-              options, provider!, model: _autoModelFor(provider, route));
+              options, provider!,
+              model: _autoModelFor(provider, route),
+              route: route,
+              pageContributors: pageContributors,
+              reviseTarget: reviseTarget);
         default:
           // No live provider (video/audio, or an image route without a Gemini
           // key, or no keys at all) → the fully-functional mock.
@@ -869,6 +876,8 @@ class RealChatService implements ChatService {
     ChatOptions options,
     ChatRoute route, {
     String? model,
+    Set<StudioType> pageContributors = const {},
+    Artifact? reviseTarget,
   }) async {
     controller.add(RoutingDetected(route.studioType));
     final events = _gemini.streamChat(
@@ -877,15 +886,25 @@ class RealChatService implements ChatService {
       userInput: userInput,
       model: model ?? GeminiApiConfig.flashModel,
       attachments: attachments,
-      systemPrompt: options.systemPrompt,
+      systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
+          isCode: route == ChatRoute.code),
       grounding: options.webSearch || route == ChatRoute.webSearch,
     );
-    await controller.addStream(events);
+    await _streamText(
+      controller,
+      events,
+      conversation: conversation,
+      userInput: userInput,
+      route: route,
+      pageContributors: pageContributors,
+      reviseTarget: reviseTarget,
+    );
   }
 
   /// An OpenAI-compatible model (GPT/Groq/OpenRouter/Mistral) answers the turn
-  /// directly — whether pinned or chosen by Auto. Plain chat, so no artifact
-  /// extraction (mirrors a pinned Claude model).
+  /// directly — whether pinned or chosen by Auto. A code-routed turn yields an
+  /// artifact just as Claude's does; a pin forces the chat route, so pinned
+  /// models still answer inline.
   Future<void> _runOpenAiChat(
     StreamController<ChatEvent> controller,
     Conversation conversation,
@@ -894,8 +913,11 @@ class RealChatService implements ChatService {
     ChatOptions options,
     ProviderDescriptor provider, {
     required String model,
+    ChatRoute route = ChatRoute.chat,
+    Set<StudioType> pageContributors = const {},
+    Artifact? reviseTarget,
   }) async {
-    controller.add(RoutingDetected(ChatRoute.chat.studioType));
+    controller.add(RoutingDetected(route.studioType));
     final events = _openAi.streamChat(
       apiKey: keys.keyFor(provider.id),
       baseUrl: provider.baseUrl!,
@@ -904,10 +926,19 @@ class RealChatService implements ChatService {
       conversation: conversation,
       userInput: userInput,
       attachments: attachments,
-      systemPrompt: options.systemPrompt,
+      systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
+          isCode: route == ChatRoute.code),
       extraHeaders: provider.extraHeaders,
     );
-    await controller.addStream(events);
+    await _streamText(
+      controller,
+      events,
+      conversation: conversation,
+      userInput: userInput,
+      route: route,
+      pageContributors: pageContributors,
+      reviseTarget: reviseTarget,
+    );
   }
 
   /// The model an OpenAI-compatible provider should use for an Auto-routed
@@ -1047,8 +1078,6 @@ class RealChatService implements ChatService {
     controller.add(RoutingDetected(route.studioType));
 
     final model = options.modelPin ?? AnthropicApiConfig.defaultModel;
-    final buffer = StringBuffer();
-    var failed = false;
 
     // Server tools: explicit composer toggles, plus web search whenever the
     // router decided the prompt needs fresh information.
@@ -1064,27 +1093,60 @@ class RealChatService implements ChatService {
       userInput: userInput,
       model: model,
       attachments: attachments,
-      systemPrompt: options.systemPrompt,
+      systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
+          isCode: route == ChatRoute.code),
       tools: tools,
       extendedThinking: options.extendedThinking,
     );
+
+    await _streamText(
+      controller,
+      events,
+      conversation: conversation,
+      userInput: userInput,
+      route: route,
+      pageContributors: pageContributors,
+      reviseTarget: reviseTarget,
+    );
+  }
+
+  /// Pipes a text provider's events to the UI, and on a code-routed turn turns
+  /// the completed reply's fenced block into an artifact.
+  ///
+  /// Shared by every text client — Claude, Gemini and the OpenAI-compatible
+  /// providers — because which model wrote the page has no bearing on how the
+  /// page becomes an artifact. Only Claude used to do this, so a user whose
+  /// key was for anything else got prose with a code fence in it and an empty
+  /// side panel.
+  Future<void> _streamText(
+    StreamController<ChatEvent> controller,
+    Stream<ChatEvent> events, {
+    required Conversation conversation,
+    required String userInput,
+    required ChatRoute route,
+    Set<StudioType> pageContributors = const {},
+    Artifact? reviseTarget,
+  }) async {
+    final buffer = StringBuffer();
+    var failed = false;
 
     await for (final event in events) {
       if (event is MessageDelta) buffer.write(event.chunk);
       if (event is MessageError) failed = true;
       if (event is MessageComplete && !failed) {
         // Code-routed replies whose fenced block is substantial also become
-        // an artifact, mirroring the mock's behavior.
+        // an artifact, mirroring the mock's behavior. (A model pin forces the
+        // chat route, so pinned models deliberately produce no artifact.)
         if (route == ChatRoute.code) {
           var artifact =
               extractCodeArtifact(buffer.toString(), conversation.id);
           if (artifact != null) {
             if (pageContributors.isNotEmpty &&
                 artifact.kind == ArtifactKind.html) {
-              // Claude built the page; now the other studios supply its
+              // The model built the page; now the other studios supply its
               // photos, soundtrack/voiceover, and video — woven in before
               // the artifact ever reaches the UI, all contributing to the
-              // one turn. (Copy is already Claude's own on the page.)
+              // one turn. (Copy is already the model's own on the page.)
               artifact = await _assembleContributions(
                   artifact, userInput, pageContributors);
             }

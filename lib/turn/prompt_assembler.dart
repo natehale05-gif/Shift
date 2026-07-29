@@ -103,3 +103,28 @@ String assembleSystemPrompt({
 
   return buffer.toString();
 }
+
+/// Appended to the system prompt on a code-routed turn, for every provider.
+///
+/// The reply's first substantial fenced block becomes the artifact the user
+/// edits, previews and downloads, so the shape of the reply is load-bearing:
+/// a page split across several fences, or wrapped in a fence that also holds
+/// commentary, yields a broken artifact. Claude tends to answer this way
+/// unprompted; saying it out loud makes every other provider's output usable
+/// too.
+const String codeArtifactInstruction =
+    'Put the complete file in a single fenced code block, tagged with its '
+    'language (```html for a web page). One block per reply — no partial '
+    'snippets, no splitting a file across several blocks. Keep any '
+    'explanation outside the block, and keep it short.';
+
+/// [systemPrompt] with the code-artifact instruction appended when this turn
+/// is code-routed. Null and empty prompts are handled, since a turn with no
+/// personalization still needs the instruction.
+String? systemPromptForCodeTurn(String? systemPrompt, {required bool isCode}) {
+  if (!isCode) return systemPrompt;
+  final base = systemPrompt?.trim() ?? '';
+  return base.isEmpty
+      ? codeArtifactInstruction
+      : '$base\n\n$codeArtifactInstruction';
+}
