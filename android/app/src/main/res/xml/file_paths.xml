@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What the FileProvider in AndroidManifest.xml is allowed to share.
+
+  Only the app's own cache directory, which is where the updater writes the
+  downloaded APK (path_provider's getTemporaryDirectory). Nothing else is
+  exposed.
+-->
+<paths>
+    <cache-path name="update" path="." />
+</paths>
