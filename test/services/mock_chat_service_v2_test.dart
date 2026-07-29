@@ -91,6 +91,83 @@ void main() {
     expect(events.whereType<ArtifactCreated>(), isEmpty);
   }, timeout: const Timeout(Duration(minutes: 2)));
 
+  test('a new page request does not overwrite the existing artifact', () async {
+    // Demo mode used to revise whatever artifact happened to be last, so
+    // asking for a second page silently destroyed the first one.
+    final existing = Artifact(
+      id: 'a1',
+      conversationId: 'c1',
+      title: 'bakery landing page',
+      kind: ArtifactKind.html,
+      versions: [
+        ArtifactVersion(
+          content: '<html>bakery</html>',
+          createdAt: DateTime(2026, 7, 19),
+        ),
+      ],
+    );
+    final events = await _collect(
+      'build me a landing page for a law firm',
+      conversation: _conversation(artifacts: [existing]),
+    );
+
+    expect(events.whereType<ArtifactUpdated>(), isEmpty);
+    final created = events.whereType<ArtifactCreated>().single;
+    expect(created.artifact.id, isNot('a1'));
+    expect(created.artifact.kind, ArtifactKind.html);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('a code turn after a recipe card leaves the card alone', () async {
+    // Interactive artifacts share the conversation's artifact list, and an
+    // unfiltered "revise the last one" used to splice a landing page over a
+    // recipe card.
+    final recipe = Artifact(
+      id: 'recipe1',
+      conversationId: 'c1',
+      title: 'Banana bread',
+      kind: ArtifactKind.html,
+      interactive: true,
+      versions: [
+        ArtifactVersion(
+          content: '<html>card</html>',
+          createdAt: DateTime(2026, 7, 19),
+        ),
+      ],
+    );
+    final events = await _collect(
+      'build me a landing page for my bakery',
+      conversation: _conversation(artifacts: [recipe]),
+    );
+
+    expect(events.whereType<ArtifactUpdated>(), isEmpty);
+    expect(events.whereType<ArtifactCreated>().single.artifact.id,
+        isNot('recipe1'));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('a revision reflects what was asked for, not the old title', () async {
+    // The revised version used to be generated from '<old title> — revised',
+    // discarding the user's request entirely.
+    final existing = Artifact(
+      id: 'a1',
+      conversationId: 'c1',
+      title: 'bakery landing page',
+      kind: ArtifactKind.html,
+      versions: [
+        ArtifactVersion(
+          content: '<html>v1</html>',
+          createdAt: DateTime(2026, 7, 19),
+        ),
+      ],
+    );
+    final events = await _collect(
+      'change the code so the heading says Fresh Sourdough Daily',
+      conversation: _conversation(artifacts: [existing]),
+    );
+
+    final updated = events.whereType<ArtifactUpdated>().single;
+    expect(updated.artifact.latest.content, contains('Fresh Sourdough Daily'));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test('deep research option walks planning/searching/synthesizing stages',
       () async {
     final events = await _collect(

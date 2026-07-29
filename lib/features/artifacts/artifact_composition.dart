@@ -116,6 +116,68 @@ bool referencesExistingArtifact(String input) {
   return _artifactReferenceKeywords.any(lower.contains);
 }
 
+/// An explicit request to build something new, carrying its own subject:
+/// "build me a pricing page", "create a dashboard". The noun is required so
+/// that "make it bigger" — which also starts with a build verb — does not
+/// read as a fresh build.
+final _freshBuildSignal = RegExp(
+    r'\b(build|create|generate|design|make me|write me|give me)\b[\s\S]*'
+    r'\b(page|site|website|app|landing|dashboard|form|game|portfolio|'
+    r'blog|store|shop|calculator)\b');
+
+/// A request to change what is already there rather than start over.
+final _revisionSignal = RegExp(
+    r'\b(change|changes|update|updates|fix|fixes|tweak|adjust|revise|edit|'
+    r'rename|remove|delete|replace|swap|instead|refactor|simplify|'
+    r'make it|make the|can you make|turn it|turn the)\b');
+
+/// The artifact a code-routed turn should revise, or null when the turn should
+/// create a fresh one.
+///
+/// This is the create-vs-revise decision, kept pure and shared so demo mode and
+/// live mode cannot disagree about it — they used to, in opposite directions:
+/// the mock revised whatever artifact happened to be last (silently overwriting
+/// a page when the user asked for a different one), while the live path always
+/// created, so a genuine "change the button to red" spawned a second artifact
+/// instead of a version.
+///
+/// Distinct from [findArtifactEdit], which handles "add a hero image **to the
+/// website**" — splicing generated media into a page. This decides whether the
+/// *code* output replaces an existing artifact.
+///
+/// Ambiguity resolves to create (null). A spurious extra artifact is a nuisance
+/// the user can delete; overwriting the page they asked for destroys work.
+Artifact? findRevisionTarget(Conversation conversation, String userInput) {
+  // Interactive artifacts (recipe cards, quizzes) live in the same list but are
+  // generated wholesale from a prompt — a later code request is never a
+  // revision of one.
+  Artifact? candidate;
+  for (final artifact in conversation.artifacts.reversed) {
+    if (artifact.interactive) continue;
+    if (artifact.kind == ArtifactKind.html ||
+        artifact.kind == ArtifactKind.code) {
+      candidate = artifact;
+      break;
+    }
+  }
+  if (candidate == null) return null;
+
+  final lower = userInput.toLowerCase();
+
+  // "Build me a pricing page" is a new deliverable even mid-conversation —
+  // unless it also points back at what exists ("rebuild the page with…").
+  if (_freshBuildSignal.hasMatch(lower) &&
+      !_artifactReferenceKeywords.any(lower.contains)) {
+    return null;
+  }
+
+  if (_artifactReferenceKeywords.any(lower.contains) ||
+      _revisionSignal.hasMatch(lower)) {
+    return candidate;
+  }
+  return null;
+}
+
 /// How many images a combined build request wants: an explicit count
 /// ("3 photos") wins; vague plurals ("several", "photos") default to a
 /// small gallery; a singular mention ("a logo") wants just one.

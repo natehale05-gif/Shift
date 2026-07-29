@@ -16,7 +16,7 @@ void main() {
     final store = ConversationStore(
       chatService: MockChatService(),
       persistence: PersistenceService(),
-    )..onArtifactCreated = (_) => opened++;
+    )..onArtifactCreated = (_, {versionIndex}) => opened++;
     await store.load();
     store.startNewConversation();
 

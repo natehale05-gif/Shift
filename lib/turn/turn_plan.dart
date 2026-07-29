@@ -116,11 +116,20 @@ class StudioTurn extends TurnPlan {
   /// Empty for a plain single-studio turn.
   final Set<StudioType> contributors;
 
+  /// The artifact this turn's code output revises, when the prompt reads as a
+  /// change to what already exists ("make the button red") rather than a new
+  /// deliverable. Null means create a fresh artifact.
+  ///
+  /// Decided once, here, so demo and live modes cannot answer the same prompt
+  /// differently — see `findRevisionTarget`.
+  final Artifact? reviseTarget;
+
   const StudioTurn({
     this.structuredRequest,
     this.composeTarget,
     this.composeKind,
     this.contributors = const {},
+    this.reviseTarget,
     required super.studio,
     required super.effectiveInput,
     required super.isAnsweringClarification,

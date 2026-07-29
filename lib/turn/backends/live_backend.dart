@@ -306,11 +306,12 @@ class RealChatService implements ChatService {
 
       final pageContributors =
           turn is StudioTurn ? turn.contributors : const <StudioType>{};
+      final reviseTarget = turn is StudioTurn ? turn.reviseTarget : null;
 
       switch (provider?.clientKind) {
         case ProviderClientKind.anthropic:
           await _runAnthropicChat(controller, conversation, userInput,
-              attachments, options, route, pageContributors);
+              attachments, options, route, pageContributors, reviseTarget);
         case ProviderClientKind.gemini:
           if (route == ChatRoute.imageGen) {
             await _runImageWithClarification(controller, conversation,
@@ -1041,6 +1042,7 @@ class RealChatService implements ChatService {
     ChatOptions options,
     ChatRoute route,
     Set<StudioType> pageContributors,
+    Artifact? reviseTarget,
   ) async {
     controller.add(RoutingDetected(route.studioType));
 
@@ -1086,7 +1088,15 @@ class RealChatService implements ChatService {
               artifact = await _assembleContributions(
                   artifact, userInput, pageContributors);
             }
-            controller.add(ArtifactCreated(artifact));
+            // A revision keeps the user's artifact and gains a version, so the
+            // panel's version navigator can step back to what it replaced —
+            // rather than leaving two near-identical artifacts side by side.
+            if (reviseTarget != null && reviseTarget.kind == artifact.kind) {
+              controller.add(ArtifactUpdated(reviseTarget.withNewVersion(
+                  artifact.latest.content, DateTime.now())));
+            } else {
+              controller.add(ArtifactCreated(artifact));
+            }
           }
         }
       }

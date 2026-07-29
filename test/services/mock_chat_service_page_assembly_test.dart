@@ -21,6 +21,42 @@ Future<Artifact> _buildPage(String prompt) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('contributors still run when the conversation has a code artifact',
+      () async {
+    // The mock used to revise whatever artifact was last and return before
+    // page assembly ever ran, so a multi-studio build silently degraded to a
+    // content-free revision. (Only reachable via a code artifact: a page
+    // request is not planned as an assembly once an HTML artifact exists.)
+    final existing = Artifact(
+      id: 'code1',
+      conversationId: 'c1',
+      title: 'parse_dates.py',
+      kind: ArtifactKind.code,
+      versions: [
+        ArtifactVersion(content: 'print(1)', createdAt: DateTime(2026, 7, 20)),
+      ],
+    );
+    final conversation = Conversation(
+      id: 'c1',
+      title: 'Test',
+      createdAt: DateTime(2026, 7, 20),
+      updatedAt: DateTime(2026, 7, 20),
+      artifacts: [existing],
+    );
+    final events = await MockChatService()
+        .sendMessage(
+          conversation: conversation,
+          userInput: 'build me a bakery website with a soundtrack',
+          options: ChatOptions.none,
+        )
+        .toList();
+
+    expect(events.whereType<ArtifactUpdated>(), isEmpty);
+    final artifact = events.whereType<ArtifactCreated>().single.artifact;
+    expect(artifact.kind, ArtifactKind.html);
+    expect(artifact.latest.content, contains('<audio controls'));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test('a website with a soundtrack embeds a playable audio player',
       () async {
     final artifact =

@@ -1,5 +1,6 @@
 import 'studio_detection.dart';
 import '../data/models/studio_type.dart';
+import '../features/artifacts/artifact_composition.dart';
 import 'diagram_detection.dart';
 import '../features/artifacts/interactive/interactive_content.dart';
 import 'studio_clarification.dart';
@@ -131,11 +132,21 @@ TurnPlan planTurn(TurnInput input) {
   }
 
   final isEdit = plan.kind == CompositionKind.editArtifact;
+
+  // Whether Code Studio's output replaces an existing artifact or starts a new
+  // one. Only meaningful for a fresh code turn: a splice-media edit already
+  // names its target, and a structured form or clarification answer is always
+  // producing something new.
+  final reviseTarget = fresh && !isEdit && studio == StudioType.codeStudio
+      ? findRevisionTarget(conversation, effectiveInput)
+      : null;
+
   return StudioTurn(
     structuredRequest: structuredRequest,
     composeTarget: isEdit ? plan.editTarget : null,
     composeKind: isEdit ? plan.editKind : null,
     contributors: wantsBoth ? plan.contributors : const <StudioType>{},
+    reviseTarget: reviseTarget,
     studio: studio,
     effectiveInput: effectiveInput,
     isAnsweringClarification: answering,

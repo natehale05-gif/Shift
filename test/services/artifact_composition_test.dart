@@ -240,4 +240,96 @@ void main() {
       expect(galleryIndex, lessThan(h1Index));
     });
   });
+
+  group('findRevisionTarget', () {
+    Artifact codeArtifact() => Artifact(
+          id: 'code1',
+          conversationId: 'c1',
+          title: 'script.py',
+          kind: ArtifactKind.code,
+          versions: [
+            ArtifactVersion(content: 'print(1)', createdAt: DateTime(2026))
+          ],
+        );
+
+    test('returns null when the conversation has no artifacts', () {
+      expect(
+        findRevisionTarget(_withArtifacts(const []), 'make the button red'),
+        isNull,
+      );
+    });
+
+    test('a new build request does not revise the existing page', () {
+      // The regression this function exists for: demo mode used to overwrite
+      // whatever artifact was last, so asking for a second page destroyed the
+      // first one.
+      final conversation = _withArtifacts([_htmlArtifact()]);
+      expect(
+        findRevisionTarget(conversation, 'build me a pricing page for a SaaS'),
+        isNull,
+      );
+      expect(
+        findRevisionTarget(conversation, 'create a dashboard app'),
+        isNull,
+      );
+    });
+
+    test('a change request revises the existing page', () {
+      final conversation = _withArtifacts([_htmlArtifact()]);
+      expect(
+        findRevisionTarget(conversation, 'change the code so the button is red')
+            ?.id,
+        'art1',
+      );
+      expect(
+        findRevisionTarget(conversation, 'make the heading bigger')?.id,
+        'art1',
+      );
+    });
+
+    test('a back-reference revises even alongside a build verb', () {
+      final conversation = _withArtifacts([_htmlArtifact()]);
+      expect(
+        findRevisionTarget(conversation, 'build a contact form on the page')
+            ?.id,
+        'art1',
+      );
+    });
+
+    test('skips interactive artifacts', () {
+      // A recipe card is generated wholesale from its own prompt; a later code
+      // request is never a revision of one.
+      final recipe = Artifact(
+        id: 'recipe1',
+        conversationId: 'c1',
+        title: 'Banana bread',
+        kind: ArtifactKind.html,
+        interactive: true,
+        versions: [
+          ArtifactVersion(content: '<html>card</html>', createdAt: DateTime(2026))
+        ],
+      );
+      expect(
+        findRevisionTarget(_withArtifacts([recipe]), 'make the heading bigger'),
+        isNull,
+      );
+    });
+
+    test('revises a code artifact too', () {
+      expect(
+        findRevisionTarget(_withArtifacts([codeArtifact()]), 'fix the off by one')
+            ?.id,
+        'code1',
+      );
+    });
+
+    test('an unrelated prompt creates rather than revises', () {
+      // Ambiguity resolves to create: a spare artifact is recoverable, an
+      // overwritten one is not.
+      expect(
+        findRevisionTarget(_withArtifacts([_htmlArtifact()]), 'a poem about rain'),
+        isNull,
+      );
+    });
+  });
 }

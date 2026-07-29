@@ -24,7 +24,7 @@ class ConversationStore extends ChangeNotifier {
   /// Called when a new artifact is created, so the UI can open the artifacts
   /// panel automatically — like Claude, the result just appears; you don't
   /// click anything.
-  void Function(String artifactId)? onArtifactCreated;
+  void Function(String artifactId, {int? versionIndex})? onArtifactCreated;
 
   /// Called with the user's text after a genuine user turn finishes, so the
   /// app can extract durable facts into cross-chat memory.
@@ -478,7 +478,13 @@ class ConversationStore extends ChangeNotifier {
         if (!artifact.interactive) onArtifactCreated?.call(artifact.id);
       case ArtifactUpdated(:final artifact):
         _upsertArtifact(conversationId, messageId, artifact);
-        if (!artifact.interactive) onArtifactCreated?.call(artifact.id);
+        // Jump to the version just written — asking for a change and being
+        // shown the version it replaced reads as the change not landing. The
+        // navigator still steps back to the older ones.
+        if (!artifact.interactive) {
+          onArtifactCreated?.call(artifact.id,
+              versionIndex: artifact.versions.length - 1);
+        }
       case ImageGenerated(:final pngBytes, :final alt):
         // Bytes go to the asset store (IndexedDB) so the image survives
         // reload; the block keeps them in memory for immediate display.

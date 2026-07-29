@@ -115,6 +115,7 @@ class MockChatService implements ChatService {
             :final composeTarget,
             :final composeKind,
             :final contributors,
+            :final reviseTarget,
             :final isAnsweringClarification,
           ):
           await _runStudioFlow(
@@ -127,6 +128,7 @@ class MockChatService implements ChatService {
             composeTarget,
             composeKind,
             contributors,
+            reviseTarget,
           );
       }
 
@@ -153,6 +155,7 @@ class MockChatService implements ChatService {
     Artifact? composeTarget,
     ArtifactMediaKind? composeKind,
     Set<StudioType> pageContributors,
+    Artifact? reviseTarget,
   ) async {
     final contributorNames =
         pageContributors.map((s) => s.displayName).toList();
@@ -210,7 +213,7 @@ class MockChatService implements ChatService {
       // Code output ships as an artifact (side panel), not an inline card —
       // the artifact IS the deliverable, with copy/download/versions there.
       await _emitCodeArtifact(controller, conversation, userInput, result,
-          pageContributors: pageContributors);
+          pageContributors: pageContributors, reviseTarget: reviseTarget);
     } else {
       controller.add(StudioResultReady(result));
     }
@@ -501,9 +504,14 @@ class MockChatService implements ChatService {
   }
 
   /// Code-routed turns also produce an artifact: a runnable HTML page for
-  /// page-shaped prompts, otherwise the generated code file. A follow-up
-  /// code prompt in a conversation that already has an artifact revises it
-  /// (new version) instead of creating a fresh one — the artifacts model.
+  /// page-shaped prompts, otherwise the generated code file.
+  ///
+  /// [reviseTarget] carries the create-vs-revise decision made in `planTurn`
+  /// (see `findRevisionTarget`) — when set, this turn is a change to that
+  /// artifact and becomes a new version of it rather than a fresh one. The
+  /// decision is deliberately *not* made here: this backend and the live one
+  /// used to each guess at it and guess differently.
+  ///
   /// A non-empty [pageContributors] means other studios ran alongside Code
   /// Studio on this same request — their outputs (photos, copy, an audio
   /// player, a video block) are woven into the page before the artifact is
@@ -514,18 +522,20 @@ class MockChatService implements ChatService {
     String userInput,
     StudioResult result, {
     Set<StudioType> pageContributors = const {},
+    Artifact? reviseTarget,
   }) async {
     final wantsHtml = StudioDetection.wantsHtmlArtifact(userInput);
     final now = DateTime.now();
 
-    final existing =
-        conversation.artifacts.isNotEmpty ? conversation.artifacts.last : null;
-    if (existing != null) {
-      final content = existing.kind == ArtifactKind.html
+    if (reviseTarget != null) {
+      // Demo mode has no model to actually apply the edit, so the revision is
+      // still templated — but it is templated from what the user just asked
+      // for, not from the artifact's own stale title.
+      final content = reviseTarget.kind == ArtifactKind.html
           ? StudioResponseBank.htmlArtifactContent(
-              '${existing.title} — revised')
+              '${reviseTarget.title} — ${userInput.trim()}')
           : (result is CodeResult ? result.code : userInput);
-      controller.add(ArtifactUpdated(existing.withNewVersion(content, now)));
+      controller.add(ArtifactUpdated(reviseTarget.withNewVersion(content, now)));
       return;
     }
 
