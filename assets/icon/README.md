@@ -15,6 +15,21 @@ That writes the Android mipmaps, the macOS `AppIcon.appiconset`, the Windows
 `.ico`, and the web `icons/` + `favicon.png`. The generated files are committed,
 so CI builds need no extra step.
 
+## iOS home screen
+
+`dart run flutter_launcher_icons` does **not** produce an iOS-correct icon for
+"Add to Home Screen" — Safari ignores `manifest.json` and uses the
+`apple-touch-icon` link, which needs an opaque, full-bleed, 180x180 image. Run:
+
+```bash
+python3 tool/make_apple_touch_icon.py
+```
+
+Then **bump the filename** in `web/index.html` (e.g. `-180.png` ->
+`-180-v2.png`). iOS caches apple-touch-icons by URL and never revalidates, and
+the service worker caches by URL as well, so reusing a path means both keep
+serving the old icon no matter what the server returns.
+
 ## Notes
 
 - **Linux** is not covered by the generator. `linux/runner/my_application.cc`

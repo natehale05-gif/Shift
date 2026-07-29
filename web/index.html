@@ -31,11 +31,24 @@
   <meta name="description"
         content="SHIFT AI — one studio, every AI tool. A middleware AI that routes your request to the right specialized studio.">
 
-  <!-- iOS meta tags & icons -->
+  <!--
+    iOS meta tags & icons. "Add to Home Screen" does NOT use manifest.json —
+    Safari uses the apple-touch-icon link below, and it has its own rules:
+    the image must be opaque (iOS paints transparent pixels black), full-bleed
+    square (iOS applies its own rounding), and 180x180.
+
+    The filename is versioned on purpose. iOS caches apple-touch-icons by URL
+    and never revalidates, and the service worker caches by URL too — so
+    replacing the bytes behind an existing path leaves both caches serving the
+    old icon indefinitely. Bump the number whenever the icon changes.
+
+    Built by tool/make_apple_touch_icon.py.
+  -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SHIFT AI">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180.png">
 
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
