@@ -129,4 +129,45 @@ void main() {
     expect(hasStagedUpdate(), isFalse);
     expect(await applyStagedUpdate(), isFalse);
   });
+
+  group('canReplaceInPlace', () {
+    test('a writable install directory can replace itself', () {
+      expect(canReplaceInPlace(), isTrue);
+    });
+
+    test('a read-only parent cannot', () async {
+      // What a .deb install looks like: the bundle lives under root-owned
+      // /opt, so the sibling staging directory can never be created. The
+      // probe has to notice *before* the download, or the app spends 23 MB
+      // to arrive at a failure it could have predicted.
+      final locked = Directory('${root.path}/locked')..createSync();
+      Directory('${locked.path}/SHIFT-AI-linux-x64').createSync();
+      useInstallLocation('${locked.path}/SHIFT-AI-linux-x64', _executable);
+      await Process.run('chmod', ['555', locked.path]);
+
+      addTearDown(() => Process.run('chmod', ['755', locked.path]));
+
+      // Running the suite as root defeats permission bits entirely, so this
+      // assertion is only meaningful for an unprivileged user.
+      final probe = File('${locked.path}/probe');
+      var writable = true;
+      try {
+        probe.writeAsStringSync('');
+        probe.deleteSync();
+      } catch (_) {
+        writable = false;
+      }
+
+      if (writable) {
+        markTestSkipped('running as root: permission bits do not apply');
+        return;
+      }
+      expect(canReplaceInPlace(), isFalse);
+    });
+
+    test('a parent that does not exist cannot', () {
+      useInstallLocation('/definitely/not/here/SHIFT-AI', _executable);
+      expect(canReplaceInPlace(), isFalse);
+    });
+  });
 }

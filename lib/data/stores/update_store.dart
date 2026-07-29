@@ -28,6 +28,11 @@ enum UpdateStatus {
   /// where unsigned software cannot install silently.
   handedOff,
 
+  /// A newer release exists, but this copy is installed somewhere it cannot
+  /// write — a `.deb` under `/opt`, or an all-users Windows install. Nothing
+  /// was downloaded; the release page is the way to get it.
+  manualRequired,
+
   /// The check or the download could not complete — offline, rate-limited,
   /// or no release published yet. Deliberately distinct from [upToDate]: the
   /// app must not claim to be current when it does not know.
@@ -89,7 +94,11 @@ class UpdateStore extends ChangeNotifier {
     return switch (_status) {
       UpdateStatus.readyToRestart || UpdateStatus.handedOff => true,
       UpdateStatus.downloading => true,
-      UpdateStatus.available => _latest!.tag != _dismissedTag,
+      // Dismissible: this one needs the user to go and do something, so
+      // nagging them past a "not now" is the wrong call.
+      UpdateStatus.available ||
+      UpdateStatus.manualRequired =>
+        _latest!.tag != _dismissedTag,
       _ => false,
     };
   }
@@ -192,6 +201,7 @@ class UpdateStore extends ChangeNotifier {
     _status = switch (outcome) {
       InstallOutcome.staged => UpdateStatus.readyToRestart,
       InstallOutcome.handedOff => UpdateStatus.handedOff,
+      InstallOutcome.notPermitted => UpdateStatus.manualRequired,
       InstallOutcome.failed => UpdateStatus.failed,
     };
     notifyListeners();

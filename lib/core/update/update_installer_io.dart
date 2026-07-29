@@ -87,6 +87,34 @@ bool hasStagedUpdate() {
   }
 }
 
+/// Whether this copy is allowed to replace itself in place.
+///
+/// A `.deb` unpacks into `/opt`, and a Windows all-users install lands in
+/// `Program Files` — both root-owned. The swap would fail there, and failing
+/// *after* a 23 MB download, with a message that reads like the check itself
+/// broke, is the worst of the available outcomes. Probing first turns it into
+/// an accurate sentence and a working link.
+///
+/// Probed by actually writing, not by reading permission bits: ownership,
+/// ACLs, read-only mounts and Windows semantics do not reduce to a mode check.
+bool canReplaceInPlace() {
+  if (installModeFor(Platform.operatingSystem) !=
+      InstallMode.replaceAndRelaunch) {
+    return true; // Hand-off platforms never touch the install directory.
+  }
+  try {
+    final parent = _installDir.parent;
+    if (!parent.existsSync()) return false;
+    final probe = File('${parent.path}${Platform.pathSeparator}'
+        '.shift_ai_write_probe_${DateTime.now().microsecondsSinceEpoch}');
+    probe.writeAsStringSync('');
+    probe.deleteSync();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
 Future<InstallOutcome> downloadAndInstall(
   ReleaseAsset asset, {
   void Function(double progress)? onProgress,
@@ -94,6 +122,9 @@ Future<InstallOutcome> downloadAndInstall(
 }) async {
   final mode = installMode();
   if (mode == InstallMode.unsupported) return InstallOutcome.failed;
+  // Checked before the download, not after: there is no point spending the
+  // bandwidth on an update this copy cannot apply.
+  if (!canReplaceInPlace()) return InstallOutcome.notPermitted;
 
   final file = await _download(asset, onProgress, clientFactory);
   if (file == null) return InstallOutcome.failed;

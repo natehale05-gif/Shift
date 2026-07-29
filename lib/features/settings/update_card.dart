@@ -96,7 +96,15 @@ class UpdateCard extends StatelessWidget {
                   icon: const Icon(Icons.download_rounded, size: 18),
                   label: const Text('Download it'),
                 ),
-              if (store.status != UpdateStatus.available)
+              if (store.status == UpdateStatus.manualRequired)
+                FilledButton.icon(
+                  onPressed: () => openUrl(
+                      store.latest?.pageUrl ?? UpdateCheck.releasesPage),
+                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                  label: const Text('Get it from GitHub'),
+                ),
+              if (store.status != UpdateStatus.available &&
+                  store.status != UpdateStatus.manualRequired)
                 TextButton(
                   onPressed: () => openUrl(
                       store.latest?.pageUrl ?? UpdateCheck.releasesPage),
@@ -126,6 +134,12 @@ class UpdateCard extends StatelessWidget {
         UpdateStatus.handedOff =>
           '${store.latest?.tag ?? 'The update'} has been downloaded and the '
               'installer is open. Finish there.',
+        // Says which of the two things is true — the update exists, and this
+        // copy specifically cannot apply it — rather than a bare failure.
+        UpdateStatus.manualRequired =>
+          '${store.latest?.tag ?? 'A new version'} is available. This copy is '
+              'installed system-wide, so it cannot replace itself — install '
+              'the new version from GitHub.',
         // Never "you're up to date" — the app does not know that it is.
         UpdateStatus.failed =>
           "Couldn't check right now. You may be offline, or there may be no "

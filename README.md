@@ -9,13 +9,28 @@ install, no key required. Demo mode simulates every studio.
 
 ## Download
 
-[![macOS](https://img.shields.io/badge/macOS-Download-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-macos.dmg)
-[![Windows](https://img.shields.io/badge/Windows-Download-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-windows.zip)
-[![Linux](https://img.shields.io/badge/Linux-Download-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-linux-x64.tar.gz)
-[![Android](https://img.shields.io/badge/Android-Download-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-android.apk)
+[![macOS](https://img.shields.io/badge/macOS-Install-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-macos.dmg)
+[![Windows](https://img.shields.io/badge/Windows-Install-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-windows-setup.exe)
+[![Linux](https://img.shields.io/badge/Linux-Install-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-linux-amd64.deb)
+[![Android](https://img.shields.io/badge/Android-Install-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-android.apk)
+
+Each button is a real installer, not an archive to unpack:
+
+| Platform | What you get | How to install |
+|---|---|---|
+| **macOS** | `.dmg` disk image | Open it, drag **SHIFT AI** into Applications |
+| **Windows** | `.exe` setup | Run it — Start Menu entry, desktop shortcut, uninstaller |
+| **Linux** | `.deb` package | `sudo dpkg -i SHIFT-AI-linux-amd64.deb`, then launch it from your apps menu |
+| **Android** | `.apk` | Tap it and confirm the install |
 
 Every button points at `releases/latest`, so it always fetches the newest build.
 All builds are on the [Releases page](https://github.com/natehale05-gif/Shift/releases).
+
+**Portable builds.** `SHIFT-AI-windows.zip` and `SHIFT-AI-linux-x64.tar.gz` are
+also published for anyone who would rather not install anything — extract and
+run. On Linux the tarball is additionally the *self-updating* copy: a `.deb`
+installs into root-owned `/opt`, so that copy cannot replace itself and the app
+says so and links you back here instead of failing an update halfway.
 
 **You only download once.** The app checks for new releases daily and installs
 them itself — silently on Linux and Windows, applied the next time you open it.
@@ -33,7 +48,13 @@ project does not have them. Your OS will object exactly once:
 | **macOS** | Right-click the app → **Open** → **Open**. If it claims the app is "damaged": `xattr -dr com.apple.quarantine "/Applications/SHIFT AI.app"` |
 | **Windows** | SmartScreen shows a blue box → **More info** → **Run anyway** |
 | **Android** | Allow installs from unknown sources for your file manager when prompted |
-| **Linux** | `tar -xzf SHIFT-AI-linux-x64.tar.gz && ./shift_ai` |
+| **Linux** | No warning — `dpkg` does not check signatures for a local file |
+
+The Windows installer installs per-user, into
+`%LOCALAPPDATA%\Programs\SHIFT AI`, which is what lets the app update itself
+later. You can choose an all-users install instead; the app then detects that it
+cannot write to its own directory and points you back to the Releases page for
+updates rather than failing one halfway through.
 
 ### What differs from the browser version
 

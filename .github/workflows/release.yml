@@ -71,7 +71,23 @@ jobs:
       # fails on the toolchain again, this is the step that says why.
       - run: flutter doctor -v
       - run: flutter build windows --release
-      - name: Package .zip
+
+      # The installer is the primary Windows download: Start Menu entry,
+      # uninstaller, and a per-user install directory the in-app updater can
+      # actually write to. The .zip stays for people who want it portable.
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          if (-not (Test-Path $iscc)) { $iscc = "iscc" }
+          $version = "${{ github.event.inputs.tag || github.ref_name }}" -replace '^v',''
+          & $iscc "/DAppVersion=$version" windows\installer\shift_ai.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with $LASTEXITCODE" }
+
+      - name: Package portable .zip
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
@@ -79,7 +95,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/SHIFT-AI-windows.zip
+          path: |
+            dist/SHIFT-AI-windows-setup.exe
+            dist/SHIFT-AI-windows.zip
 
   linux:
     runs-on: ubuntu-latest
@@ -97,14 +115,28 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
       - run: flutter pub get
       - run: flutter build linux --release
-      - name: Package .tar.gz
+
+      # The .deb is the primary Linux download: it installs to /opt with a
+      # launcher entry and icon, so the app shows up in the applications list.
+      - name: Build .deb
+        run: |
+          VERSION="${{ github.event.inputs.tag || github.ref_name }}"
+          ./linux/packaging/build_deb.sh "${VERSION#v}"
+
+      # Kept alongside it, and not merely for portability: /opt is root-owned,
+      # so a .deb install cannot replace itself and the app tells those users
+      # to update from the release page. The tarball extracts wherever the
+      # user wants, which is what keeps the self-updating path available.
+      - name: Package portable .tar.gz
         run: |
           mkdir -p dist
           tar -czf dist/SHIFT-AI-linux-x64.tar.gz -C build/linux/x64/release/bundle .
       - uses: actions/upload-artifact@v4
         with:
           name: linux
-          path: dist/SHIFT-AI-linux-x64.tar.gz
+          path: |
+            dist/SHIFT-AI-linux-amd64.deb
+            dist/SHIFT-AI-linux-x64.tar.gz
 
   android:
     runs-on: ubuntu-latest
@@ -149,6 +181,19 @@ jobs:
           body: |
             Download the build for your platform below, or use the app in your
             browser at https://natehale05-gif.github.io/Shift/
+
+            | Platform | Install this |
+            |---|---|
+            | macOS | `SHIFT-AI-macos.dmg` — open it, drag the app to Applications |
+            | Windows | `SHIFT-AI-windows-setup.exe` — installer, Start Menu entry, uninstaller |
+            | Linux | `SHIFT-AI-linux-amd64.deb` — `sudo dpkg -i SHIFT-AI-linux-amd64.deb`, then find it in your apps |
+            | Android | `SHIFT-AI-android.apk` — tap it and confirm the install |
+
+            `SHIFT-AI-windows.zip` and `SHIFT-AI-linux-x64.tar.gz` are portable
+            builds for anyone who would rather not install. On Linux the
+            tarball is also the self-updating one — a `.deb` lives in
+            root-owned `/opt`, so that copy cannot replace itself and will
+            point you back here instead.
 
             **You only have to download once.** The app checks for new releases
             daily and installs them itself — silently on Linux and Windows,
