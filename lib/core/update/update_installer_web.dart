@@ -12,6 +12,8 @@ InstallMode installMode() => InstallMode.unsupported;
 
 bool hasStagedUpdate() => false;
 
+bool canReplaceInPlace() => false;
+
 Future<InstallOutcome> downloadAndInstall(
   ReleaseAsset asset, {
   void Function(double progress)? onProgress,

@@ -17,6 +17,12 @@ enum InstallOutcome {
   /// Android only.
   handedOff,
 
+  /// This copy cannot replace itself: it lives somewhere the user cannot
+  /// write, such as a `.deb` installed under `/opt` or a Windows all-users
+  /// install under `Program Files`. Nothing was downloaded. The update is
+  /// real and the release page is the way to get it.
+  notPermitted,
+
   /// Nothing was changed. The download failed, was short, or the unpacked
   /// tree did not look like an install.
   failed,
@@ -48,3 +54,8 @@ Future<bool> applyStagedUpdate() => target.applyStagedUpdate();
 
 /// Whether an unpacked update is sitting beside the install, waiting.
 bool get hasStagedUpdate => target.hasStagedUpdate();
+
+/// Whether this copy can replace itself where it stands. False for a
+/// system-wide install (`/opt` from a `.deb`, `Program Files`), which the app
+/// cannot write to — the release page is the route for those.
+bool get canReplaceInPlace => target.canReplaceInPlace();

@@ -47,6 +47,9 @@ class UpdateBanner extends StatelessWidget {
                   UpdateStatus.handedOff =>
                     'SHIFT AI ${release.tag} downloaded. Finish in the '
                         'installer.',
+                  UpdateStatus.manualRequired =>
+                    'SHIFT AI ${release.tag} is available — this copy is '
+                        'installed system-wide, so install it from GitHub.',
                   _ => 'SHIFT AI ${release.tag} is available.',
                 },
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -67,6 +70,11 @@ class UpdateBanner extends StatelessWidget {
                 onPressed: store.restartAndUpdate,
                 child: const Text('Restart now'),
               )
+            else if (store.status == UpdateStatus.manualRequired)
+              TextButton(
+                onPressed: () => openUrl(release.pageUrl),
+                child: const Text('Get it from GitHub'),
+              )
             else if (store.status == UpdateStatus.available)
               TextButton(
                 onPressed: store.mode == InstallMode.unsupported
@@ -76,7 +84,8 @@ class UpdateBanner extends StatelessWidget {
               ),
             // A download already paid for is not dismissible -- there would
             // be nothing left to bring it back.
-            if (store.status == UpdateStatus.available)
+            if (store.status == UpdateStatus.available ||
+                store.status == UpdateStatus.manualRequired)
               IconButton(
                 tooltip: 'Dismiss',
                 onPressed: store.dismiss,
