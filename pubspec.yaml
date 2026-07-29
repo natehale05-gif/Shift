@@ -86,11 +86,9 @@ flutter:
   # ```mermaid diagrams inline in chat.
   assets:
     - assets/js/mermaid.min.js
-    # Uncomment together with adding assets/icon/app_icon.png. Declaring an
-    # asset that does not exist fails the build, so this stays commented until
-    # the file lands. It is what lets the Linux GTK runner set the window and
-    # taskbar icon (flutter_launcher_icons has no Linux target).
-    # - assets/icon/app_icon.png
+    # Lets the Linux GTK runner set the window and taskbar icon at startup —
+    # flutter_launcher_icons has no Linux target.
+    - assets/icon/app_icon.png
 
   # Bundled locally (not fetched from a font CDN at runtime) so text renders
   # reliably on static GitHub Pages hosting with no backend and no guaranteed
