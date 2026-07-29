@@ -21,6 +21,21 @@ static void first_frame_cb(MyApplication* self, FlView *view)
 }
 
 // Implements GApplication::activate.
+// Sets the window/taskbar icon from the bundled asset. flutter_launcher_icons
+// has no Linux target and the GTK runner sets no icon by default, which leaves
+// a generic placeholder in the taskbar and alt-tab. Best effort: if the asset
+// is missing the window simply keeps the default, so a packaging change can
+// never stop the app launching.
+static void set_window_icon(GtkWindow* window) {
+  g_autofree gchar* exe = g_file_read_link("/proc/self/exe", nullptr);
+  if (exe == nullptr) return;
+  g_autofree gchar* dir = g_path_get_dirname(exe);
+  g_autofree gchar* icon = g_build_filename(
+      dir, "data", "flutter_assets", "assets", "icon", "app_icon.png", nullptr);
+  if (!g_file_test(icon, G_FILE_TEST_EXISTS)) return;
+  gtk_window_set_icon_from_file(window, icon, nullptr);
+}
+
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
   GtkWindow* window =
@@ -52,6 +67,8 @@ static void my_application_activate(GApplication* application) {
   } else {
     gtk_window_set_title(window, "SHIFT AI");
   }
+
+  set_window_icon(window);
 
   gtk_window_set_default_size(window, 1280, 720);
 
