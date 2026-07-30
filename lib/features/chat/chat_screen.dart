@@ -32,7 +32,32 @@ class ChatScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        return Scaffold(
+        final sideBySide = constraints.maxWidth >= 880;
+        // A full-screen artifact covers the chat's own app bar. Left inside
+        // the Scaffold body it sat *below* it, so the chat title stayed on
+        // screen above the artifact title — two headers competing, and a row
+        // of chat controls that do nothing for the artifact you are reading.
+        return Stack(
+          children: [
+            _chatScaffold(context, constraints, sideBySide),
+            Consumer<ArtifactPanelStore>(
+              builder: (context, panel, _) =>
+                  panel.isOpen && (!sideBySide || panel.expanded)
+                      ? const Positioned.fill(child: ArtifactPanel())
+                      : const SizedBox.shrink(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _chatScaffold(
+    BuildContext context,
+    BoxConstraints constraints,
+    bool sideBySide,
+  ) {
+    return Scaffold(
           appBar: GlassAppBar(
             title: const _ChatTitle(),
             leading: const HomeMenuButton(),
@@ -50,37 +75,29 @@ class ChatScreen extends StatelessWidget {
           body: Consumer<ArtifactPanelStore>(
             builder: (context, panel, _) {
               // Side-by-side panel needs real width; below that the panel
-              // covers the chat as a full overlay. The threshold is measured
-              // against the chat area (the sidebar is already subtracted), so
-              // keep it low enough that a common desktop window with the
-              // sidebar open still shows chat + artifact together — the panel
-              // is at most 560px, leaving the chat a comfortable column.
-              final sideBySide = constraints.maxWidth >= 880;
+              // covers the whole screen (handled by the caller's Stack). The
+              // threshold is measured against the chat area (the sidebar is
+              // already subtracted), so keep it low enough that a common
+              // desktop window with the sidebar open still shows chat +
+              // artifact together — the panel is at most 560px, leaving the
+              // chat a comfortable column.
               final panelWidth = (constraints.maxWidth * 0.42).clamp(
                 380.0,
                 560.0,
               );
-              return Stack(
+              return Row(
                 children: [
-                  Row(
-                    children: [
-                      const Expanded(child: _ChatBody()),
-                      if (panel.isOpen && sideBySide)
-                        SizedBox(
-                          width: panelWidth,
-                          child: const ArtifactPanel(),
-                        ),
-                    ],
-                  ),
-                  if (panel.isOpen && !sideBySide)
-                    const Positioned.fill(child: ArtifactPanel()),
+                  const Expanded(child: _ChatBody()),
+                  if (panel.isOpen && sideBySide && !panel.expanded)
+                    SizedBox(
+                      width: panelWidth,
+                      child: const ArtifactPanel(),
+                    ),
                 ],
               );
             },
           ),
         );
-      },
-    );
   }
 }
 
