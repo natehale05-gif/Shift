@@ -1150,10 +1150,19 @@ class RealChatService implements ChatService {
       if (event is MessageDelta) buffer.write(event.chunk);
       if (event is MessageError) failed = true;
       if (event is MessageComplete && !failed) {
-        // Code-routed replies whose fenced block is substantial also become
-        // an artifact, mirroring the mock's behavior. (A model pin forces the
-        // chat route, so pinned models deliberately produce no artifact.)
-        if (route == ChatRoute.code) {
+        // Code-routed replies whose fenced block is substantial become an
+        // artifact, mirroring the mock's behavior.
+        //
+        // The second condition is a safety net rather than a nicety. Routing
+        // is a classification and it will sometimes be wrong — most visibly
+        // on a follow-up like "give it to me as an artifact", which the
+        // router sees without any conversation around it. When it is wrong,
+        // the old gate silently discarded a finished deliverable into a chat
+        // bubble: unreadable, un-runnable, and impossible to download or
+        // revise. A reply carrying an entire HTML document is never better
+        // off inline, so route or no route, it becomes an artifact.
+        if (route == ChatRoute.code ||
+            repliedWithWholeDocument(buffer.toString())) {
           var artifact = extractCodeArtifact(
               buffer.toString(), conversation.id,
               title: titleFromRequest(userInput));
@@ -1263,13 +1272,33 @@ class RealChatService implements ChatService {
   /// page", which is also the download filename — so a second download
   /// collided with the first and the sidebar showed a column of identical
   /// names.
+  /// Whether [text] contains a fenced block holding a *whole* HTML document.
+  ///
+  /// Deliberately narrow: a complete page (doctype, or `<html>` paired with
+  /// `</html>`) is a deliverable, whereas a handful of tags quoted to explain
+  /// something belongs in the conversation. Matching any HTML at all would
+  /// turn every answer that mentions a `<div>` into an artifact.
+  static bool repliedWithWholeDocument(String text) {
+    for (final match in _fencedBlock.allMatches(text)) {
+      final code = match.group(2)!.trim();
+      final lower = code.toLowerCase();
+      if (lower.startsWith('<!doctype html') ||
+          (lower.contains('<html') && lower.contains('</html>'))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  static final _fencedBlock =
+      RegExp(r'```([A-Za-z0-9+#_-]*)\n([\s\S]*?)```');
+
   static Artifact? extractCodeArtifact(
     String text,
     String conversationId, {
     String? title,
   }) {
-    final match =
-        RegExp(r'```([A-Za-z0-9+#_-]*)\n([\s\S]*?)```').firstMatch(text);
+    final match = _fencedBlock.firstMatch(text);
     if (match == null) return null;
     final code = match.group(2)!.trim();
     if (code.split('\n').length < 5) return null;
