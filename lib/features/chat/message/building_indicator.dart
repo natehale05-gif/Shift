@@ -12,6 +12,9 @@ enum BuildingTool {
 
   /// A pencil sketching — drawing.
   pencil,
+
+  /// A bow drawn across strings — anything that comes out as sound.
+  violin,
 }
 
 /// The wait indicator for a turn that is *making* something.
@@ -81,22 +84,33 @@ class _BuildingIndicatorState extends State<BuildingIndicator>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AnimatedBuilder(
-          animation: _controller,
-          builder: (context, _) => CustomPaint(
-            size: const Size(30, 24),
-            painter: widget.tool == BuildingTool.pencil
-                ? _PencilPainter(
-                    t: _controller.value,
-                    color: theme.colorScheme.primary,
-                    lineColor: colors.textSecondary,
-                  )
-                : _HammerPainter(
-                    t: _controller.value,
-                    strikes: _strikes,
-                    color: theme.colorScheme.primary,
-                    sparkColor: colors.textSecondary,
-                  ),
+        // The painter runs at 60fps for as long as the turn does. Without a
+        // boundary every frame marks the whole message list dirty, so an
+        // animation the size of a postage stamp repaints the transcript.
+        RepaintBoundary(
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) => CustomPaint(
+              size: const Size(30, 24),
+              painter: switch (widget.tool) {
+                BuildingTool.pencil => _PencilPainter(
+                  t: _controller.value,
+                  color: theme.colorScheme.primary,
+                  lineColor: colors.textSecondary,
+                ),
+                BuildingTool.violin => _ViolinPainter(
+                  t: _controller.value,
+                  color: theme.colorScheme.primary,
+                  bowColor: colors.textSecondary,
+                ),
+                BuildingTool.hammer => _HammerPainter(
+                  t: _controller.value,
+                  strikes: _strikes,
+                  color: theme.colorScheme.primary,
+                  sparkColor: colors.textSecondary,
+                ),
+              },
+            ),
           ),
         ),
         const SizedBox(width: AppSpacing.sm),
@@ -227,7 +241,11 @@ class _HammerPainter extends CustomPainter {
 
   /// Square → triangle → circle → pentagon, then round again.
   static List<Offset> _shapePoints(
-      int shape, Offset center, double radius, int samples) {
+    int shape,
+    Offset center,
+    double radius,
+    int samples,
+  ) {
     final sides = switch (shape % 4) {
       0 => 4, // square
       1 => 3, // triangle
@@ -236,7 +254,7 @@ class _HammerPainter extends CustomPainter {
     };
     return [
       for (var i = 0; i < samples; i++)
-        _pointAt(center, radius, i / samples, sides)
+        _pointAt(center, radius, i / samples, sides),
     ];
   }
 
@@ -364,4 +382,100 @@ class _PencilPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PencilPainter old) =>
       old.t != t || old.color != color || old.lineColor != lineColor;
+}
+
+/// A bow drawn back and forth across a violin — anything that comes out as
+/// sound.
+///
+/// The bow is the moving part and the instrument is still, which is the way
+/// round that reads as playing. It changes direction at the ends of the stroke
+/// rather than snapping back, and eases at the turn: a bow at constant speed
+/// that teleports home reads as a wiper blade.
+class _ViolinPainter extends CustomPainter {
+  final double t;
+  final Color color;
+  final Color bowColor;
+
+  _ViolinPainter({
+    required this.t,
+    required this.color,
+    required this.bowColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final scale = size.height / 24;
+    canvas.save();
+    canvas.scale(scale);
+
+    final body = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final line = Paint()
+      ..color = bowColor
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
+
+    // The instrument, tilted the way it sits under a chin.
+    canvas.save();
+    canvas.translate(13, 13);
+    canvas.rotate(-0.62);
+
+    // Body: two lobes with a waist between them, which is the whole
+    // silhouette of a violin. A plain oval would be a lute.
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, -7)
+        ..cubicTo(4.6, -7, 5.4, -3.4, 3.4, -1.4)
+        ..cubicTo(2.2, -0.3, 2.2, 0.3, 3.4, 1.4)
+        ..cubicTo(5.9, 3.7, 4.8, 8, 0, 8)
+        ..cubicTo(-4.8, 8, -5.9, 3.7, -3.4, 1.4)
+        ..cubicTo(-2.2, 0.3, -2.2, -0.3, -3.4, -1.4)
+        ..cubicTo(-5.4, -3.4, -4.6, -7, 0, -7)
+        ..close(),
+      body,
+    );
+    // Neck and scroll.
+    canvas.drawLine(
+      const Offset(0, -7),
+      const Offset(0, -13),
+      line
+        ..strokeWidth = 1.6
+        ..color = color,
+    );
+    canvas.drawCircle(const Offset(-0.6, -13.6), 1.5, body);
+    canvas.restore();
+
+    // Bow: a triangle wave along the strings, eased at each turn so it slows
+    // into the change of direction the way a real stroke does.
+    final sweep = (1 - math.cos(t * 2 * math.pi)) / 2;
+    final travel = -6.5 + sweep * 13;
+    canvas.save();
+    canvas.translate(13 + travel * 0.42, 13 - travel * 0.55);
+    canvas.rotate(0.95);
+    canvas.drawLine(
+      const Offset(-11, 0),
+      const Offset(11, 0),
+      line
+        ..strokeWidth = 1.5
+        ..color = bowColor,
+    );
+    // The frog, so the bow has a direction rather than being a stick.
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: const Offset(-10, 0), width: 3, height: 2.6),
+        const Radius.circular(1),
+      ),
+      Paint()..color = bowColor,
+    );
+    canvas.restore();
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_ViolinPainter old) =>
+      old.t != t || old.color != color || old.bowColor != bowColor;
 }

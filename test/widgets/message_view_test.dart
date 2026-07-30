@@ -13,6 +13,11 @@ import 'package:shift_ai/features/chat/message/message_view.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
 import 'package:shift_ai/features/chat/message/building_indicator.dart';
 import 'package:shift_ai/features/chat/message/typing_indicator.dart';
+import 'package:shift_ai/features/chat/message/tool_chip.dart';
+import 'package:shift_ai/features/chat/message/assistant_prose.dart'
+    show buildingTool;
+import 'package:shift_ai/turn/backends/live_backend.dart'
+    show writingToolId, writingToolName;
 
 const _markdownFixture = '''
 # Release notes
@@ -139,29 +144,117 @@ void main() {
     expect(find.byType(TypingIndicator), findsNothing);
   });
 
-  testWidgets('the tool keeps working while the code is being written',
+  ChatMessage codeTurn({required List<MessageBlock> blocks}) => ChatMessage(
+        id: 'm5',
+        conversationId: 'c1',
+        role: MessageRole.assistant,
+        text: "Here's a coffee shop site:",
+        status: MessageStatus.streaming,
+        studioType: StudioType.codeStudio,
+        blocks: blocks,
+        timestamp: DateTime(2026, 7, 30, 12, 0),
+      );
+
+  testWidgets('the prose before the file is still thinking', (tester) async {
+    // A code turn opens with a sentence or two and only then writes the file.
+    // The hammer used to start swinging at the first word of the sentence,
+    // claiming work that had not begun.
+    await tester.pumpWidget(_harness(MessageView(
+      message: codeTurn(blocks: const [TextBlock("Here's a coffee shop site:")]),
+    )));
+    await tester.pump();
+
+    expect(find.byType(BuildingIndicator), findsNothing);
+    expect(find.byType(TypingIndicator), findsOneWidget);
+  });
+
+  testWidgets('the tool works while the file is actually being written',
       (tester) async {
-    // The long part of a build is after the prose: a code turn opens with a
-    // sentence and then writes the file, which is withheld from the transcript
-    // so the page does not arrive twice. The screen used to go completely
-    // still for exactly the stretch when the thing was being made.
+    // The backend reports the fence opening as a running tool, which is the
+    // exact window in which the deliverable is being made.
+    await tester.pumpWidget(_harness(MessageView(
+      message: codeTurn(blocks: const [
+        TextBlock("Here's a coffee shop site:"),
+        ToolUseBlock(
+          id: writingToolId,
+          tool: writingToolName,
+          label: 'Building',
+          status: ToolUseStatus.running,
+        ),
+      ]),
+    )));
+    await tester.pump();
+
+    expect(find.byType(BuildingIndicator), findsOneWidget);
+    expect(find.text('Building'), findsOneWidget);
+    expect(find.byType(TypingIndicator), findsNothing);
+  });
+
+  testWidgets('and stops when the fence closes', (tester) async {
+    await tester.pumpWidget(_harness(MessageView(
+      message: codeTurn(blocks: const [
+        TextBlock("Here's a coffee shop site:"),
+        ToolUseBlock(
+          id: writingToolId,
+          tool: writingToolName,
+          label: 'Building',
+          status: ToolUseStatus.done,
+        ),
+      ]),
+    )));
+    await tester.pump();
+
+    expect(find.byType(BuildingIndicator), findsNothing);
+  });
+
+  testWidgets('the writing tool is never also a chip', (tester) async {
+    // It rides the tool-use events for their lifecycle, but it draws as the
+    // build animation — two indicators for one piece of work is one too many.
+    await tester.pumpWidget(_harness(MessageView(
+      message: codeTurn(blocks: const [
+        ToolUseBlock(
+          id: writingToolId,
+          tool: writingToolName,
+          label: 'Building',
+          status: ToolUseStatus.running,
+        ),
+      ]),
+    )));
+    await tester.pump();
+
+    expect(find.byType(ToolChip), findsNothing);
+  });
+
+  testWidgets('an audio turn plays a violin', (tester) async {
     final message = ChatMessage(
-      id: 'm5',
+      id: 'm9',
       conversationId: 'c1',
       role: MessageRole.assistant,
-      text: "Here's a coffee shop site:",
+      text: "Here's the voiceover:",
       status: MessageStatus.streaming,
-      studioType: StudioType.codeStudio,
-      blocks: const [TextBlock("Here's a coffee shop site:")],
+      studioType: StudioType.voiceStudio,
+      blocks: const [TextBlock("Here's the voiceover:")],
       timestamp: DateTime(2026, 7, 30, 12, 0),
     );
     await tester.pumpWidget(_harness(MessageView(message: message)));
     await tester.pump();
 
-    expect(find.byType(BuildingIndicator), findsOneWidget);
-    expect(find.text('Building'), findsOneWidget);
-    expect(find.byType(TypingIndicator), findsNothing,
-        reason: 'content has arrived; the dots have had their turn');
+    final indicator =
+        tester.widget<BuildingIndicator>(find.byType(BuildingIndicator));
+    expect(indicator.tool, BuildingTool.violin);
+  });
+
+  test('every studio whose output is heard gets the violin', () {
+    for (final studio in [
+      StudioType.musicStudio,
+      StudioType.voiceStudio,
+      StudioType.voiceAvatarStudio,
+      StudioType.avatarStudio,
+    ]) {
+      expect(buildingTool(studio), BuildingTool.violin, reason: studio.name);
+    }
+    expect(buildingTool(StudioType.codeStudio), BuildingTool.hammer);
+    expect(buildingTool(StudioType.imageStudio), BuildingTool.pencil);
   });
 
   testWidgets('it stops once the turn is finished', (tester) async {

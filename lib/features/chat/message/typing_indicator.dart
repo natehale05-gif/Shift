@@ -23,31 +23,38 @@ class _TypingIndicatorState extends State<TypingIndicator>
   @override
   Widget build(BuildContext context) {
     final color = Theme.of(context).colorScheme.onSurfaceVariant;
-    return SizedBox(
-      width: 36,
-      height: 14,
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (context, _) {
-          return Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(3, (i) {
-              final t = (_controller.value - i * 0.2) % 1.0;
-              final scale = 0.6 + 0.4 * (1 - (t - 0.5).abs() * 2).clamp(0, 1);
-              return Opacity(
-                opacity: 0.4 + 0.6 * scale,
-                child: Transform.scale(
-                  scale: scale,
-                  child: Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+    // Same reason as BuildingIndicator: a looping animation with no boundary
+    // marks the whole transcript dirty on every frame it draws.
+    return RepaintBoundary(
+      child: SizedBox(
+        width: 36,
+        height: 14,
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, _) {
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: List.generate(3, (i) {
+                final t = (_controller.value - i * 0.2) % 1.0;
+                final scale = 0.6 + 0.4 * (1 - (t - 0.5).abs() * 2).clamp(0, 1);
+                return Opacity(
+                  opacity: 0.4 + 0.6 * scale,
+                  child: Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                   ),
-                ),
-              );
-            }),
-          );
-        },
+                );
+              }),
+            );
+          },
+        ),
       ),
     );
   }

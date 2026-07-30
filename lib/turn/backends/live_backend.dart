@@ -83,6 +83,16 @@ Executor chooseExecutor(
   };
 }
 
+/// The tool id and name the backend reports while a fenced deliverable is
+/// being written.
+///
+/// It rides on the existing tool-use events rather than a new kind of event:
+/// message folding, persistence and the running/done lifecycle already work,
+/// and the UI only has to know that this one tool draws as the build animation
+/// instead of a chip.
+const String writingToolId = 'shift-writing';
+const String writingToolName = 'shift_write';
+
 /// Whether this turn is asking for speech rather than a score.
 ///
 /// [ChatRoute.voice] always is. [ChatRoute.audio] is shared between Music and
@@ -1309,12 +1319,24 @@ class RealChatService implements ChatService {
     final fences = FenceFilter();
     var failed = false;
     var producedArtifact = false;
+    var writing = false;
 
     await for (final event in events) {
       if (event is MessageDelta) {
         buffer.write(event.chunk);
         final prose = fences.feed(event.chunk);
         if (prose.isNotEmpty) controller.add(MessageDelta(prose));
+        // The fence opening is the moment the deliverable starts being
+        // written. The UI shows the build animation for exactly this window;
+        // before it, the model is still writing the sentence that introduces
+        // the thing, and claiming "Building" then claims work not yet begun.
+        if (fences.writingCode != writing) {
+          writing = fences.writingCode;
+          controller.add(writing
+              ? const ToolUseStarted(
+                  id: writingToolId, tool: writingToolName, label: 'Building')
+              : const ToolUseFinished(id: writingToolId));
+        }
         continue; // the filtered delta above replaces this one
       }
       if (event is MessageError) failed = true;
@@ -1335,6 +1357,12 @@ class RealChatService implements ChatService {
           event is MessageIncomplete ||
           event is MessageError;
       if (ending) {
+        if (writing) {
+          // A reply cut off mid-fence would otherwise leave the animation
+          // running under a finished message forever.
+          writing = false;
+          controller.add(const ToolUseFinished(id: writingToolId));
+        }
         final trailing = fences.flush();
         if (trailing.isNotEmpty) controller.add(MessageDelta(trailing));
         // Extraction only on a clean finish. A page cut off mid-tag is not a

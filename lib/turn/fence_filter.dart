@@ -28,6 +28,14 @@ class FenceFilter {
   /// Whether any fenced block was seen at all.
   bool get sawFence => _held.isNotEmpty;
 
+  /// Whether a fenced block is open right now — i.e. the deliverable is being
+  /// written this instant, rather than the prose around it.
+  ///
+  /// The UI needs the distinction: a code turn opens with a sentence or two
+  /// and only then writes the file, and showing "Building" during the sentence
+  /// claims work that has not started.
+  bool get writingCode => _inFence;
+
   /// Consumes a streamed [chunk] and returns the prose safe to emit now.
   String feed(String chunk) {
     final text = (_carry..write(chunk)).toString();
