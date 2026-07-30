@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/attachment.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/data/models/conversation.dart';
+import 'package:shift_ai/data/models/message_block.dart';
 import 'package:shift_ai/turn/chat_service.dart';
 import 'package:shift_ai/providers/clients/anthropic_api_config.dart';
 import 'package:shift_ai/providers/clients/anthropic_client.dart';
@@ -121,6 +122,92 @@ void main() {
       expect(last['role'], 'user');
       final lastContent = (last['content'] as List).last as Map;
       expect(lastContent['text'], 'new question');
+    });
+
+    test('a generated image never lands in an assistant message', () {
+      // The live 400, verbatim:
+      //   messages.1.content: 'image' blocks are not permitted within
+      //   assistant turns.
+      // Generate an image, then ask for a website using it, and the entire
+      // request was rejected — the turn produced an error rather than just
+      // losing the picture. Asserted on the request body rather than on
+      // `buildHistory` alone, because the body is the thing the API read.
+      final body = AnthropicClient.buildRequestBody(
+        conversation: Conversation(
+          id: 'c1',
+          title: 'Image of a corgi',
+          createdAt: DateTime(2026, 7, 30),
+          updatedAt: DateTime(2026, 7, 30),
+          messages: [
+            ChatMessage(
+              id: 'u1',
+              conversationId: 'c1',
+              role: MessageRole.user,
+              text: 'image of a corgi',
+              timestamp: DateTime(2026, 7, 30),
+            ),
+            ChatMessage(
+              id: 'a1',
+              conversationId: 'c1',
+              role: MessageRole.assistant,
+              text: '',
+              blocks: [
+                ImageBlock(
+                  alt: 'a corgi',
+                  pngBytes: Uint8List.fromList([137, 80, 78, 71]),
+                ),
+              ],
+              timestamp: DateTime(2026, 7, 30),
+            ),
+            // The real shape the store hands over: this turn's user message
+            // and an empty placeholder for the reply are already appended.
+            ChatMessage(
+              id: 'u2',
+              conversationId: 'c1',
+              role: MessageRole.user,
+              text: 'now build a website for dog treats and use this image',
+              timestamp: DateTime(2026, 7, 30),
+            ),
+            ChatMessage(
+              id: 'a2',
+              conversationId: 'c1',
+              role: MessageRole.assistant,
+              text: '',
+              timestamp: DateTime(2026, 7, 30),
+            ),
+          ],
+        ),
+        userInput: 'now build a website for dog treats and use this image',
+        model: AnthropicApiConfig.defaultModel,
+      );
+
+      final messages = (body['messages'] as List).cast<Map<String, dynamic>>();
+
+      for (final message in messages) {
+        if (message['role'] == 'assistant') {
+          final types = (message['content'] as List)
+              .map((block) => (block as Map)['type'])
+              .toList();
+          expect(types, isNot(contains('image')),
+              reason: 'this is the exact shape the API rejects');
+        }
+      }
+
+      // Consecutive same-role messages are their own 400.
+      for (var i = 1; i < messages.length; i++) {
+        expect(messages[i]['role'], isNot(messages[i - 1]['role']));
+      }
+
+      // The picture and the request that refers to it arrive together.
+      final last = messages.last;
+      expect(last['role'], 'user');
+      final blocks = (last['content'] as List).cast<Map<String, dynamic>>();
+      expect(blocks.any((b) => b['type'] == 'image'), isTrue);
+      expect(
+        blocks.any((b) => b['text'] == 'now build a website for dog treats '
+            'and use this image'),
+        isTrue,
+      );
     });
 
     test('does not duplicate the new user turn when the store has already '

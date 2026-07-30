@@ -41,8 +41,13 @@ class GeminiClient implements KeyValidatable {
     // the new user turn is re-added below — otherwise it would be
     // duplicated as two consecutive user turns.
     final history = List.of(conversation.messages);
+    // `blocks.isEmpty` as well as empty text: a real streaming placeholder has
+    // neither yet, but an *image-only* assistant turn also has empty text —
+    // and dropping that would delete the very picture the next message is
+    // about, silently, one turn before the request that needs it.
     if (history.isNotEmpty &&
         history.last.role == MessageRole.assistant &&
+        history.last.blocks.isEmpty &&
         history.last.text.trim().isEmpty) {
       history.removeLast();
       if (history.isNotEmpty &&
@@ -56,7 +61,8 @@ class GeminiClient implements KeyValidatable {
     for (final turn in buildHistory(history)) {
       contents.add({
         'role': turn.role == MessageRole.user ? 'user' : 'model',
-        'parts': [
+        // Explicitly `dynamic` — see the note in `anthropic_client.dart`.
+        'parts': <Map<String, dynamic>>[
           for (final part in turn.parts)
             if (part is HistoryImage)
               {
@@ -70,20 +76,26 @@ class GeminiClient implements KeyValidatable {
         ],
       });
     }
-    contents.add({
-      'role': 'user',
-      'parts': [
-        for (final attachment in attachments)
-          if (attachment.bytes != null)
-            {
-              'inlineData': {
-                'mimeType': attachment.mimeType,
-                'data': base64Encode(attachment.bytes!),
-              },
+    // Merged rather than appended when history already ends with a user turn
+    // — see the note in `anthropic_client.dart`. Gemini is laxer than
+    // Anthropic about consecutive same-role turns, but the image and the
+    // request that refers to it belong together regardless.
+    final currentParts = <Map<String, dynamic>>[
+      for (final attachment in attachments)
+        if (attachment.bytes != null)
+          {
+            'inlineData': {
+              'mimeType': attachment.mimeType,
+              'data': base64Encode(attachment.bytes!),
             },
-        {'text': userInput.isEmpty ? '(see attachment)' : userInput},
-      ],
-    });
+          },
+      {'text': userInput.isEmpty ? '(see attachment)' : userInput},
+    ];
+    if (contents.isNotEmpty && contents.last['role'] == 'user') {
+      (contents.last['parts'] as List).addAll(currentParts);
+    } else {
+      contents.add({'role': 'user', 'parts': currentParts});
+    }
 
     return {
       'contents': contents,
