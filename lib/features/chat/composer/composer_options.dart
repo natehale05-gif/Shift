@@ -30,13 +30,12 @@ class ComposerOptions {
   ///
   /// The system prompt follows the same precedence the UI implies: the
   /// conversation's own project wins; otherwise the sidebar's active project
-  /// applies. A *custom* style passes its instructions through
-  /// `styleInstruction` and reports itself as 'normal', so a user-authored
-  /// style overrides the built-in clauses rather than stacking with them.
+  /// applies.
   ///
-  /// [prefs.responseStyle] holds a built-in id or a custom style's id — both
-  /// come from the same Settings control, so there is one place a style is
-  /// chosen and one value to resolve here.
+  /// [prefs.responseStyle] holds a style id — built-in or custom, the same
+  /// shape either way — so resolving it is one lookup with nothing to tell
+  /// apart. An id nothing answers to (a style deleted while selected) yields
+  /// no instruction, which is Normal.
   ChatOptions build({
     required UserPrefsStore prefs,
     required ProjectStore projects,
@@ -46,16 +45,14 @@ class ComposerOptions {
   }) {
     final project = projects.projectById(conversations.current?.projectId) ??
         projects.activeProject;
-    final styleId = prefs.responseStyle;
-    final customStyle = styles.styleById(styleId);
+    final style = styles.styleById(prefs.responseStyle);
     return ChatOptions(
       modelPin: modelPin,
       systemPrompt: assembleSystemPrompt(
         nickname: prefs.nickname,
         role: prefs.role,
         traits: prefs.traits,
-        responseStyle: customStyle == null ? styleId : 'normal',
-        styleInstruction: customStyle?.instructions ?? '',
+        styleInstruction: style?.instructions ?? '',
         customInstructions: prefs.customInstructions,
         project: project,
         memories: memory.activeTexts,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models/memory_entry.dart';
+import '../../data/models/writing_style.dart';
 import 'app_data_export.dart';
 import '../../data/stores/app_settings_store.dart';
 import '../../data/stores/conversation_store.dart';
@@ -346,30 +347,10 @@ class _PersonalizationCardState extends State<_PersonalizationCard> {
             ),
             onChanged: prefs.setTraits,
           ),
-          const SizedBox(height: AppSpacing.md),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment(value: 'normal', label: Text('Normal')),
-                ButtonSegment(value: 'concise', label: Text('Concise')),
-                ButtonSegment(
-                    value: 'explanatory', label: Text('Explanatory')),
-                ButtonSegment(value: 'formal', label: Text('Formal')),
-              ],
-              // A custom style lives in the same setting but is not one of
-              // these segments, so nothing here is selected while one is
-              // active — and SegmentedButton asserts on a selection it has no
-              // segment for.
-              emptySelectionAllowed: true,
-              selected: const {'normal', 'concise', 'explanatory', 'formal'}
-                      .contains(prefs.responseStyle)
-                  ? {prefs.responseStyle}
-                  : const <String>{},
-              onSelectionChanged: (selection) => prefs.setResponseStyle(
-                  selection.isEmpty ? 'normal' : selection.first),
-            ),
-          ),
+          // The response style is picked in the Response styles card below —
+          // one control for one setting. A segmented button here offered the
+          // built-ins only, so a custom style could be selected below and
+          // leave this control showing nothing selected.
           const SizedBox(height: AppSpacing.md),
           TextField(
             controller: _instructionsController,
@@ -388,8 +369,88 @@ class _PersonalizationCardState extends State<_PersonalizationCard> {
   }
 }
 
-/// Custom response styles: the built-in set (read-only) plus user-created
-/// styles with create/edit/delete (Claude's custom styles).
+/// One selectable style — built-in or custom, the same row either way.
+///
+/// Only a custom style offers Edit and Delete; a built-in has nothing to edit.
+/// That is the only difference the UI draws between them, which is the point:
+/// they are the same kind of thing.
+class _StyleTile extends StatelessWidget {
+  final WritingStyle style;
+  final bool custom;
+  final VoidCallback onEdit;
+
+  const _StyleTile({
+    required this.style,
+    required this.custom,
+    required this.onEdit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.extension<AppSemanticColors>()!;
+    final prefs = context.watch<UserPrefsStore>();
+    final selected = prefs.responseStyle == style.id;
+
+    return ListTile(
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      leading: IconButton(
+        tooltip: selected ? 'In use' : 'Use this style',
+        iconSize: 18,
+        icon: Icon(
+          selected
+              ? Icons.radio_button_checked
+              : Icons.radio_button_unchecked,
+          color: selected ? theme.colorScheme.primary : colors.textSecondary,
+        ),
+        // Tapping the one already in use does nothing. Un-selecting a style
+        // has no meaning when Normal is itself a style in the list.
+        onPressed: selected
+            ? null
+            : () => context.read<UserPrefsStore>().setResponseStyle(style.id),
+      ),
+      title: Text(style.name),
+      subtitle: style.instructions.isEmpty
+          ? null
+          : Text(
+              style.instructions,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall,
+            ),
+      trailing: custom
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  tooltip: 'Edit',
+                  iconSize: 16,
+                  icon: const Icon(Icons.edit_outlined),
+                  onPressed: onEdit,
+                ),
+                IconButton(
+                  tooltip: 'Delete',
+                  iconSize: 16,
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () {
+                    // Deleting the style in use would leave the preference
+                    // pointing at an id nothing resolves.
+                    if (selected) {
+                      context.read<UserPrefsStore>().setResponseStyle('normal');
+                    }
+                    context.read<StylesStore>().remove(style.id);
+                  },
+                ),
+              ],
+            )
+          : null,
+    );
+  }
+}
+
+/// Response styles: the built-in set plus user-created ones, in one list, with
+/// the selection that decides how every chat is written.
 class _StylesCard extends StatelessWidget {
   const _StylesCard();
 
@@ -416,7 +477,6 @@ class _StylesCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final styles = context.watch<StylesStore>();
     final theme = Theme.of(context);
-    final colors = theme.extension<AppSemanticColors>()!;
     return _SectionCard(
       title: 'Response styles',
       child: Column(
@@ -426,9 +486,8 @@ class _StylesCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Built-in: Normal, Concise, Explanatory, Formal — chosen '
-                  'above. Create your own here and select it to use it in '
-                  'every chat.',
+                  'How SHIFT AI writes in every chat. Pick one, or write your '
+                  'own.',
                   style: theme.textTheme.bodySmall,
                 ),
               ),
@@ -439,78 +498,16 @@ class _StylesCard extends StatelessWidget {
               ),
             ],
           ),
-          if (styles.customStyles.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.xs),
-              child: Text(
-                'No custom styles yet.',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: colors.textSecondary),
-              ),
-            ),
-          for (final style in styles.customStyles)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              // Selecting one here is the only way to put it to work: the
-              // composer's Style menu used to do it, and the segmented button
-              // above offers the built-ins only, so without this a custom
-              // style could be written and never applied.
-              leading: IconButton(
-                tooltip: context.watch<UserPrefsStore>().responseStyle ==
-                        style.id
-                    ? 'In use'
-                    : 'Use this style',
-                iconSize: 18,
-                icon: Icon(
-                  context.watch<UserPrefsStore>().responseStyle == style.id
-                      ? Icons.radio_button_checked
-                      : Icons.radio_button_unchecked,
-                  color:
-                      context.watch<UserPrefsStore>().responseStyle == style.id
-                          ? theme.colorScheme.primary
-                          : colors.textSecondary,
-                ),
-                onPressed: () => context
-                    .read<UserPrefsStore>()
-                    .setResponseStyle(
-                        context.read<UserPrefsStore>().responseStyle == style.id
-                            ? 'normal'
-                            : style.id),
-              ),
-              title: Text(style.name),
-              subtitle: Text(
-                style.instructions,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.labelSmall,
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Edit',
-                    iconSize: 16,
-                    icon: const Icon(Icons.edit_outlined),
-                    onPressed: () => _edit(
-                        context, style.id, style.name, style.instructions),
-                  ),
-                  IconButton(
-                    tooltip: 'Delete',
-                    iconSize: 16,
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () {
-                      // Deleting the style in use would leave the preference
-                      // pointing at an id nothing resolves.
-                      final prefs = context.read<UserPrefsStore>();
-                      if (prefs.responseStyle == style.id) {
-                        prefs.setResponseStyle('normal');
-                      }
-                      context.read<StylesStore>().remove(style.id);
-                    },
-                  ),
-                ],
-              ),
+          // Built-in and custom styles in one list, because they are one
+          // thing: a name and the instructions it adds. Two controls for one
+          // setting is how a custom style could be selected while the
+          // built-in picker showed nothing chosen.
+          for (final style in styles.allStyles)
+            _StyleTile(
+              style: style,
+              custom: !isBuiltInStyle(style.id),
+              onEdit: () =>
+                  _edit(context, style.id, style.name, style.instructions),
             ),
         ],
       ),

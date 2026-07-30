@@ -259,7 +259,7 @@ class _ProjectDetailSheetState extends State<_ProjectDetailSheet> {
                 final chats = context
                     .watch<ConversationStore>()
                     .conversations
-                    .where((c) => c.projectId == project.id && !c.archived)
+                    .where((c) => c.projectId == project.id)
                     .toList();
                 if (chats.isEmpty) {
                   return Text(
