@@ -25,7 +25,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'send_button.dart';
 import 'stop_button.dart';
-import 'style_chip.dart';
 import 'tools_menu.dart';
 import 'usage_meter.dart';
 
@@ -258,12 +257,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
                     ModelChip(
                       modelPin: _options.modelPin,
                       onSelected: (pin) => setState(() => _options.modelPin = pin),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                    StyleChip(
-                      styleOverride: _options.styleOverride,
-                      onSelected: (style) =>
-                          setState(() => _options.styleOverride = style),
                     ),
                     const Spacer(),
                     IconButton(

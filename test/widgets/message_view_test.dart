@@ -8,7 +8,9 @@ import 'package:shift_ai/data/persistence/persistence_service.dart';
 import 'package:shift_ai/data/stores/api_keys_store.dart';
 import 'package:shift_ai/data/stores/conversation_store.dart';
 import 'package:shift_ai/core/theme/app_theme.dart';
+import 'package:shift_ai/data/models/message_block.dart';
 import 'package:shift_ai/features/chat/message/message_view.dart';
+import 'package:shift_ai/features/chat/message/typing_indicator.dart';
 
 const _markdownFixture = '''
 # Release notes
@@ -94,5 +96,44 @@ void main() {
 
     // The literal asterisks survive: user text is never markdown-parsed.
     expect(find.text('please **do not** format this'), findsOneWidget);
+  });
+
+  testWidgets('the same indicator covers a wait that is only thinking',
+      (tester) async {
+    // Thinking is collapsed behind a disclosure, so a message holding nothing
+    // else looked idle. Every studio now waits the same way instead of
+    // announcing itself in its own prose.
+    final message = ChatMessage(
+      id: 'm3',
+      conversationId: 'c1',
+      role: MessageRole.assistant,
+      text: '',
+      status: MessageStatus.streaming,
+      blocks: const [ThinkingBlock('Parsing the request.')],
+      timestamp: DateTime(2026, 7, 30, 12, 0),
+    );
+    await tester.pumpWidget(_harness(MessageView(message: message)));
+    await tester.pump();
+
+    expect(find.byType(TypingIndicator), findsOneWidget);
+  });
+
+  testWidgets('real content replaces the indicator', (tester) async {
+    final message = ChatMessage(
+      id: 'm4',
+      conversationId: 'c1',
+      role: MessageRole.assistant,
+      text: 'Here you go:',
+      status: MessageStatus.streaming,
+      blocks: const [
+        ThinkingBlock('Parsing the request.'),
+        TextBlock('Here you go:'),
+      ],
+      timestamp: DateTime(2026, 7, 30, 12, 0),
+    );
+    await tester.pumpWidget(_harness(MessageView(message: message)));
+    await tester.pump();
+
+    expect(find.byType(TypingIndicator), findsNothing);
   });
 }

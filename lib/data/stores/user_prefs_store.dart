@@ -24,11 +24,18 @@ class UserPrefsStore extends ChangeNotifier {
   String get customInstructions => _customInstructions;
 
   /// Migrates the older concise/balanced/detailed values onto the named set.
+  ///
+  /// Anything else is kept as-is: this setting also holds a *custom* style's
+  /// id, which is the only place one is chosen now that the composer's Style
+  /// menu is gone. It used to collapse every unrecognised value to 'normal',
+  /// which would silently discard a custom style the moment it was selected.
+  /// An id whose style has since been deleted resolves to no clause at all,
+  /// so a stale value degrades to Normal rather than breaking.
   static String _normalizeStyle(String value) => switch (value) {
         'balanced' => 'normal',
         'detailed' => 'explanatory',
-        'normal' || 'concise' || 'explanatory' || 'formal' => value,
-        _ => 'normal',
+        '' => 'normal',
+        _ => value,
       };
 
   Future<void> load() async {

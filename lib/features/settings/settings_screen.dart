@@ -357,9 +357,17 @@ class _PersonalizationCardState extends State<_PersonalizationCard> {
                     value: 'explanatory', label: Text('Explanatory')),
                 ButtonSegment(value: 'formal', label: Text('Formal')),
               ],
-              selected: {prefs.responseStyle},
-              onSelectionChanged: (selection) =>
-                  prefs.setResponseStyle(selection.first),
+              // A custom style lives in the same setting but is not one of
+              // these segments, so nothing here is selected while one is
+              // active — and SegmentedButton asserts on a selection it has no
+              // segment for.
+              emptySelectionAllowed: true,
+              selected: const {'normal', 'concise', 'explanatory', 'formal'}
+                      .contains(prefs.responseStyle)
+                  ? {prefs.responseStyle}
+                  : const <String>{},
+              onSelectionChanged: (selection) => prefs.setResponseStyle(
+                  selection.isEmpty ? 'normal' : selection.first),
             ),
           ),
           const SizedBox(height: AppSpacing.md),
@@ -418,8 +426,9 @@ class _StylesCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'Built-in: Normal, Concise, Explanatory, Formal. Create your '
-                  'own and pick it from the composer\'s Style menu.',
+                  'Built-in: Normal, Concise, Explanatory, Formal — chosen '
+                  'above. Create your own here and select it to use it in '
+                  'every chat.',
                   style: theme.textTheme.bodySmall,
                 ),
               ),
@@ -443,7 +452,32 @@ class _StylesCard extends StatelessWidget {
             ListTile(
               dense: true,
               contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.brush_outlined, size: 18),
+              // Selecting one here is the only way to put it to work: the
+              // composer's Style menu used to do it, and the segmented button
+              // above offers the built-ins only, so without this a custom
+              // style could be written and never applied.
+              leading: IconButton(
+                tooltip: context.watch<UserPrefsStore>().responseStyle ==
+                        style.id
+                    ? 'In use'
+                    : 'Use this style',
+                iconSize: 18,
+                icon: Icon(
+                  context.watch<UserPrefsStore>().responseStyle == style.id
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color:
+                      context.watch<UserPrefsStore>().responseStyle == style.id
+                          ? theme.colorScheme.primary
+                          : colors.textSecondary,
+                ),
+                onPressed: () => context
+                    .read<UserPrefsStore>()
+                    .setResponseStyle(
+                        context.read<UserPrefsStore>().responseStyle == style.id
+                            ? 'normal'
+                            : style.id),
+              ),
               title: Text(style.name),
               subtitle: Text(
                 style.instructions,
@@ -465,7 +499,15 @@ class _StylesCard extends StatelessWidget {
                     tooltip: 'Delete',
                     iconSize: 16,
                     icon: const Icon(Icons.close_rounded),
-                    onPressed: () => context.read<StylesStore>().remove(style.id),
+                    onPressed: () {
+                      // Deleting the style in use would leave the preference
+                      // pointing at an id nothing resolves.
+                      final prefs = context.read<UserPrefsStore>();
+                      if (prefs.responseStyle == style.id) {
+                        prefs.setResponseStyle('normal');
+                      }
+                      context.read<StylesStore>().remove(style.id);
+                    },
                   ),
                 ],
               ),

@@ -1,11 +1,9 @@
-import '../../core/theme/studio_style.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/models/chat_message.dart';
 import '../../data/models/conversation.dart';
-import '../../data/models/studio_type.dart';
 import 'chat_find.dart';
 import 'greeting.dart';
 import 'conversation_export.dart';
@@ -572,10 +570,13 @@ class _FindBar extends StatelessWidget {
   }
 }
 
-/// The new-chat screen: a greeting and what the app can do, then the
-/// composer. The canned prompts that used to sit here wrote a message for
-/// you, were identical on every visit, and pushed the composer off the bottom
-/// of a phone screen.
+/// The new-chat screen: a greeting, then the composer.
+///
+/// Nothing else. The canned prompts that used to sit here wrote a message for
+/// you and were identical on every visit; the studio chips that replaced them
+/// were labels rather than actions, which made them a legend for a routing
+/// layer the app deliberately keeps invisible. Routing happens on its own —
+/// naming the ten destinations up front asks people to pick one.
 class _EmptyState extends StatefulWidget {
   const _EmptyState();
 
@@ -619,35 +620,6 @@ class _EmptyStateState extends State<_EmptyState> {
                   color: theme.textTheme.headlineMedium!.color!,
                 ),
                 textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              // Kept: these say what the app is for, which a greeting cannot.
-              // Unlike the prompts they are labels, not actions — nothing here
-              // sends a message on your behalf.
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                alignment: WrapAlignment.center,
-                children: [
-                  for (final studio in const [
-                    StudioType.imageStudio,
-                    StudioType.voiceStudio,
-                    StudioType.avatarStudio,
-                    StudioType.translateStudio,
-                    StudioType.videoStudio,
-                    StudioType.deckStudio,
-                    StudioType.shortReelsStudio,
-                    StudioType.musicStudio,
-                    StudioType.brandPackStudio,
-                    StudioType.codeStudio,
-                  ])
-                    Chip(
-                      avatar: Icon(studio.icon, size: 14, color: studio.accent),
-                      label: Text(studio.shortName),
-                      visualDensity: VisualDensity.compact,
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                ],
               ),
             ],
           ),
