@@ -13,6 +13,9 @@ doc/api/
 
 # dotenv environment variables file
 .env*
+# …but the example, which lists names only and no values, is the documentation
+# of what those names are.
+!.env.example
 
 # Avoid committing generated Javascript files (build/ output only —
 # web/flutter_bootstrap.js is a real source file, so this project can't

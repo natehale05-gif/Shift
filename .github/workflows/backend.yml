@@ -1,0 +1,53 @@
+name: Backend schema
+
+# Applies every migration to a plain PostgreSQL and runs the row-security
+# assertions against it.
+#
+# Plain on purpose — `postgres:16`, never a Supabase image. Supabase is the
+# first host, not an assumption, so the test that keeps the schema portable is
+# simply never to run it on the vendor's own container. Anything Supabase-only
+# that creeps in (`auth.uid()`, a reference to `auth.users`, an extension only
+# they ship) fails here rather than the day somebody tries to move.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/shiftai-flutter-chat-app-rjtgyj
+    paths:
+      - 'supabase/**'
+      - 'tool/test_migrations.sh'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'tool/test_migrations.sh'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+jobs:
+  migrations:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply migrations and assert row security
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: '5433'
+          PGUSER: postgres
+        run: ./tool/test_migrations.sh
