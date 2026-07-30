@@ -67,7 +67,10 @@ class AssistantProse extends StatelessWidget {
             // made.
             child: buildingLabel(message.studioType) == null
                 ? const TypingIndicator()
-                : BuildingIndicator(label: buildingLabel(message.studioType)!),
+                : BuildingIndicator(
+                    label: buildingLabel(message.studioType)!,
+                    tool: buildingTool(message.studioType),
+                  ),
           )
         else if (blocks.isEmpty && text.isNotEmpty)
           // Directly constructed / legacy messages carry text without
@@ -153,4 +156,15 @@ String? buildingLabel(StudioType? studio) => switch (studio) {
       StudioType.middleware ||
       null =>
         null,
+    };
+
+/// Which tool a studio's wait shows.
+///
+/// Drawing is not construction: a hammer over an image request is the wrong
+/// verb, and the wrong verb in an animation is as noticeable as it is in a
+/// sentence.
+BuildingTool buildingTool(StudioType? studio) => switch (studio) {
+      StudioType.imageStudio || StudioType.brandPackStudio =>
+        BuildingTool.pencil,
+      _ => BuildingTool.hammer,
     };

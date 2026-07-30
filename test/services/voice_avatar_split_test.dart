@@ -30,8 +30,8 @@ class _FakeHeygen extends HeygenClient {
   Future<HeygenVideo> generateAvatarVideo({
     required String apiKey,
     required String script,
-    String avatarId = '',
-    String voiceId = '',
+    String? avatarId,
+    String? voiceId,
   }) async {
     calls++;
     return const HeygenVideo(

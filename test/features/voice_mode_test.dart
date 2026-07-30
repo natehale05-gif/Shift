@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
 import 'package:shift_ai/features/chat/message/assistant_prose.dart';
+import 'package:shift_ai/features/chat/message/building_indicator.dart';
 import 'package:shift_ai/features/voice/voice_mode_controller.dart';
 
 void main() {
@@ -72,6 +73,15 @@ void main() {
       expect(buildingLabel(StudioType.translateStudio), isNull);
       expect(buildingLabel(StudioType.copyScriptsStudio), isNull);
       expect(buildingLabel(null), isNull);
+    });
+
+    test('drawing gets a pencil, building gets a hammer', () {
+      // A hammer over an image request is the wrong verb, and a wrong verb in
+      // an animation is as noticeable as one in a sentence.
+      expect(buildingTool(StudioType.imageStudio), BuildingTool.pencil);
+      expect(buildingTool(StudioType.brandPackStudio), BuildingTool.pencil);
+      expect(buildingTool(StudioType.codeStudio), BuildingTool.hammer);
+      expect(buildingTool(StudioType.deckStudio), BuildingTool.hammer);
     });
 
     test('every studio is decided one way or the other', () {
