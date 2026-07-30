@@ -19,8 +19,8 @@ import '../streaming/sse_client.dart';
 ///
 /// Two response shapes are handled because the models disagree: `gpt-image-1`
 /// always returns base64 in `b64_json`, while the DALL·E models return a
-/// signed `url` unless asked otherwise. Asking for base64 and *also* reading a
-/// url means a model swap cannot silently produce a blank image.
+/// signed `url` unless asked otherwise. Reading both means a model swap cannot
+/// silently produce a blank image.
 class OpenAiImageClient {
   final http.Client Function() _clientFactory;
 
@@ -36,6 +36,14 @@ class OpenAiImageClient {
     return Uri.parse('$trimmed/images/generations');
   }
 
+  /// Whether [model] accepts the `response_format` parameter.
+  ///
+  /// gpt-image-1 does not merely ignore it — it rejects the whole request with
+  /// `400 Unknown parameter: 'response_format'`. It is always base64, so it
+  /// has no format to choose. The DALL·E models default to a signed URL and do
+  /// need to be asked.
+  static bool wantsResponseFormat(String model) => model.startsWith('dall-e');
+
   static Map<String, dynamic> buildRequestBody({
     required String prompt,
     String model = defaultModel,
@@ -46,9 +54,7 @@ class OpenAiImageClient {
         'prompt': prompt,
         'n': 1,
         'size': size,
-        // Ignored by gpt-image-1 (which is always base64) and honoured by the
-        // DALL·E models, so one body serves both.
-        'response_format': 'b64_json',
+        if (wantsResponseFormat(model)) 'response_format': 'b64_json',
       };
 
   /// Generates one image and maps it onto the same

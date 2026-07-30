@@ -35,6 +35,8 @@ void main() {
 
     expect(sentBody['model'], OpenAiImageClient.defaultModel);
     expect(sentBody['prompt'], 'a pink flower');
+    expect(sentBody.containsKey('response_format'), isFalse,
+        reason: 'gpt-image-1 rejects the whole request over this parameter');
     final image = events.whereType<ImageGenerated>().single;
     expect(image.pngBytes, png);
     expect(events.last, isA<MessageComplete>());
@@ -105,5 +107,17 @@ void main() {
         'https://api.openai.com/v1/images/generations');
     expect(OpenAiImageClient.endpoint('https://api.openai.com/v1').toString(),
         'https://api.openai.com/v1/images/generations');
+  });
+
+  test('only the DALL·E models are sent response_format', () {
+    // Shipped once as "gpt-image-1 ignores it" — it does not. It answers
+    // 400 Unknown parameter and no image is generated at all.
+    expect(OpenAiImageClient.wantsResponseFormat('gpt-image-1'), isFalse);
+    expect(OpenAiImageClient.wantsResponseFormat('dall-e-3'), isTrue);
+    expect(OpenAiImageClient.wantsResponseFormat('dall-e-2'), isTrue);
+    expect(
+        OpenAiImageClient.buildRequestBody(prompt: 'x', model: 'dall-e-3')
+            ['response_format'],
+        'b64_json');
   });
 }

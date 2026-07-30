@@ -1,0 +1,86 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shift_ai/data/models/studio_type.dart';
+import 'package:shift_ai/features/chat/message/assistant_prose.dart';
+import 'package:shift_ai/features/voice/voice_mode_controller.dart';
+
+void main() {
+  group('speakableText', () {
+    test('a code block becomes a note, not a recital', () {
+      // Read verbatim, a fenced block spells out every brace and semicolon —
+      // a minute of noise for something the user can already see.
+      const reply = 'Here you go:\n\n```html\n<h1>Hi</h1>\n```\n\nSave it.';
+      final spoken = speakableText(reply);
+
+      expect(spoken, isNot(contains('<h1>')));
+      expect(spoken, contains('the code is on screen'),
+          reason: 'saying nothing about it would be its own kind of lie');
+      expect(spoken, contains('Here you go'));
+      expect(spoken, contains('Save it'));
+    });
+
+    test('a reply cut off mid-block is still handled', () {
+      final spoken = speakableText('Here:\n```html\n<html>');
+      expect(spoken, isNot(contains('<html>')));
+      expect(spoken, contains('the code is on screen'));
+    });
+
+    test('markdown punctuation is not announced', () {
+      final spoken = speakableText(
+          '## Heading\n\n- **bold** item\n- a `token` here\n\n> quoted');
+      for (final marker in ['#', '*', '`', '>', '- ']) {
+        expect(spoken, isNot(contains(marker)), reason: marker);
+      }
+      expect(spoken, contains('bold item'));
+      expect(spoken, contains('token'));
+    });
+
+    test('links are read as their text, images dropped', () {
+      final spoken =
+          speakableText('See [the docs](https://example.com/a/b) and ![alt](x.png)');
+      expect(spoken, contains('the docs'));
+      expect(spoken, isNot(contains('example.com')));
+      expect(spoken, isNot(contains('alt')));
+    });
+
+    test('plain prose passes through unchanged', () {
+      expect(speakableText('The capital of France is Paris.'),
+          'The capital of France is Paris.');
+    });
+
+    test('a reply that is only code produces nothing worth saying', () {
+      // The caller checks for empty and goes back to listening rather than
+      // speaking a bare parenthetical into the room.
+      final spoken = speakableText('```dart\nvoid main() {}\n```');
+      expect(spoken, '(the code is on screen)');
+    });
+  });
+
+  group('buildingLabel', () {
+    test('the making studios each say what they are making', () {
+      expect(buildingLabel(StudioType.codeStudio), 'Building');
+      expect(buildingLabel(StudioType.imageStudio), 'Drawing');
+      expect(buildingLabel(StudioType.videoStudio), 'Filming');
+      expect(buildingLabel(StudioType.musicStudio), 'Scoring');
+      expect(buildingLabel(StudioType.deckStudio), 'Building the deck');
+      expect(buildingLabel(StudioType.brandPackStudio), 'Designing');
+      expect(buildingLabel(StudioType.shortReelsStudio), 'Cutting');
+    });
+
+    test('answering and translating stay "thinking"', () {
+      // The hammer would be a lie over a turn that is only writing prose.
+      expect(buildingLabel(StudioType.middleware), isNull);
+      expect(buildingLabel(StudioType.translateStudio), isNull);
+      expect(buildingLabel(StudioType.copyScriptsStudio), isNull);
+      expect(buildingLabel(null), isNull);
+    });
+
+    test('every studio is decided one way or the other', () {
+      // A studio added without a decision here would silently fall back to
+      // dots; the switch is exhaustive, so this is really a reminder that the
+      // choice is deliberate for each one.
+      for (final studio in StudioType.values) {
+        expect(() => buildingLabel(studio), returnsNormally, reason: '$studio');
+      }
+    });
+  });
+}
