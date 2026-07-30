@@ -64,6 +64,21 @@ final _existingImageReference = RegExp(
     r'(images?|photos?|pictures?|logos?|graphics?|illustrations?|'
     r'artworks?|renders?|renderings?)\b');
 
+/// The same request made with a bare pronoun: "put **it** in a website",
+/// "turn it into a landing page", "a site featuring it".
+///
+/// Most people say it this way — the picture is right there on screen, so
+/// naming it again feels redundant. Requiring the noun meant "put it in a
+/// website" fell through and the model was left to invent a stand-in.
+///
+/// The verb (or preposition) has to sit immediately before the pronoun, which
+/// is what keeps an unrelated "it" out: "build a page and put a contact form
+/// in it" does not match, because the pronoun there is the *destination*.
+final _pronounReference = RegExp(
+    r'\b(put|use|add|include|place|insert|drop|feature|show|display|embed|'
+    r'turn|make|with|featuring|using|around)\s+'
+    r'(it|this|that|them|these|those)\b');
+
 /// Somewhere for the image to go.
 final _pageReference = RegExp(
     r'\b(website|web site|site|page|landing|homepage|home page|portfolio|'
@@ -72,15 +87,17 @@ final _pageReference = RegExp(
 /// The already-generated image a page-building turn should carry, or null when
 /// this turn is not that.
 ///
-/// Requires both halves — a definite reference to an existing image *and*
+/// Requires both halves — a reference to something that already exists *and*
 /// somewhere to put it — so that "make this image bigger" (no page) and "build
-/// me a site with photos" (no existing image) are both left alone.
+/// me a site with photos" (nothing referred to) are both left alone.
 GeneratedImage? existingImageForPage(
   Conversation conversation,
   String userInput,
 ) {
   final lower = userInput.toLowerCase();
-  if (!_existingImageReference.hasMatch(lower)) return null;
+  final refersBack = _existingImageReference.hasMatch(lower) ||
+      _pronounReference.hasMatch(lower);
+  if (!refersBack) return null;
   if (!_pageReference.hasMatch(lower)) return null;
   return latestGeneratedImage(conversation);
 }

@@ -196,6 +196,17 @@ void main() {
       expect(client.callCount, 1);
     });
 
+    test('"put it in a website selling pink flowers" works too', () async {
+      // Same request, said with a pronoun — which is how people actually say
+      // it. This phrasing shipped broken once already.
+      final (events, client) =
+          await _runLive('put it in a website selling pink flowers');
+
+      final created = events.whereType<ArtifactCreated>().single;
+      expect(created.artifact.latest.content, contains(_flowerInPage));
+      expect(client.seenSystemPrompt, contains(existingImageInstruction));
+    });
+
     test('a model that ignores the placeholder still gets the image', () async {
       final (events, _) = await _runLive('now put this image in the website',
           page: _pageWithoutPlaceholder);
