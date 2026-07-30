@@ -147,3 +147,24 @@ if [ -n "$secret" ]; then
   exit 1
 fi
 echo "no client role can read a ciphertext column"
+
+# Every function must pin its search_path.
+#
+# Without one, the schemas a function resolves names in are chosen by whoever
+# calls it — and `shift.current_user_id()` is named in every row-security
+# policy in the database, so changing what it returns changes who can read
+# what, everywhere at once. The host's linter catches this after deployment;
+# this catches it before.
+unpinned=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(p.proname, ', ')
+  from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'shift'
+    and not exists (
+      select 1 from unnest(coalesce(p.proconfig, '{}')) as c
+      where c like 'search_path=%')")
+
+if [ -n "$unpinned" ]; then
+  echo "FAIL: functions with a caller-controlled search_path: $unpinned" >&2
+  exit 1
+fi
+echo "every function pins its search_path"
