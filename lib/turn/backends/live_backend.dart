@@ -446,6 +446,17 @@ class RealChatService implements ChatService {
         }
       }
 
+      // Music: a real track when a music provider is keyed. Like video, this
+      // route had no live executor — every song was the local synthesizer's
+      // "Rising Pulse", whatever keys were present.
+      if (route == ChatRoute.audio && !_wantsSpokenAudio(route, userInput)) {
+        if (keys.hasKey('elevenlabs')) {
+          await _runMusic(controller, userInput);
+          await controller.close();
+          return;
+        }
+      }
+
       // Video: a real render when a video provider is keyed. Before this the
       // route had no executor at all — it fell off the end of the client-kind
       // switch into the mock, so every video was the simulated card no matter
@@ -1415,7 +1426,7 @@ class RealChatService implements ChatService {
                 repliedWithWholeDocument(buffer.toString()))) {
           var artifact = extractCodeArtifact(
               buffer.toString(), conversation.id,
-              title: titleFromRequest(userInput));
+              request: userInput);
           if (artifact != null) {
             // The image the user pointed at goes in here, not in the model's
             // output — it never saw the picture. It was asked to leave a
@@ -1556,6 +1567,43 @@ class RealChatService implements ChatService {
       return rasterizeGradientArt(seed: seed);
     }
     return null;
+  }
+
+  /// A real composed track, or the synthesized card with the reason.
+  Future<void> _runMusic(
+    StreamController<ChatEvent> controller,
+    String userInput,
+  ) async {
+    controller.add(const RoutingDetected(StudioType.musicStudio));
+
+    final seed = StudioResponseBank.seedFromString(userInput);
+    Uint8List? bytes;
+    String? problem;
+    try {
+      bytes = await _elevenLabs.compose(
+          apiKey: keys.keyFor('elevenlabs'), prompt: userInput);
+    } on SseHttpException catch (e) {
+      problem = elevenLabsProblem(e.statusCode, e.body);
+    } catch (e) {
+      problem = 'Couldn\'t reach ElevenLabs for the track, so this is the '
+          'built-in synthesizer. ($e)';
+    }
+
+    if (problem != null) controller.add(MessageDelta('$problem\n\n'));
+    controller.add(StudioResultReady(AudioResult(
+      kind: AudioKind.music,
+      title: bytes == null ? 'Rising Pulse' : 'Track',
+      subtitle: bytes == null ? 'Synthesized' : 'Composed',
+      durationSec: 30,
+      seed: seed,
+      transcript: userInput,
+      audioBytes: bytes ??
+          AudioSynthService.synthesizeWav(
+              seed: seed, durationSec: 20, bpm: 100, speechLike: false),
+    )));
+    controller.add(const MessageDelta(
+        '\n\nPlay or download it from the card above.'));
+    controller.add(const MessageComplete());
   }
 
   /// A real rendered video, or the simulated card with the reason when the
@@ -1753,6 +1801,7 @@ class RealChatService implements ChatService {
     String text,
     String conversationId, {
     String? title,
+    String request = '',
   }) {
     final match = _fencedBlock.firstMatch(text);
     if (match == null) return null;
@@ -1763,10 +1812,12 @@ class RealChatService implements ChatService {
     return Artifact(
       id: _uuid.v4(),
       conversationId: conversationId,
+      // Named from what was built, not from the sentence that asked for it —
+      // the page's own <title>/<h1>, or the component it declares. The request
+      // is the fallback, and 'Generated page' the fallback's fallback.
       title: title ??
-          (isHtml
-              ? 'Generated page'
-              : 'Generated ${language.isEmpty ? 'code' : language}'),
+          titleFromArtifact(code,
+              language: isHtml ? null : language, request: request),
       kind: isHtml ? ArtifactKind.html : ArtifactKind.code,
       language: language.isEmpty ? null : language,
       versions: [ArtifactVersion(content: code, createdAt: DateTime.now())],

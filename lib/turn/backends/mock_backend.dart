@@ -610,6 +610,9 @@ class MockChatService implements ChatService {
     if (wantsHtml) {
       // The page is named the same way in both backends, and the page's own
       // <title>/<h1> use that name rather than quoting the request back.
+      // The template names the page after the request, then the page is read
+      // back for its name — so demo mode and live mode arrive at a title the
+      // same way even though only one of them has a model.
       final title = titleFromRequest(userInput);
       var content = StudioResponseBank.htmlArtifactContent(title);
       if (pageContributors.isNotEmpty) {

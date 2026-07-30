@@ -46,6 +46,36 @@ class ElevenLabsClient implements KeyValidatable {
   /// Speaks [text] and returns raw 16-bit mono PCM at [sampleRate]. Throws
   /// [SseHttpException] on an API error so the caller can decide whether to
   /// fall back to the local synthesizer.
+  /// Composes a track from a description.
+  ///
+  /// **Verification boundary:** there is no ElevenLabs key in this
+  /// environment, so this wire shape is written from the documented Music
+  /// endpoint and proven only against a fake client. A failure surfaces its
+  /// status through [elevenLabsProblem] rather than falling back in silence.
+  Future<Uint8List> compose({
+    required String apiKey,
+    required String prompt,
+    int lengthMs = 30000,
+  }) async {
+    final client = _clientFactory();
+    try {
+      final response = await client.post(
+        Uri.parse('$base/music'),
+        headers: {
+          'xi-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({'prompt': prompt, 'music_length_ms': lengthMs}),
+      );
+      if (response.statusCode >= 400) {
+        throw SseHttpException(response.statusCode, response.body);
+      }
+      return response.bodyBytes;
+    } finally {
+      client.close();
+    }
+  }
+
   Future<Uint8List> speak({
     required String apiKey,
     required String text,
