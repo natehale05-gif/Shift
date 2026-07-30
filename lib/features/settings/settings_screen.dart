@@ -13,6 +13,7 @@ import '../../data/stores/styles_store.dart';
 import '../../data/stores/user_prefs_store.dart';
 import '../styles/style_editor.dart';
 import '../../core/theme/app_spacing.dart';
+import 'account_card.dart';
 import 'api_keys_section.dart';
 import 'update_card.dart';
 import '../../core/theme/app_theme.dart';
@@ -48,6 +49,10 @@ class SettingsScreen extends StatelessWidget {
               onSelectionChanged: (selection) => settings.setThemeMode(selection.first),
             ),
           ),
+          const SizedBox(height: AppSpacing.lg),
+          // Above the keys, because where a key is *stored* is the first
+          // decision — on this device, or on the server behind an account.
+          const AccountCard(),
           const SizedBox(height: AppSpacing.lg),
           const _SectionCard(
             title: 'API keys (live AI)',

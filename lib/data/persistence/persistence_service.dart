@@ -28,6 +28,7 @@ class PersistenceService {
   static const _userPrefsKey = 'shift_ai.user_prefs.v1';
   static const _migratedFlagKey = 'shift_ai.migrated_to_idb.v1';
   static const _updateStateKey = 'shift_ai.update_state.v1';
+  static const _sessionKey = 'shift_ai.session.v1';
   static const maxStoredConversations = 50;
 
   /// Generated images kept before oldest are pruned.
@@ -196,6 +197,29 @@ class PersistenceService {
 
   Future<void> saveUpdateState(Map<String, dynamic> value) =>
       _putKv(_updateStateKey, jsonEncode(value));
+
+  /// The signed-in session, so opening the app does not mean signing in again.
+  ///
+  /// This holds a bearer token, and it sits in the same local store as every
+  /// other preference — which is honest about what it is: the same trust
+  /// boundary as the provider keys the app already keeps on the device. It is
+  /// short-lived and refreshable, so the blast radius of the store being read
+  /// is one session rather than an account.
+  Future<Map<String, dynamic>> loadSession() async {
+    final raw = await _getKv(_sessionKey);
+    if (raw == null || raw.isEmpty) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is Map<String, dynamic> ? decoded : const {};
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// Passing null signs out — the row is cleared rather than left holding a
+  /// token nobody meant to keep.
+  Future<void> saveSession(Map<String, dynamic>? value) =>
+      _putKv(_sessionKey, value == null ? '' : jsonEncode(value));
 
   Future<String?> loadSelectedTier() => _getKv(_selectedTierKey);
 

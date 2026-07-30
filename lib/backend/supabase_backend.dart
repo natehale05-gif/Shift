@@ -381,7 +381,7 @@ class SupabaseBackend implements ShiftBackend {
       rethrow;
     } catch (e) {
       if (allowFailure) return const [];
-      throw BackendException(BackendProblem.unavailable, '$e');
+      throw _offline(e);
     }
   }
 
@@ -437,9 +437,23 @@ class SupabaseBackend implements ShiftBackend {
     } on BackendException {
       rethrow;
     } catch (e) {
-      throw BackendException(BackendProblem.unavailable, '$e');
+      throw _offline(e);
     }
   }
+
+  /// A request that never reached an HTTP answer — offline, DNS, a blocked
+  /// proxy, a timeout.
+  ///
+  /// The exception text goes in `detail`, which is for logs. Putting it in
+  /// `message` is how a sign-in form ended up displaying
+  /// `ClientException: Failed to fetch, uri=https://…/auth/v1/token`: useless
+  /// to the person who typed a password, and it prints the project's address
+  /// to anyone looking at the screen.
+  BackendException _offline(Object error) => BackendException(
+        BackendProblem.unavailable,
+        defaultMessageFor(BackendProblem.unavailable),
+        detail: '$error',
+      );
 
   BackendException _problemFor(http.Response response) {
     final problem = switch (response.statusCode) {
@@ -449,8 +463,9 @@ class SupabaseBackend implements ShiftBackend {
       _ => BackendProblem.unavailable,
     };
     // The server's own wording is better than anything invented here, when it
-    // bothers to send one.
-    String message = 'Something went wrong (${response.statusCode}).';
+    // bothers to send one; otherwise the problem's own sentence, which at
+    // least says what to do. A bare status code says neither.
+    String message = defaultMessageFor(problem);
     try {
       final decoded = jsonDecode(response.body);
       if (decoded is Map) {
@@ -462,7 +477,8 @@ class SupabaseBackend implements ShiftBackend {
             .toString();
       }
     } catch (_) {}
-    return BackendException(problem, message);
+    return BackendException(problem, message,
+        detail: 'HTTP ${response.statusCode}');
   }
 
   @override
