@@ -6,6 +6,7 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/conversation.dart';
 import 'chat_find.dart';
 import 'greeting.dart';
+import 'walking_animal.dart';
 import 'conversation_export.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../core/state/artifact_panel_store.dart';
@@ -600,10 +601,25 @@ class _EmptyStateState extends State<_EmptyState> {
   /// screen overwrites the moment it picks.
   String? _greeting;
 
+  /// Chosen once, alongside the greeting and for the same reason: an animal
+  /// that swapped mid-rebuild would be a different creature every keystroke.
+  WalkingAnimal? _animal;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final prefs = context.watch<UserPrefsStore>();
+    final animal = _animal ??= () {
+      final chosen = animalForSeed(
+        _seed,
+        avoid: WalkingAnimal.values
+            .where((a) => a.name == prefs.lastAnimal)
+            .firstOrNull,
+      );
+      WidgetsBinding.instance
+          .addPostFrameCallback((_) => prefs.setLastAnimal(chosen.name));
+      return chosen;
+    }();
     final greeting = _greeting ??= () {
       final now = DateTime.now();
       final chosen = greetingFor(
@@ -628,9 +644,8 @@ class _EmptyStateState extends State<_EmptyState> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.auto_awesome_rounded,
-                size: 32,
+              WalkingAnimalStrip(
+                animal: animal,
                 color: theme.colorScheme.primary,
               ),
               const SizedBox(height: AppSpacing.md),
