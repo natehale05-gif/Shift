@@ -53,6 +53,16 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
+[InstallDelete]
+; Reinstalling over a copy that has a half-applied update staged beside it
+; would leave that directory in place, and the freshly installed app would
+; immediately try to swap it in — quit, flash a console, and come back
+; unchanged, on every launch. Installing is the moment to clear it.
+Type: filesandordirs; Name: "{app}_staged"
+Type: filesandordirs; Name: "{app}_backup"
+Type: filesandordirs; Name: "{app}_incoming"
+Type: files; Name: "{app}_staged.attempted"
+
 [Files]
 Source: "..\..\build\windows\x64\runner\Release\*"; DestDir: "{app}"; \
     Flags: ignoreversion recursesubdirs createallsubdirs
@@ -72,3 +82,4 @@ Filename: "{app}\{#AppExe}"; Description: "Launch {#AppName}"; \
 Type: filesandordirs; Name: "{app}_staged"
 Type: filesandordirs; Name: "{app}_backup"
 Type: filesandordirs; Name: "{app}_incoming"
+Type: files; Name: "{app}_staged.attempted"

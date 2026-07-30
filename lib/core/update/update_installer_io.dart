@@ -87,6 +87,39 @@ bool hasStagedUpdate() {
   }
 }
 
+/// Marks that a swap was already attempted for the tree currently staged.
+///
+/// Without this the app could not fail: a swap that did not go through left
+/// the staged directory in place, so the next launch attempted it again, quit
+/// to do so, and came back to the same state — forever. On Windows each
+/// attempt also flashed a console window, which is what made the loop
+/// obvious. One attempt per staged build; then the staged tree is discarded
+/// and the app starts normally.
+File get _attemptMarker => File('${_stagedDir.path}.attempted');
+
+bool _swapAlreadyAttempted() {
+  try {
+    return _attemptMarker.existsSync();
+  } catch (_) {
+    return false;
+  }
+}
+
+/// Throws away a staged update that could not be applied, so the app boots
+/// normally instead of retrying forever. The next check re-downloads it.
+void _discardStagedUpdate() {
+  try {
+    if (_stagedDir.existsSync()) _stagedDir.deleteSync(recursive: true);
+  } catch (_) {
+    // Better to start the app than to fail on cleanup.
+  }
+  try {
+    if (_attemptMarker.existsSync()) _attemptMarker.deleteSync();
+  } catch (_) {
+    // Same.
+  }
+}
+
 /// Whether this copy is allowed to replace itself in place.
 ///
 /// A `.deb` unpacks into `/opt`, and a Windows all-users install lands in
@@ -262,18 +295,50 @@ Future<InstallOutcome> _handOff(File file) async {
 
 Future<bool> applyStagedUpdate() async {
   if (!hasStagedUpdate()) return false;
+  // A staged tree that has already had its turn is a failed swap, not a
+  // pending one. Retrying it is what produced the loop.
+  if (_swapAlreadyAttempted()) {
+    _discardStagedUpdate();
+    return false;
+  }
   try {
     final script = await _writeSwapScript();
-    await Process.start(
-      Platform.isWindows ? 'cmd' : 'sh',
-      Platform.isWindows ? ['/c', script.path] : [script.path],
-      mode: ProcessStartMode.detached,
-    );
+    // Written before launching, not after: if the swap works, this process is
+    // gone and the marker goes with the old install anyway; if it does not,
+    // the marker is what stops the next launch from trying again.
+    await _attemptMarker.writeAsString(DateTime.now().toIso8601String());
+    await _launchDetached(script);
     // The script waits for this process to go away before touching anything.
     exit(0);
   } catch (_) {
+    _discardStagedUpdate();
     return false;
   }
+}
+
+/// Runs the swap script without putting a window on screen.
+///
+/// On Windows `Process.start('cmd', …)` opens a console — on Windows 11 that
+/// surfaces as a Terminal window, which reads as the app spawning a shell at
+/// you. Dart's `Process.start` has no flag to suppress it, so the script is
+/// launched through `wscript` running a two-line VBScript, which is the
+/// dependency-free way to start something genuinely hidden.
+Future<void> _launchDetached(File script) async {
+  if (!Platform.isWindows) {
+    await Process.start('sh', [script.path], mode: ProcessStartMode.detached);
+    return;
+  }
+  final launcher = File('${script.parent.path}\\shift_ai_update_launch.vbs');
+  // `Run(cmd, 0, False)`: window style 0 is hidden, and False means do not
+  // wait — the script has its own wait-for-exit loop.
+  await launcher.writeAsString(
+      'CreateObject("WScript.Shell").Run "" & Chr(34) & "${script.path}"'
+      ' & Chr(34), 0, False\r\n');
+  await Process.start(
+    'wscript',
+    ['//B', '//Nologo', launcher.path],
+    mode: ProcessStartMode.detached,
+  );
 }
 
 /// The swap itself, as a detached script — the running process cannot
@@ -285,6 +350,9 @@ Future<File> _writeSwapScript() async {
   final backup = '${install}_backup';
   final incoming = '${install}_incoming';
   final exe = '$install${Platform.pathSeparator}$_executableName';
+  // Cleared by the script itself once the swap is decided, either way. Left
+  // behind, it would block the *next* real update from ever being applied.
+  final marker = _attemptMarker.path;
 
   if (Platform.isWindows) {
     final file = File('${dir.path}\\shift_ai_update.cmd');
@@ -298,14 +366,25 @@ if not errorlevel 1 (
 )
 if exist "$backup" rmdir /s /q "$backup"
 if exist "$incoming" rmdir /s /q "$incoming"
-move "$staged" "$incoming" >nul || goto done
-move "$install" "$backup" >nul || goto done
+move "$staged" "$incoming" >nul || goto failed
+move "$install" "$backup" >nul || goto failed
 move "$incoming" "$install" >nul || move "$backup" "$install" >nul
 if exist "$backup" rmdir /s /q "$backup"
 rem Relaunch from inside the new install; the old working directory is gone.
 cd /d "$install"
 start "" "$exe"
+goto done
+
+:failed
+rem Leave nothing staged. A staged tree that survives a failed swap is what
+rem made the app quit, flash a console and come back unchanged on every
+rem single launch. The next check downloads it again.
+if exist "$incoming" rmdir /s /q "$incoming"
+if exist "$staged" rmdir /s /q "$staged"
+start "" "$exe"
+
 :done
+if exist "$marker" del /q "$marker"
 del "%~f0"
 ''');
     return file;
@@ -317,16 +396,26 @@ del "%~f0"
 # Wait for the app to exit; it cannot replace the directory it runs from.
 while kill -0 $pid 2>/dev/null; do sleep 0.2; done
 
+# Leave nothing staged whichever way this goes: a staged tree that survives a
+# failed swap makes every later launch quit and retry it, forever.
+give_up() {
+  rm -rf "$incoming" "$staged"
+  rm -f "$marker"
+  "$exe" >/dev/null 2>&1 &
+  exit 1
+}
+
 rm -rf "$backup" "$incoming"
 # Rename into place in two steps so a failure leaves the old install
 # recoverable. Nothing is deleted until the new tree is live.
-mv "$staged" "$incoming" || exit 1
-mv "$install" "$backup" || exit 1
+mv "$staged" "$incoming" || give_up
+mv "$install" "$backup" || give_up
 if ! mv "$incoming" "$install"; then
   mv "$backup" "$install"
-  exit 1
+  give_up
 fi
 rm -rf "$backup"
+rm -f "$marker"
 
 # Relaunch from inside the new install. The old working directory was just
 # renamed out from under this script, and a process whose cwd no longer
