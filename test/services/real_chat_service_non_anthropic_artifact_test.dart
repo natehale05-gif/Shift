@@ -39,6 +39,13 @@ class _ForcedRouter extends ModelRouter {
 class _FakeGeminiClient extends GeminiClient {
   int callCount = 0;
 
+  /// What the model replies. Defaults to a page, but a plain question has to
+  /// be answered with prose: a fake that returns `<!DOCTYPE html>` no matter
+  /// what is asked cannot tell "the route gate held" apart from "the reply
+  /// contained nothing worth extracting".
+  final String reply;
+  _FakeGeminiClient({this.reply = 'Sure:\n\n```html\n$_pageHtml\n```'});
+
   @override
   Stream<ChatEvent> streamChat({
     required String apiKey,
@@ -50,13 +57,16 @@ class _FakeGeminiClient extends GeminiClient {
     bool grounding = false,
   }) async* {
     callCount++;
-    yield const MessageDelta('Sure:\n\n```html\n$_pageHtml\n```');
+    yield MessageDelta(reply);
     yield const MessageComplete();
   }
 }
 
 class _FakeOpenAiClient extends OpenAiCompatibleClient {
   int callCount = 0;
+
+  final String reply;
+  _FakeOpenAiClient({this.reply = 'Sure:\n\n```html\n$_pageHtml\n```'});
 
   @override
   Stream<ChatEvent> streamChat({
@@ -71,10 +81,13 @@ class _FakeOpenAiClient extends OpenAiCompatibleClient {
     Map<String, String> extraHeaders = const {},
   }) async* {
     callCount++;
-    yield const MessageDelta('Sure:\n\n```html\n$_pageHtml\n```');
+    yield MessageDelta(reply);
     yield const MessageComplete();
   }
 }
+
+/// How a model actually answers a question that is not a build request.
+const _proseReply = 'The capital of France is Paris.';
 
 Artifact _existingPage() => Artifact(
       id: 'a1',
@@ -131,9 +144,12 @@ void main() {
       String prompt, {
       List<Artifact> artifacts = const [],
       ChatRoute route = ChatRoute.code,
+      String? reply,
     }) async {
       final keys = await _keysFor('gemini', 'test-gemini-key');
-      final gemini = _FakeGeminiClient();
+      final gemini = reply == null
+          ? _FakeGeminiClient()
+          : _FakeGeminiClient(reply: reply);
       final service = RealChatService(
         keys: keys,
         geminiClient: gemini,
@@ -203,12 +219,39 @@ void main() {
     });
 
     test('a non-code route still produces no artifact', () async {
-      final (events, gemini) =
-          await run('what is the capital of France', route: ChatRoute.chat);
+      final (events, gemini) = await run('what is the capital of France',
+          route: ChatRoute.chat, reply: _proseReply);
 
       expect(gemini.callCount, 1);
       expect(events.whereType<ArtifactCreated>(), isEmpty);
       expect(events.whereType<ArtifactUpdated>(), isEmpty);
+    });
+
+    test('a whole page becomes an artifact even off the code route', () async {
+      // Routing is a classification and it is sometimes wrong -- most often
+      // on a follow-up like "give it to me as an artifact", which the router
+      // sees with no conversation around it. When that happens the old gate
+      // dropped a finished page into a chat bubble, where it could not be
+      // previewed, downloaded or revised. A complete document is a
+      // deliverable regardless of what the router decided.
+      final (events, _) = await run('give it to me as an artifact',
+          route: ChatRoute.chat);
+
+      final created = events.whereType<ArtifactCreated>().single;
+      expect(created.artifact.kind, ArtifactKind.html);
+      expect(created.artifact.latest.content, contains('Northbound'));
+    });
+
+    test('a code fragment in a chat answer stays in the chat', () async {
+      // The other half of the same decision: a few tags quoted to explain
+      // something must not become an artifact.
+      final (events, _) = await run('how do I centre a div',
+          route: ChatRoute.chat,
+          reply: 'Use flexbox:\n\n```html\n<div class="row">\n'
+              '  <span>a</span>\n  <span>b</span>\n</div>\n```\n'
+              'Then add display:flex.');
+
+      expect(events.whereType<ArtifactCreated>(), isEmpty);
     });
   });
 
@@ -242,7 +285,7 @@ void main() {
         () async {
       // The pin must not start routing ordinary chat into studios.
       final keys = await _keysFor('openai', 'test-openai-key');
-      final openAi = _FakeOpenAiClient();
+      final openAi = _FakeOpenAiClient(reply: _proseReply);
       final service = RealChatService(
         keys: keys,
         openAiClient: openAi,

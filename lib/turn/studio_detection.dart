@@ -108,4 +108,25 @@ class StudioDetection {
     final lower = input.toLowerCase();
     return _htmlArtifactKeywords.any(lower.contains);
   }
+
+  /// An instruction about *presentation* — "give it to me as an artifact",
+  /// "put that in a file" — rather than about what to build.
+  ///
+  /// These arrive as follow-ups, which is exactly what the router model
+  /// cannot classify: it is shown only the current message, and "give it to
+  /// me as an artifact" says nothing about code in isolation. So it came back
+  /// `chat`, the artifact extraction never ran, and a finished page was
+  /// rendered as a code fence in the chat bubble.
+  ///
+  /// Requires a verb or preposition before the noun, so "what is an
+  /// artifact?" is a question rather than a request.
+  static bool wantsArtifactPresentation(String input) =>
+      _artifactRequest.hasMatch(input.toLowerCase());
+
+  static final _artifactRequest = RegExp(
+    r'\b(as|into|in|to|make|makes|give|put|render|show|want|need|turn)\b'
+    r'[^.?!]{0,24}'
+    r'\b(artifact|artefact|side panel|separate file|its own file|'
+    r'downloadable file)\b',
+  );
 }

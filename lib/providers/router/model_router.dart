@@ -103,6 +103,11 @@ ChatRoute routeForStudio(StudioType studio) => switch (studio) {
 /// Maps the existing keyword tables onto routes — the no-key (and
 /// LLM-parse-failure) fallback, so routing never breaks.
 ChatRoute keywordRoute(String input) {
+  // An explicit request for an artifact outranks topic detection: the user
+  // has said what form the answer should take, and no keyword table needs
+  // consulting to honour that.
+  if (StudioDetection.wantsArtifactPresentation(input)) return ChatRoute.code;
+
   final studio = StudioDetection.detectStudio(input);
   if (studio == StudioType.middleware) {
     return StudioDetection.wantsWebSearch(input)
@@ -156,6 +161,13 @@ class ModelRouter {
     String? anthropicKey,
     String? geminiKey,
   }) async {
+    // "give it to me as an artifact" is an unambiguous instruction about the
+    // form of the answer, and the classifier is the wrong thing to ask: it
+    // sees only this message, where the phrase says nothing about code. It
+    // answered `chat`, so the page came back as a fence in the chat bubble.
+    // Deciding it here also saves a router round-trip.
+    if (StudioDetection.wantsArtifactPresentation(input)) return ChatRoute.code;
+
     final hasAnthropic = anthropicKey != null && anthropicKey.isNotEmpty;
     final hasGemini = geminiKey != null && geminiKey.isNotEmpty;
     if (!hasAnthropic && !hasGemini) {
