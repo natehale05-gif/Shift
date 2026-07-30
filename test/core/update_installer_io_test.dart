@@ -170,4 +170,61 @@ void main() {
       expect(canReplaceInPlace(), isFalse);
     });
   });
+
+  group('a swap that fails is not retried forever', () {
+    // The Windows report: the app kept quitting, flashing a console window,
+    // and coming back unchanged. A staged tree that survived a failed swap was
+    // still "pending" on the next launch, so every launch tried it again.
+    File marker() => File('${staged.path}.attempted');
+
+    test('a second attempt at the same staged tree is refused', () async {
+      await stageArchiveBytes(_bundleTarGz(), isZip: false);
+      expect(hasStagedUpdate(), isTrue);
+
+      // Stand in for the first attempt having happened and not worked.
+      marker().writeAsStringSync('2026-07-30T12:00:00.000');
+
+      expect(await applyStagedUpdate(), isFalse,
+          reason: 'the tree already had its turn');
+    });
+
+    test('the refused tree is discarded, so the app boots normally', () async {
+      await stageArchiveBytes(_bundleTarGz(), isZip: false);
+      marker().writeAsStringSync('x');
+
+      await applyStagedUpdate();
+
+      expect(staged.existsSync(), isFalse);
+      expect(marker().existsSync(), isFalse);
+      expect(hasStagedUpdate(), isFalse,
+          reason: 'nothing left to retry on the next launch');
+    });
+
+    test('the install itself is never touched by the refusal', () async {
+      await stageArchiveBytes(_bundleTarGz(), isZip: false);
+      marker().writeAsStringSync('x');
+
+      await applyStagedUpdate();
+
+      expect(File('${install.path}/$_executable').readAsStringSync(),
+          'the old build');
+    });
+
+    test('a later update stages cleanly after a refusal', () async {
+      // The marker must not outlive the tree it refers to, or the *next* real
+      // update could never be applied either.
+      await stageArchiveBytes(_bundleTarGz(), isZip: false);
+      marker().writeAsStringSync('x');
+      await applyStagedUpdate();
+
+      final outcome = await stageArchiveBytes(_bundleTarGz(), isZip: false);
+      expect(outcome, InstallOutcome.staged);
+      expect(hasStagedUpdate(), isTrue);
+      expect(marker().existsSync(), isFalse);
+    });
+
+    test('with nothing staged there is nothing to attempt', () async {
+      expect(await applyStagedUpdate(), isFalse);
+    });
+  });
 }
