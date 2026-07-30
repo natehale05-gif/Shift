@@ -76,5 +76,58 @@ void main() {
         expect(greetingFor(now: at(hour)), isNotEmpty, reason: 'hour $hour');
       }
     });
+
+    test('every band offers plenty to rotate through', () {
+      // Four variants meant a repeat every few chats even with a good seed.
+      for (final hour in [9, 14, 19, 2]) {
+        final seen = {
+          for (var seed = 0; seed < 60; seed++)
+            greetingFor(now: at(hour), seed: seed)
+        };
+        expect(seen.length, greaterThanOrEqualTo(10), reason: 'hour $hour');
+      }
+    });
+  });
+
+  group('never the same as last time', () {
+    test('the avoided line is not returned', () {
+      for (final hour in [9, 14, 19, 2]) {
+        final previous = greetingFor(now: at(hour), seed: 3);
+        for (var seed = 0; seed < 60; seed++) {
+          expect(greetingFor(now: at(hour), seed: seed, avoid: previous),
+              isNot(previous),
+              reason: 'hour $hour, seed $seed');
+        }
+      }
+    });
+
+    test('avoiding still works once a name is set', () {
+      // The stored value is the bare line, so a nickname appearing (or
+      // changing) between chats must not defeat the comparison.
+      const previous = 'Good evening';
+      for (var seed = 0; seed < 40; seed++) {
+        final greeting =
+            greetingFor(now: at(19), seed: seed, name: 'Nate', avoid: previous);
+        expect(greeting, isNot(startsWith(previous)), reason: 'seed $seed');
+      }
+    });
+
+    test('the stored line is the variant itself, commas and all', () {
+      // Splitting the rendered greeting on its last comma would truncate a
+      // line that contains one — and a truncated value never matches, which
+      // silently turns the avoidance off for exactly that line.
+      for (var seed = 0; seed < 40; seed++) {
+        final line = greetingLineFor(now: at(19), seed: seed);
+        expect(greetingFor(now: at(19), seed: seed, name: 'Nate'),
+            '$line, Nate',
+            reason: 'seed $seed');
+      }
+    });
+
+    test('an unknown or empty avoid value changes nothing', () {
+      for (final avoid in [null, '', 'Something never used']) {
+        expect(greetingFor(now: at(19), seed: 0, avoid: avoid), isNotEmpty);
+      }
+    });
   });
 }

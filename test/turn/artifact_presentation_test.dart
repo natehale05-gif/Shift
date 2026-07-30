@@ -86,6 +86,47 @@ void main() {
     });
   });
 
+  group('wantsDeepResearch', () {
+    test('asking for a researched report selects it without a toggle', () {
+      for (final input in [
+        'do deep research on solid-state batteries',
+        'write me a research report on the EV market',
+        'I need a comprehensive analysis of our competitors',
+        'give me an in-depth report on tidal energy',
+        'a thorough investigation of what happened at Enron',
+      ]) {
+        expect(StudioDetection.wantsDeepResearch(input), isTrue, reason: input);
+      }
+    });
+
+    test('an ordinary look-up stays a web search, not a research run', () {
+      // Deep research runs several rounds of searching and synthesis, so
+      // over-triggering it costs real time and real tokens on questions that
+      // wanted one answer.
+      for (final input in [
+        'what happened in the news today',
+        'look up the current price of copper',
+        'research shows coffee is good for you, right?',
+        'who won the game last night',
+        'search for a good pasta recipe',
+      ]) {
+        expect(StudioDetection.wantsDeepResearch(input), isFalse,
+            reason: input);
+      }
+    });
+
+    test('plain prompts are untouched', () {
+      for (final input in [
+        'what is the capital of France',
+        'build me a landing page',
+        'write a haiku',
+      ]) {
+        expect(StudioDetection.wantsDeepResearch(input), isFalse,
+            reason: input);
+      }
+    });
+  });
+
   group('keywordRoute', () {
     test('an explicit artifact request routes to code', () {
       // Without this the router model is asked to classify a follow-up it

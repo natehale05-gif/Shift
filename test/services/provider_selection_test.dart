@@ -53,14 +53,33 @@ void main() {
       expect(pick({}), isNull);
     });
 
-    test('image only ever resolves to Gemini (or nothing)', () {
-      expect(chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only({'gemini'})),
-          'gemini');
-      // OpenAI-compatible providers do not advertise image → no live image.
+    test('an OpenAI-only user gets a real image, not the procedural stand-in',
+        () {
+      // OpenAI has an images endpoint; the other OpenAI-compatible providers
+      // do not. Before, image resolved to null for an OpenAI-only user, the
+      // backend fell through to the mock, and they got abstract gradient art
+      // while the key they had just tested sat unused.
       expect(chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only({'openai'})),
-          isNull);
-      expect(chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only({})),
-          isNull);
+          'openai');
+    });
+
+    test('image preference: Gemini, then Flux, then OpenAI', () {
+      String? pick(Set<String> keys) =>
+          chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only(keys));
+
+      expect(pick({'gemini', 'flux', 'openai'}), 'gemini');
+      expect(pick({'flux', 'openai'}), 'flux');
+      expect(pick({'openai'}), 'openai');
+      expect(pick({}), isNull);
+    });
+
+    test('the other OpenAI-compatible providers still have no image endpoint',
+        () {
+      for (final id in ['groq', 'mistral', 'openrouter']) {
+        expect(chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only({id})),
+            isNull,
+            reason: id);
+      }
     });
 
     test('search resolves to Anthropic then Gemini; OpenAI-only degrades', () {

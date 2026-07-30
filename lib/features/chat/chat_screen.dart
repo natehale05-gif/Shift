@@ -427,7 +427,11 @@ class _ChatBodyState extends State<_ChatBody> {
             ),
           Expanded(
             child: messages.isEmpty
-                ? const _EmptyState()
+                // Keyed by conversation so starting another new chat picks a
+                // fresh greeting. Without it the state survives the switch and
+                // the same line stays on screen, which is exactly the repeat
+                // the rotation exists to avoid.
+                ? _EmptyState(key: ValueKey(store.current?.id ?? 'none'))
                 : ListView.separated(
                     controller: _scrollController,
                     padding: const EdgeInsets.symmetric(
@@ -578,7 +582,7 @@ class _FindBar extends StatelessWidget {
 /// layer the app deliberately keeps invisible. Routing happens on its own —
 /// naming the ten destinations up front asks people to pick one.
 class _EmptyState extends StatefulWidget {
-  const _EmptyState();
+  const _EmptyState({super.key});
 
   @override
   State<_EmptyState> createState() => _EmptyStateState();
@@ -590,14 +594,31 @@ class _EmptyStateState extends State<_EmptyState> {
   /// keystroke would be worse.
   late final int _seed = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
+  /// Chosen once, then held. Recomputing on every rebuild would let the
+  /// nickname arriving from storage change the line under the reader, and the
+  /// "not the last one" rule needs the *previous* chat's greeting — which this
+  /// screen overwrites the moment it picks.
+  String? _greeting;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final greeting = greetingFor(
-      now: DateTime.now(),
-      name: context.watch<UserPrefsStore>().nickname,
-      seed: _seed,
-    );
+    final prefs = context.watch<UserPrefsStore>();
+    final greeting = _greeting ??= () {
+      final now = DateTime.now();
+      final chosen = greetingFor(
+        now: now,
+        name: prefs.nickname,
+        seed: _seed,
+        avoid: prefs.lastGreeting,
+      );
+      // After this frame: writing to a store during build is not allowed, and
+      // this one is only read by the *next* new chat anyway.
+      WidgetsBinding.instance.addPostFrameCallback((_) =>
+          prefs.setLastGreeting(greetingLineFor(
+              now: now, seed: _seed, avoid: prefs.lastGreeting)));
+      return chosen;
+    }();
 
     return Center(
       child: ConstrainedBox(

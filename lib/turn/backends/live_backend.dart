@@ -40,6 +40,7 @@ import '../../providers/clients/gemini_api_config.dart';
 import '../../providers/clients/gemini_client.dart';
 import '../../providers/clients/heygen_client.dart';
 import '../../providers/clients/openai_compatible_client.dart';
+import '../../providers/clients/openai_image_client.dart';
 import '../../providers/clients/provider_capability.dart';
 import '../../providers/clients/provider_descriptor.dart';
 import '../../providers/clients/provider_registry.dart';
@@ -86,6 +87,7 @@ class RealChatService implements ChatService {
   final AnthropicClient _anthropic;
   final GeminiClient _gemini;
   final OpenAiCompatibleClient _openAi;
+  final OpenAiImageClient _openAiImages;
   final FluxClient _flux;
   final HeygenClient _heygen;
   final ProviderRegistry _registry;
@@ -97,6 +99,7 @@ class RealChatService implements ChatService {
     AnthropicClient? anthropicClient,
     GeminiClient? geminiClient,
     OpenAiCompatibleClient? openAiClient,
+    OpenAiImageClient? openAiImageClient,
     FluxClient? fluxClient,
     HeygenClient? heygenClient,
     ProviderRegistry? registry,
@@ -105,6 +108,7 @@ class RealChatService implements ChatService {
   })  : _anthropic = anthropicClient ?? AnthropicClient(),
         _gemini = geminiClient ?? GeminiClient(),
         _openAi = openAiClient ?? OpenAiCompatibleClient(),
+        _openAiImages = openAiImageClient ?? OpenAiImageClient(),
         _flux = fluxClient ?? FluxClient(),
         _heygen = heygenClient ?? HeygenClient(),
         _registry = registry ?? ProviderRegistry.defaults(),
@@ -326,26 +330,27 @@ class RealChatService implements ChatService {
           turn is StudioTurn ? turn.contributors : const <StudioType>{};
       final reviseTarget = turn is StudioTurn ? turn.reviseTarget : null;
 
+      // An image turn is decided by the *route*, not by which client the
+      // provider happens to use. Branching on clientKind first sent OpenAI's
+      // image requests to chat-completions, because OpenAI shares its chat
+      // wire shape with Groq and Mistral — so declaring the image capability
+      // alone would have produced a text reply where a picture was asked for.
+      if (providerId != null && route == ChatRoute.imageGen) {
+        await _runImageWithClarification(controller, conversation, userInput,
+            turn.effectiveInput, turn.isAnsweringClarification, providerId);
+        await controller.close();
+        return;
+      }
+
       switch (provider?.clientKind) {
         case ProviderClientKind.anthropic:
           await _runAnthropicChat(controller, conversation, userInput,
               attachments, options, route, pageContributors, reviseTarget);
         case ProviderClientKind.gemini:
-          if (route == ChatRoute.imageGen) {
-            await _runImageWithClarification(controller, conversation,
-                userInput, turn.effectiveInput,
-                turn.isAnsweringClarification, 'gemini');
-          } else {
-            await _runGeminiChat(controller, conversation, userInput,
-                attachments, options, route,
-                pageContributors: pageContributors,
-                reviseTarget: reviseTarget);
-          }
-        case ProviderClientKind.flux:
-          // Flux only serves the image capability, so this is always the
-          // image route.
-          await _runImageWithClarification(controller, conversation, userInput,
-              turn.effectiveInput, turn.isAnsweringClarification, 'flux');
+          await _runGeminiChat(controller, conversation, userInput,
+              attachments, options, route,
+              pageContributors: pageContributors,
+              reviseTarget: reviseTarget);
         case ProviderClientKind.openAiCompatible:
           await _runOpenAiChat(controller, conversation, userInput, attachments,
               options, provider!,
@@ -354,8 +359,10 @@ class RealChatService implements ChatService {
               pageContributors: pageContributors,
               reviseTarget: reviseTarget);
         default:
-          // No live provider (video/audio, or an image route without a Gemini
-          // key, or no keys at all) → the fully-functional mock.
+          // No live provider — video and audio have none, and neither does a
+          // user with no keys at all. Flux never reaches here either: it
+          // serves only the image capability, so every Flux turn is taken by
+          // the image branch above.
           await _delegateToMock(controller, conversation, userInput, null,
               attachments, options);
           return;
@@ -566,8 +573,12 @@ class RealChatService implements ChatService {
         return;
       }
       // No Heygen key (or the render failed): a portrait + synthesized voice.
-      final images = keys.hasGeminiKey
-          ? await _generateGeminiPhotos('$userInput, portrait headshot', 1)
+      // Any keyed image provider draws the portrait, not Gemini alone.
+      final portraitId =
+          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey);
+      final images = portraitId != null
+          ? await _generatePhotos(
+              portraitId, '$userInput, portrait headshot', 1)
           : await _generateProceduralPhotos(userInput, 1);
       if (images.isNotEmpty) {
         controller
@@ -956,13 +967,20 @@ class RealChatService implements ChatService {
         provider.models.first.id;
   }
 
-  /// The image stream for the chosen image provider (Gemini or Flux). Both map
-  /// onto the same ImageGenerated → ImageBlock path.
+  /// The image stream for the chosen image provider. All three map onto the
+  /// same ImageGenerated → ImageBlock path, which is why adding one is a case
+  /// here and nothing else.
   Stream<ChatEvent> _imageStream(String providerId, String prompt) {
-    if (providerId == 'flux') {
-      return _flux.generateImage(apiKey: keys.keyFor('flux'), prompt: prompt);
-    }
-    return _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt);
+    return switch (providerId) {
+      'flux' => _flux.generateImage(apiKey: keys.keyFor('flux'), prompt: prompt),
+      'openai' => _openAiImages.generateImage(
+          apiKey: keys.keyFor('openai'),
+          prompt: prompt,
+          baseUrl: _registry.byId('openai')?.baseUrl ??
+              'https://api.openai.com/v1',
+        ),
+      _ => _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt),
+    };
   }
 
   /// Freeform image prompts get the same "ask before guessing" gate as the
@@ -1081,12 +1099,15 @@ class RealChatService implements ChatService {
 
     final model = options.modelPin ?? AnthropicApiConfig.defaultModel;
 
-    // Server tools: explicit composer toggles, plus web search whenever the
-    // router decided the prompt needs fresh information.
+    // Server tools are offered on every turn and the model decides whether to
+    // reach for them. They used to be composer toggles, which asked the user
+    // to predict — before writing the message — whether the answer would need
+    // fresh information or a calculation. Nobody knows that in advance, so the
+    // toggles were mostly off and the tools mostly unused. Offering a tool
+    // costs a little prompt overhead; invoking one is the model's call.
     final tools = <Map<String, dynamic>>[
-      if (options.webSearch || route == ChatRoute.webSearch)
-        AnthropicTools.webSearch,
-      if (options.codeExecution) AnthropicTools.codeExecution,
+      AnthropicTools.webSearch,
+      AnthropicTools.codeExecution,
     ];
 
     final events = _anthropic.streamChat(
@@ -1259,8 +1280,13 @@ class RealChatService implements ChatService {
     }
     if (contributors.contains(StudioType.imageStudio)) {
       final count = photoCountHint(userInput);
-      final images = keys.hasGeminiKey
-          ? await _generateGeminiPhotos(userInput, count)
+      // Whichever image provider Auto would pick — not Gemini specifically.
+      // Hardcoding Gemini here meant an OpenAI or Flux user got procedural
+      // placeholder art inside a page they had paid a real key to build.
+      final imageId =
+          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey);
+      final images = imageId != null
+          ? await _generatePhotos(imageId, userInput, count)
           : await _generateProceduralPhotos(userInput, count);
       if (images.isNotEmpty) {
         html = embedImageGallery(html, images, altText: userInput);
@@ -1277,12 +1303,11 @@ class RealChatService implements ChatService {
     );
   }
 
-  Future<List<Uint8List>> _generateGeminiPhotos(
-      String prompt, int count) async {
+  Future<List<Uint8List>> _generatePhotos(
+      String providerId, String prompt, int count) async {
     final images = <Uint8List>[];
     for (var i = 0; i < count; i++) {
-      await for (final event
-          in _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt)) {
+      await for (final event in _imageStream(providerId, prompt)) {
         if (event is ImageGenerated) images.add(event.pngBytes);
       }
     }

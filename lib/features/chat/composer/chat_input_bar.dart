@@ -25,7 +25,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'send_button.dart';
 import 'stop_button.dart';
-import 'tools_menu.dart';
 import 'usage_meter.dart';
 
 
@@ -235,25 +234,6 @@ class _ChatInputBarState extends State<ChatInputBar> {
                       color: colors.textSecondary,
                       onPressed: _pickFiles,
                     ),
-                    ToolsMenu(
-                      webSearch: _options.webSearch,
-                      deepResearch: _options.deepResearch,
-                      codeExecution: _options.codeExecution,
-                      extendedThinking: _options.extendedThinking,
-                      onToggle: (tool) => setState(() {
-                        switch (tool) {
-                          case ComposerTool.webSearch:
-                            _options.webSearch = !_options.webSearch;
-                          case ComposerTool.deepResearch:
-                            _options.deepResearch = !_options.deepResearch;
-                          case ComposerTool.codeExecution:
-                            _options.codeExecution = !_options.codeExecution;
-                          case ComposerTool.extendedThinking:
-                            _options.extendedThinking = !_options.extendedThinking;
-                        }
-                      }),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
                     ModelChip(
                       modelPin: _options.modelPin,
                       onSelected: (pin) => setState(() => _options.modelPin = pin),

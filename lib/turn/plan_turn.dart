@@ -82,8 +82,11 @@ TurnPlan planTurn(TurnInput input) {
     );
   }
 
+  // No toggle any more: asking for a researched report is what selects the
+  // research path. The `options` flag stays because a studio form can still
+  // set it explicitly.
   final wantsResearch =
-      options.deepResearch || userInput.toLowerCase().contains('deep research');
+      options.deepResearch || StudioDetection.wantsDeepResearch(userInput);
   if (wantsResearch) {
     return DeepResearchTurn(
       studio: studio,

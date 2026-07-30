@@ -14,6 +14,10 @@ class UserPrefsStore extends ChangeNotifier {
   // normal | concise | explanatory | formal
   String _responseStyle = 'normal';
   String _customInstructions = '';
+  // The new-chat greeting shown last time, so the next one can differ. Stored
+  // rather than held in memory because most repeats a user would notice happen
+  // across launches, not within one.
+  String _lastGreeting = '';
 
   UserPrefsStore({required this.persistence});
 
@@ -22,6 +26,7 @@ class UserPrefsStore extends ChangeNotifier {
   String get traits => _traits;
   String get responseStyle => _responseStyle;
   String get customInstructions => _customInstructions;
+  String get lastGreeting => _lastGreeting;
 
   /// Migrates the older concise/balanced/detailed values onto the named set.
   ///
@@ -46,6 +51,7 @@ class UserPrefsStore extends ChangeNotifier {
     _responseStyle =
         _normalizeStyle(prefs['responseStyle'] as String? ?? 'normal');
     _customInstructions = prefs['customInstructions'] as String? ?? '';
+    _lastGreeting = prefs['lastGreeting'] as String? ?? '';
     notifyListeners();
   }
 
@@ -79,11 +85,21 @@ class UserPrefsStore extends ChangeNotifier {
     _persist();
   }
 
+  /// Records the greeting just shown. Deliberately does **not** notify: the
+  /// only reader is the next new chat, and rebuilding the screen that just
+  /// displayed it would be a rebuild for nothing.
+  void setLastGreeting(String value) {
+    if (value == _lastGreeting) return;
+    _lastGreeting = value;
+    _persist();
+  }
+
   Future<void> _persist() => persistence.saveUserPrefs({
         'nickname': _nickname,
         'role': _role,
         'traits': _traits,
         'responseStyle': _responseStyle,
         'customInstructions': _customInstructions,
+        'lastGreeting': _lastGreeting,
       });
 }
