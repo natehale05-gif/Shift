@@ -53,6 +53,23 @@ void stopListening() {
 
 bool ttsSupported() => html.window.speechSynthesis != null;
 
+/// Unlocks speech output for the rest of the session.
+///
+/// iOS Safari refuses `speechSynthesis.speak()` unless it has been called at
+/// least once from inside a user gesture. Voice mode speaks its reply from an
+/// async callback minutes later, which is not a gesture — so on an iPhone the
+/// model answered and nothing came out. Everything else worked, which is why
+/// it read as "replies silently" rather than as broken.
+///
+/// Must be called *synchronously* from the tap handler: one `await` first and
+/// the gesture context is gone. A zero-volume utterance is enough to unlock.
+void primeSpeech() {
+  final synthesis = html.window.speechSynthesis;
+  if (synthesis == null) return;
+  final silent = html.SpeechSynthesisUtterance('')..volume = 0;
+  synthesis.speak(silent);
+}
+
 void speak(String text) {
   final synthesis = html.window.speechSynthesis;
   if (synthesis == null) return;

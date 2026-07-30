@@ -13,14 +13,6 @@ import 'package:shift_ai/turn/backends/live_backend.dart';
 import 'package:shift_ai/providers/router/model_router.dart';
 import 'package:shift_ai/data/stores/api_keys_store.dart';
 
-const _pageHtml = '<!DOCTYPE html>\n'
-    '<html>\n'
-    '<body>\n'
-    '<h1>Northbound</h1>\n'
-    '<p>Not written by Claude.</p>\n'
-    '</body>\n'
-    '</html>';
-
 /// A page whose headline reflects the request, the way a real model's would.
 ///
 /// The fixture used to return one canned page for every prompt. That was

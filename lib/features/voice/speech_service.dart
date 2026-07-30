@@ -39,5 +39,9 @@ class TtsService {
 
   static void speak(String text) => impl.speak(text);
 
+  /// Unlocks speech output. Call from the tap that opens voice mode, before
+  /// anything is awaited — see the web implementation for why.
+  static void prime() => impl.primeSpeech();
+
   static void stopSpeaking() => impl.stopSpeaking();
 }

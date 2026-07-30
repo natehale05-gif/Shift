@@ -98,6 +98,9 @@ void stopListening() {
 /// unlike recognition it is not gated.
 bool ttsSupported() => true;
 
+/// No-op: only Safari gates speech behind a user gesture.
+void primeSpeech() {}
+
 void speak(String text) {
   if (text.trim().isEmpty) return;
   _tts.speak(text);

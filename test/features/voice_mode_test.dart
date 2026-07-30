@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
 import 'package:shift_ai/features/chat/message/assistant_prose.dart';
@@ -5,6 +6,7 @@ import 'package:shift_ai/features/chat/message/building_indicator.dart';
 import 'package:shift_ai/features/voice/voice_mode_controller.dart';
 
 void main() {
+  _priming();
   group('speakableText', () {
     test('a code block becomes a note, not a recital', () {
       // Read verbatim, a fenced block spells out every brace and semicolon —
@@ -92,5 +94,30 @@ void main() {
         expect(() => buildingLabel(studio), returnsNormally, reason: '$studio');
       }
     });
+  });
+}
+
+void _priming() {
+  test('speech is unlocked before anything is awaited', () {
+    // iOS Safari refuses speechSynthesis.speak() unless it has been called
+    // once from inside a user gesture. Voice mode speaks its reply from an
+    // async callback minutes later, so on an iPhone the model answered and
+    // nothing came out — everything else worked, which is why it read as
+    // "replies silently" rather than as broken.
+    //
+    // The unlock has to happen synchronously in the tap that opened voice
+    // mode. Asserted on the source because the ordering *is* the fix: an
+    // await before it and the gesture context is gone.
+    final source = File('lib/features/voice/voice_mode_controller.dart')
+        .readAsStringSync();
+    final start = source.indexOf('Future<void> start() async {');
+    expect(start, greaterThan(-1));
+    final body = source.substring(start);
+    final prime = body.indexOf('TtsService.prime()');
+    final firstAwait = body.indexOf('await ');
+
+    expect(prime, greaterThan(-1), reason: 'the unlock must exist');
+    expect(prime, lessThan(firstAwait),
+        reason: 'the unlock must come before the first await');
   });
 }

@@ -64,6 +64,12 @@ class VoiceModeController extends ChangeNotifier {
     if (_running) return;
     _running = true;
     problem = null;
+
+    // Before anything is awaited. This runs inside the tap that opened voice
+    // mode, which is the only moment Safari will let speech be unlocked — and
+    // the reply is spoken from an async callback long after.
+    TtsService.prime();
+
     _setPhase(VoicePhase.starting);
 
     if (!await SpeechService.ensureReady()) {

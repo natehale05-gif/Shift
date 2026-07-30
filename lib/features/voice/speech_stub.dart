@@ -16,4 +16,7 @@ bool ttsSupported() => false;
 
 void speak(String text) {}
 
+/// No-op off the web: the platform engines have no gesture requirement.
+void primeSpeech() {}
+
 void stopSpeaking() {}
