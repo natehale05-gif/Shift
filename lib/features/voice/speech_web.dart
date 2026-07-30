@@ -63,3 +63,7 @@ void speak(String text) {
 void stopSpeaking() {
   html.window.speechSynthesis?.cancel();
 }
+
+/// The browser answers synchronously, so there is nothing to initialize —
+/// this exists to match the shape the off-web implementation needs.
+Future<bool> ensureSpeechReady() async => speechRecognitionSupported();

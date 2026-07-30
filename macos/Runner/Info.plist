@@ -28,5 +28,11 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- Shown when dictation or voice mode first asks. macOS refuses the
+	     request outright without them, so the mic would appear broken. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>SHIFT AI uses the microphone for dictation and voice mode.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>SHIFT AI turns what you say into text so you can talk to it instead of typing.</string>
 </dict>
 </plist>

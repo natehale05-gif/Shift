@@ -12,6 +12,7 @@ import '../../../data/stores/styles_store.dart';
 import '../../../data/stores/usage_store.dart';
 import '../../../data/stores/user_prefs_store.dart';
 import '../live_voice_overlay.dart';
+import '../voice_mode_overlay.dart';
 import '../../../turn/chat_service.dart';
 import '../../voice/live_voice_controller.dart';
 import '../../../core/widgets/liquid_glass.dart';
@@ -251,27 +252,25 @@ class _ChatInputBarState extends State<ChatInputBar> {
                           : colors.textSecondary,
                       onPressed: _toggleDictation,
                     ),
+                    // Voice mode runs on the ordinary chat path, so it works
+                    // with whichever provider has a key rather than only the
+                    // one vendor with a realtime endpoint. Gemini's realtime
+                    // session is still reachable from the same button when a
+                    // Google key is present, since it is lower-latency.
                     Builder(
                       builder: (context) {
                         final keys = context.watch<ApiKeysStore>();
-                        final enabled =
-                            keys.hasGeminiKey &&
+                        final live = keys.hasGeminiKey &&
                             LiveVoiceController.isSupported;
                         return IconButton(
-                          tooltip: enabled
-                              ? 'Live voice conversation (experimental)'
-                              : 'Live voice (experimental) — needs a Google '
-                                    'key in Settings',
+                          tooltip: live
+                              ? 'Realtime voice conversation'
+                              : 'Voice mode — talk, and it answers out loud',
                           icon: const Icon(Icons.graphic_eq_rounded, size: 20),
-                          color: enabled
-                              ? theme.colorScheme.primary
-                              : colors.textSecondary.withValues(alpha: 0.5),
-                          onPressed: enabled
-                              ? () => showLiveVoiceOverlay(
-                                  context,
-                                  keys.geminiKey,
-                                )
-                              : null,
+                          color: theme.colorScheme.primary,
+                          onPressed: () => live
+                              ? showLiveVoiceOverlay(context, keys.geminiKey)
+                              : showVoiceModeOverlay(context),
                         );
                       },
                     ),

@@ -6,6 +6,10 @@
          confirms every install. -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Dictation and voice mode. The mic was inert off-web before: the whole
+         feature was a browser API behind a conditional import, so on a phone
+         it did nothing at all. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
         android:label="SHIFT AI"
@@ -61,6 +65,15 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Android 11+ package visibility: without these the speech and
+             text-to-speech services are invisible to the app and both
+             silently report "unavailable" rather than failing loudly. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE"/>
         </intent>
     </queries>
 </manifest>
