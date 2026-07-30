@@ -1114,6 +1114,9 @@ class RealChatService implements ChatService {
           isCode: route == ChatRoute.code),
       tools: tools,
       extendedThinking: options.extendedThinking,
+      maxTokens: route == ChatRoute.code
+          ? AnthropicApiConfig.codeMaxTokens
+          : AnthropicApiConfig.defaultMaxTokens,
     );
 
     await _streamText(
@@ -1162,9 +1165,29 @@ class RealChatService implements ChatService {
         continue; // the filtered delta above replaces this one
       }
       if (event is MessageError) failed = true;
-      if (event is MessageComplete && !failed) {
+
+      // Every way a reply can end, not just the clean one. Claude yields
+      // MessageIncomplete when it stops at the output ceiling — which is
+      // exactly what a long single-file website does — and handling only
+      // MessageComplete meant the held page was flushed nowhere, extracted
+      // nowhere, and replayed nowhere. The user saw the prose intro and then
+      // blank space where the site should have been. Before fenced code was
+      // withheld at all it streamed through raw, so this was a regression
+      // that made a truncated page worse than useless: invisible.
+      //
+      // The invariant: withholding is a presentation choice, so every exit
+      // path either turns held text into an artifact or puts it back in the
+      // reply.
+      final ending = event is MessageComplete ||
+          event is MessageIncomplete ||
+          event is MessageError;
+      if (ending) {
         final trailing = fences.flush();
         if (trailing.isNotEmpty) controller.add(MessageDelta(trailing));
+        // Extraction only on a clean finish. A page cut off mid-tag is not a
+        // deliverable — it would preview as a broken document and hide the
+        // fact that it never finished.
+        final cleanFinish = event is MessageComplete && !failed;
         // Code-routed replies whose fenced block is substantial become an
         // artifact, mirroring the mock's behavior.
         //
@@ -1176,8 +1199,9 @@ class RealChatService implements ChatService {
         // bubble: unreadable, un-runnable, and impossible to download or
         // revise. A reply carrying an entire HTML document is never better
         // off inline, so route or no route, it becomes an artifact.
-        if (route == ChatRoute.code ||
-            repliedWithWholeDocument(buffer.toString())) {
+        if (cleanFinish &&
+            (route == ChatRoute.code ||
+                repliedWithWholeDocument(buffer.toString()))) {
           var artifact = extractCodeArtifact(
               buffer.toString(), conversation.id,
               title: titleFromRequest(userInput));
@@ -1204,10 +1228,11 @@ class RealChatService implements ChatService {
           }
         }
         // Held code that no artifact was made of belongs back in the reply:
-        // a snippet too short to be a deliverable, or a turn where extraction
-        // declined. Withholding is a presentation choice, never a deletion.
+        // a snippet too short to be a deliverable, a turn where extraction
+        // declined, or a reply that was cut off. Withholding is a
+        // presentation choice, never a deletion.
         if (!producedArtifact && fences.sawFence) {
-          controller.add(MessageDelta(fences.heldText));
+          controller.add(MessageDelta(fences.replayText()));
         }
       }
       controller.add(event);

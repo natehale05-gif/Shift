@@ -68,6 +68,12 @@ class FenceFilter {
     return prose.toString();
   }
 
+  /// Whether the stream ended inside a fence that was never closed.
+  ///
+  /// True when a reply was cut off mid-block — the model hit its output
+  /// ceiling, or the connection dropped.
+  bool get unterminated => _inFence;
+
   /// Any prose still carried when the stream ends. Backticks left dangling
   /// here were never part of a real marker, so they are prose after all.
   String flush() {
@@ -78,5 +84,15 @@ class FenceFilter {
       return '';
     }
     return remainder;
+  }
+
+  /// The held text in a form safe to put back into a reply.
+  ///
+  /// An unterminated block gets its closing marker, because markdown with an
+  /// open fence renders every following message as code. Call after [flush].
+  String replayText() {
+    final text = _held.toString();
+    if (!_inFence || text.isEmpty) return text;
+    return text.endsWith('\n') ? '$text```' : '$text\n```';
   }
 }

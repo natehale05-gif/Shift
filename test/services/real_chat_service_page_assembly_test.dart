@@ -6,6 +6,7 @@ import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/turn/chat_service.dart';
 import 'package:shift_ai/data/persistence/persistence_service.dart';
+import 'package:shift_ai/providers/clients/anthropic_api_config.dart';
 import 'package:shift_ai/providers/clients/anthropic_client.dart';
 import 'package:shift_ai/turn/backends/live_backend.dart';
 import 'package:shift_ai/providers/router/model_router.dart';
@@ -41,6 +42,7 @@ class _FakeAnthropicClient extends AnthropicClient {
     List<Map<String, dynamic>> tools = const [],
     bool extendedThinking = true,
     int maxContinuations = 5,
+    int maxTokens = AnthropicApiConfig.defaultMaxTokens,
   }) async* {
     yield const MessageDelta('Here you go:\n\n```html\n$_pageHtml\n```');
     yield const MessageComplete();

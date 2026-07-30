@@ -22,6 +22,16 @@ class AnthropicApiConfig {
 
   static const defaultMaxTokens = 16000;
 
+  /// Output ceiling for a code-routed turn.
+  ///
+  /// A single-file responsive website runs to hundreds of lines, and extended
+  /// thinking spends from the same budget — so 16000 truncated real "build me
+  /// a website" replies, which the client reports as MessageIncomplete. The
+  /// ceiling is a limit, not a reservation: billing is on tokens actually
+  /// produced, so raising it costs nothing on the turns that never approach
+  /// it and stops the deliverable arriving half-written on the ones that do.
+  static const codeMaxTokens = 48000;
+
   static Map<String, String> headers(String apiKey) => {
         'content-type': 'application/json',
         'x-api-key': apiKey,

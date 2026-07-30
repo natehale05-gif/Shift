@@ -201,6 +201,7 @@ class AnthropicClient implements KeyValidatable {
     List<Map<String, dynamic>> tools = const [],
     bool extendedThinking = true,
     int maxContinuations = 5,
+    int maxTokens = AnthropicApiConfig.defaultMaxTokens,
   }) async* {
     final baseBody = buildRequestBody(
       conversation: conversation,
@@ -209,6 +210,7 @@ class AnthropicClient implements KeyValidatable {
       attachments: attachments,
       systemPrompt: systemPrompt,
       extendedThinking: extendedThinking,
+      maxTokens: maxTokens,
     );
     if (tools.isNotEmpty) baseBody['tools'] = tools;
 
