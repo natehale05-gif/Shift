@@ -49,8 +49,12 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
     // else in the app branches on which one is active.
     final chatService = ChatServiceSelector(
       keys: _apiKeysStore,
-      real: RealChatService(keys: _apiKeysStore),
-      mock: MockChatService(),
+      // Both need the asset store to reuse an image the user generated in an
+      // earlier session: the in-memory bytes are gone by then, and only the
+      // asset id survives in the transcript.
+      real: RealChatService(
+          keys: _apiKeysStore, loadAsset: _persistence.loadAsset),
+      mock: MockChatService(loadAsset: _persistence.loadAsset),
     );
     _artifactPanelStore = ArtifactPanelStore();
     _memoryStore = MemoryStore(persistence: _persistence)..load();

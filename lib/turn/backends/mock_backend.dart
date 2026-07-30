@@ -1,3 +1,4 @@
+import '../conversation_media.dart';
 import '../studio_detection.dart';
 import 'mock_revision.dart';
 import '../request_title.dart';
@@ -36,6 +37,13 @@ const _uuid = Uuid();
 /// deep research) so every UI path works before any API key exists.
 class MockChatService implements ChatService {
   final Random _random = Random();
+
+  /// Reads a stored asset's bytes, so an image generated in an earlier session
+  /// can still be put on a page. Null in tests and when nothing is persisted.
+  final Future<Uint8List?> Function(String assetId)? _loadAsset;
+
+  MockChatService({Future<Uint8List?> Function(String assetId)? loadAsset})
+      : _loadAsset = loadAsset;
 
   @override
   Stream<ChatEvent> sendMessage({
@@ -118,6 +126,7 @@ class MockChatService implements ChatService {
             :final composeKind,
             :final contributors,
             :final reviseTarget,
+            :final existingImage,
             :final isAnsweringClarification,
           ):
           await _runStudioFlow(
@@ -131,6 +140,7 @@ class MockChatService implements ChatService {
             composeKind,
             contributors,
             reviseTarget,
+            existingImage,
           );
       }
 
@@ -158,6 +168,7 @@ class MockChatService implements ChatService {
     ArtifactMediaKind? composeKind,
     Set<StudioType> pageContributors,
     Artifact? reviseTarget,
+    GeneratedImage? existingImage,
   ) async {
     final contributorNames =
         pageContributors.map((s) => s.displayName).toList();
@@ -208,8 +219,11 @@ class MockChatService implements ChatService {
       // artifact another studio already built, instead of standing alone.
       switch (composeKind ?? ArtifactMediaKind.image) {
         case ArtifactMediaKind.image:
-          await _composeImageIntoArtifact(
-              controller, composeTarget, result as ImageResult);
+          // "Put *this* image on the page" names one that already exists, so
+          // reuse it. Generating a fresh one would put a different picture on
+          // the page than the one the user was pointing at.
+          await _composeImageIntoArtifact(controller, composeTarget,
+              existingImage ?? _asGeneratedImage(result as ImageResult));
         case ArtifactMediaKind.audio:
           await _composeAudioIntoArtifact(controller, composeTarget, userInput);
         case ArtifactMediaKind.video:
@@ -220,7 +234,9 @@ class MockChatService implements ChatService {
       // the artifact IS the deliverable, with copy/download/versions there.
       revisionSummary = await _emitCodeArtifact(
           controller, conversation, userInput, result,
-          pageContributors: pageContributors, reviseTarget: reviseTarget);
+          pageContributors: pageContributors,
+          reviseTarget: reviseTarget,
+          existingImage: existingImage);
     } else {
       controller.add(StudioResultReady(result));
     }
@@ -458,18 +474,39 @@ class MockChatService implements ChatService {
     );
   }
 
+  /// Demo mode's images are painted from a seed rather than stored, so an
+  /// [ImageResult] is a description of how to repaint one.
+  static GeneratedImage _asGeneratedImage(ImageResult result) =>
+      GeneratedImage(alt: result.prompt, seed: result.seed);
+
   /// Rasterizes the generated image to real PNG bytes and splices it into
   /// the target HTML artifact as a new version.
   Future<void> _composeImageIntoArtifact(
     StreamController<ChatEvent> controller,
     Artifact target,
-    ImageResult result,
+    GeneratedImage image,
   ) async {
-    final pngBytes = await rasterizeGradientArt(seed: result.seed);
-    final updatedHtml =
-        embedImageAsHero(target.latest.content, pngBytes, altText: result.prompt);
+    final pngBytes = await _resolveImageBytes(image);
+    if (pngBytes == null) return;
+    final updatedHtml = applyGeneratedImage(target.latest.content, pngBytes,
+        altText: image.alt);
     controller.add(
         ArtifactUpdated(target.withNewVersion(updatedHtml, DateTime.now())));
+  }
+
+  /// The bytes behind a [GeneratedImage] — the in-memory copy, the stored
+  /// asset, or a repaint from the seed. Null when none of the three can.
+  Future<Uint8List?> _resolveImageBytes(GeneratedImage image) async {
+    if (image.pngBytes != null) return image.pngBytes;
+    final assetId = image.assetId;
+    final load = _loadAsset;
+    if (assetId != null && load != null) {
+      final bytes = await load(assetId);
+      if (bytes != null) return bytes;
+    }
+    final seed = image.seed;
+    if (seed != null) return rasterizeGradientArt(seed: seed);
+    return null;
   }
 
   /// Synthesizes a WAV and splices a playable `<audio>` player into the target
@@ -539,8 +576,12 @@ class MockChatService implements ChatService {
     StudioResult result, {
     Set<StudioType> pageContributors = const {},
     Artifact? reviseTarget,
+    GeneratedImage? existingImage,
   }) async {
-    final wantsHtml = StudioDetection.wantsHtmlArtifact(userInput);
+    // A turn that exists to put a picture on a page is a page, whatever the
+    // rest of the sentence looks like.
+    final wantsHtml = existingImage != null ||
+        StudioDetection.wantsHtmlArtifact(userInput);
     final now = DateTime.now();
 
     if (reviseTarget != null) {
@@ -571,6 +612,13 @@ class MockChatService implements ChatService {
       var content = StudioResponseBank.htmlArtifactContent(title);
       if (pageContributors.isNotEmpty) {
         content = await _assembleMockPage(userInput, pageContributors);
+      }
+      // The image the user pointed at goes on the page they just asked for.
+      if (existingImage != null) {
+        final bytes = await _resolveImageBytes(existingImage);
+        if (bytes != null) {
+          content = applyGeneratedImage(content, bytes, altText: existingImage.alt);
+        }
       }
       controller.add(ArtifactCreated(Artifact(
         id: _uuid.v4(),

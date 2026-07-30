@@ -34,6 +34,11 @@ const _artifactReferenceKeywords = [
   'to the website', 'to the page', 'to the site', 'to my website',
   'to my page', 'to my site', 'on the website', 'on the page',
   'on the site', 'for the website', 'for the page', 'for the site',
+  // "put it *in* the website" is how people actually say this, and it was
+  // missing — so the phrase read as a fresh build and quietly started over.
+  'in the website', 'in the page', 'in the site', 'in my website',
+  'in my page', 'in my site', 'in this page', 'into the website',
+  'into the page', 'into the site',
   'to it', 'on it', 'hero image', 'hero section', 'header image',
   'background image', 'to this page', 'on this page', 'to the artifact',
 ];
@@ -105,6 +110,34 @@ String embedImageAsHero(
   }
   final insertAt = bodyMatch.end;
   return '${html.substring(0, insertAt)}\n$imgTag${html.substring(insertAt)}';
+}
+
+/// The token a code turn is told to put in an `<img src>` when the page it is
+/// writing should carry an image the conversation already produced.
+///
+/// The model cannot see that image — a generated picture is a block in the
+/// transcript, not something sent back up with the next request — so left to
+/// itself it invents a plausible filename and tells the user to save the file
+/// beside the page. Nobody has that file, and there is no "beside the page".
+/// A placeholder lets the model *place* the image while the app supplies it.
+const String generatedImagePlaceholder = '{{shift:image}}';
+
+/// Puts [pngBytes] into [html]: at the placeholder the model was asked to
+/// leave, or — when it left none — at the top of the body.
+///
+/// The fallback is what makes this reliable rather than merely likely. A model
+/// that ignores the instruction still ends up with the image on the page,
+/// which is the whole point of doing this in the app instead of the prompt.
+String applyGeneratedImage(
+  String html,
+  Uint8List pngBytes, {
+  String altText = 'Generated image',
+}) {
+  if (html.contains(generatedImagePlaceholder)) {
+    return html.replaceAll(generatedImagePlaceholder,
+        'data:image/png;base64,${base64Encode(pngBytes)}');
+  }
+  return embedImageAsHero(html, pngBytes, altText: altText);
 }
 
 /// Whether the prompt reads as referring to an artifact that already exists

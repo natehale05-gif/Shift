@@ -14,6 +14,7 @@ import '../../data/models/studio_result.dart';
 import '../../data/models/studio_type.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../features/artifacts/artifact_composition.dart';
+import '../conversation_media.dart';
 import '../fence_filter.dart';
 import '../request_title.dart';
 import '../studio_detection.dart';
@@ -101,8 +102,14 @@ class RealChatService implements ChatService {
   final ModelRouter _router;
   final MockChatService _mockFallback;
 
+  /// Reads a stored asset's bytes. Supplied by the app so a picture generated
+  /// in an earlier session — whose in-memory bytes are long gone — can still
+  /// be put on a page. Null in tests and when nothing is persisted.
+  final Future<Uint8List?> Function(String assetId)? _loadAsset;
+
   RealChatService({
     required this.keys,
+    Future<Uint8List?> Function(String assetId)? loadAsset,
     AnthropicClient? anthropicClient,
     GeminiClient? geminiClient,
     OpenAiCompatibleClient? openAiClient,
@@ -115,7 +122,8 @@ class RealChatService implements ChatService {
     ProviderRegistry? registry,
     ModelRouter? router,
     MockChatService? mockFallback,
-  })  : _anthropic = anthropicClient ?? AnthropicClient(),
+  })  : _loadAsset = loadAsset,
+        _anthropic = anthropicClient ?? AnthropicClient(),
         _gemini = geminiClient ?? GeminiClient(),
         _openAi = openAiClient ?? OpenAiCompatibleClient(),
         _openAiImages = openAiImageClient ?? OpenAiImageClient(),
@@ -240,6 +248,30 @@ class RealChatService implements ChatService {
       final wantsBoth =
           turn is StudioTurn && turn.contributors.isNotEmpty;
 
+      // "Put this image in the website." The picture exists already, so this
+      // turn reuses those bytes rather than asking an image provider for a
+      // second one — which would answer a different question and cost money.
+      final existingImage =
+          turn is StudioTurn ? turn.existingImage : null;
+      if (existingImage != null &&
+          turn is StudioTurn &&
+          turn.composeTarget != null) {
+        final bytes = await _resolveImageBytes(existingImage);
+        if (bytes != null) {
+          final target = turn.composeTarget!;
+          controller.add(RoutingDetected(StudioType.codeStudio));
+          controller.add(ArtifactUpdated(target.withNewVersion(
+              applyGeneratedImage(target.latest.content, bytes,
+                  altText: existingImage.alt),
+              DateTime.now())));
+          controller.add(MessageDelta(
+              'Added it to "${target.title}" as a new version.'));
+          controller.add(const MessageComplete());
+          await controller.close();
+          return;
+        }
+      }
+
       // An explicit model pin bypasses studio routing and dispatches to the
       // pinned model's provider (as long as the user has that key). Claude
       // pins fall through to the existing Anthropic path below, which already
@@ -282,7 +314,12 @@ class RealChatService implements ChatService {
           ? pinnedRoute
           : turn.isAnsweringClarification
               ? routeForStudio(turn.studio)
-              : wantsBoth
+              // Putting an existing image on a page is a page build, whatever
+              // the classifier makes of the sentence. It sees one message with
+              // no conversation around it, and "put this image in the website"
+              // reads to it like an image request — which is how the turn ended
+              // up generating prose instead of a page.
+              : wantsBoth || existingImage != null
                   ? ChatRoute.code
                   : await _router.route(
                       input: userInput,
@@ -358,19 +395,22 @@ class RealChatService implements ChatService {
       switch (provider?.clientKind) {
         case ProviderClientKind.anthropic:
           await _runAnthropicChat(controller, conversation, userInput,
-              attachments, options, route, pageContributors, reviseTarget);
+              attachments, options, route, pageContributors, reviseTarget,
+              existingImage);
         case ProviderClientKind.gemini:
           await _runGeminiChat(controller, conversation, userInput,
               attachments, options, route,
               pageContributors: pageContributors,
-              reviseTarget: reviseTarget);
+              reviseTarget: reviseTarget,
+              existingImage: existingImage);
         case ProviderClientKind.openAiCompatible:
           await _runOpenAiChat(controller, conversation, userInput, attachments,
               options, provider!,
               model: _autoModelFor(provider, route),
               route: route,
               pageContributors: pageContributors,
-              reviseTarget: reviseTarget);
+              reviseTarget: reviseTarget,
+              existingImage: existingImage);
         default:
           // No live provider — video and audio have none, and neither does a
           // user with no keys at all. Flux never reaches here either: it
@@ -920,6 +960,7 @@ class RealChatService implements ChatService {
     String? model,
     Set<StudioType> pageContributors = const {},
     Artifact? reviseTarget,
+    GeneratedImage? existingImage,
   }) async {
     controller.add(RoutingDetected(route.studioType));
     final events = _gemini.streamChat(
@@ -929,7 +970,8 @@ class RealChatService implements ChatService {
       model: model ?? GeminiApiConfig.flashModel,
       attachments: attachments,
       systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
-          isCode: route == ChatRoute.code),
+          isCode: route == ChatRoute.code,
+          hasGeneratedImage: existingImage != null),
       grounding: options.webSearch || route == ChatRoute.webSearch,
     );
     await _streamText(
@@ -940,6 +982,7 @@ class RealChatService implements ChatService {
       route: route,
       pageContributors: pageContributors,
       reviseTarget: reviseTarget,
+      existingImage: existingImage,
     );
   }
 
@@ -958,6 +1001,7 @@ class RealChatService implements ChatService {
     ChatRoute route = ChatRoute.chat,
     Set<StudioType> pageContributors = const {},
     Artifact? reviseTarget,
+    GeneratedImage? existingImage,
   }) async {
     controller.add(RoutingDetected(route.studioType));
     final events = _openAi.streamChat(
@@ -969,7 +1013,8 @@ class RealChatService implements ChatService {
       userInput: userInput,
       attachments: attachments,
       systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
-          isCode: route == ChatRoute.code),
+          isCode: route == ChatRoute.code,
+          hasGeneratedImage: existingImage != null),
       extraHeaders: provider.extraHeaders,
     );
     await _streamText(
@@ -980,6 +1025,7 @@ class RealChatService implements ChatService {
       route: route,
       pageContributors: pageContributors,
       reviseTarget: reviseTarget,
+      existingImage: existingImage,
     );
   }
 
@@ -1122,8 +1168,9 @@ class RealChatService implements ChatService {
     ChatOptions options,
     ChatRoute route,
     Set<StudioType> pageContributors,
-    Artifact? reviseTarget,
-  ) async {
+    Artifact? reviseTarget, [
+    GeneratedImage? existingImage,
+  ]) async {
     controller.add(RoutingDetected(route.studioType));
 
     final model = options.modelPin ?? AnthropicApiConfig.defaultModel;
@@ -1146,7 +1193,8 @@ class RealChatService implements ChatService {
       model: model,
       attachments: attachments,
       systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
-          isCode: route == ChatRoute.code),
+          isCode: route == ChatRoute.code,
+          hasGeneratedImage: existingImage != null),
       tools: tools,
       extendedThinking: options.extendedThinking,
       maxTokens: route == ChatRoute.code
@@ -1162,6 +1210,7 @@ class RealChatService implements ChatService {
       route: route,
       pageContributors: pageContributors,
       reviseTarget: reviseTarget,
+      existingImage: existingImage,
     );
   }
 
@@ -1181,6 +1230,7 @@ class RealChatService implements ChatService {
     required ChatRoute route,
     Set<StudioType> pageContributors = const {},
     Artifact? reviseTarget,
+    GeneratedImage? existingImage,
   }) async {
     final buffer = StringBuffer();
     // Fenced code is held back rather than streamed into the transcript: when
@@ -1241,6 +1291,22 @@ class RealChatService implements ChatService {
               buffer.toString(), conversation.id,
               title: titleFromRequest(userInput));
           if (artifact != null) {
+            // The image the user pointed at goes in here, not in the model's
+            // output — it never saw the picture. It was asked to leave a
+            // placeholder; if it did, the bytes land exactly where it put
+            // them, and if it did not they land at the top of the page.
+            if (existingImage != null && artifact.kind == ArtifactKind.html) {
+              final bytes = await _resolveImageBytes(existingImage);
+              if (bytes != null) {
+                // Replaces the one version rather than adding a second: this
+                // artifact has not reached the UI yet, so a "v1 / v2" here
+                // would offer to step back to a page the user never saw.
+                artifact = _withContent(
+                    artifact,
+                    applyGeneratedImage(artifact.latest.content, bytes,
+                        altText: existingImage.alt));
+              }
+            }
             if (pageContributors.isNotEmpty &&
                 artifact.kind == ArtifactKind.html) {
               // The model built the page; now the other studios supply its
@@ -1322,14 +1388,39 @@ class RealChatService implements ChatService {
       }
     }
 
-    return Artifact(
-      id: artifact.id,
-      conversationId: artifact.conversationId,
-      title: artifact.title,
-      kind: artifact.kind,
-      language: artifact.language,
-      versions: [ArtifactVersion(content: html, createdAt: DateTime.now())],
-    );
+    return _withContent(artifact, html);
+  }
+
+  /// [artifact] with its content replaced — one version, not a new one. Used
+  /// while an artifact is still being assembled and has never been displayed.
+  static Artifact _withContent(Artifact artifact, String content) => Artifact(
+        id: artifact.id,
+        conversationId: artifact.conversationId,
+        title: artifact.title,
+        kind: artifact.kind,
+        language: artifact.language,
+        versions: [
+          ArtifactVersion(content: content, createdAt: DateTime.now())
+        ],
+      );
+
+  /// The bytes behind a [GeneratedImage], wherever they happen to live: still
+  /// in memory from this session, in the asset store after a reload, or — in
+  /// demo mode, which stores none — repainted from the same seed.
+  ///
+  /// Null when none of the three can supply them, which the callers treat as
+  /// "carry on without the image" rather than failing the turn.
+  Future<Uint8List?> _resolveImageBytes(GeneratedImage image) async {
+    if (image.pngBytes != null) return image.pngBytes;
+    final assetId = image.assetId;
+    final load = _loadAsset;
+    if (assetId != null && load != null) {
+      final bytes = await load(assetId);
+      if (bytes != null) return bytes;
+    }
+    final seed = image.seed;
+    if (seed != null) return rasterizeGradientArt(seed: seed);
+    return null;
   }
 
   /// The audio card for a media pair, spoken by a real voice provider when one
