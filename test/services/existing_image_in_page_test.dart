@@ -53,10 +53,11 @@ class _ForcedRouter extends ModelRouter {
 
 class _FakeAnthropicClient extends AnthropicClient {
   final String page;
+  final String lang;
   String? seenSystemPrompt;
   int callCount = 0;
 
-  _FakeAnthropicClient(this.page);
+  _FakeAnthropicClient(this.page, {this.lang = 'html'});
 
   @override
   Stream<ChatEvent> streamChat({
@@ -74,7 +75,7 @@ class _FakeAnthropicClient extends AnthropicClient {
     callCount++;
     seenSystemPrompt = systemPrompt;
     yield const MessageDelta('Here it is.\n\n');
-    yield MessageDelta('```html\n$page\n```');
+    yield MessageDelta('```$lang\n$page\n```');
     yield const MessageComplete();
   }
 }
@@ -129,13 +130,14 @@ Conversation _afterGeneratingAnImage(
 Future<(List<ChatEvent>, _FakeAnthropicClient)> _runLive(
   String prompt, {
   String page = _pageWithPlaceholder,
+  String lang = 'html',
   List<Artifact> artifacts = const [],
 }) async {
   SharedPreferences.setMockInitialValues({});
   final keys = ApiKeysStore(persistence: PersistenceService());
   await keys.load();
   await keys.setAnthropicKey('test-anthropic-key');
-  final client = _FakeAnthropicClient(page);
+  final client = _FakeAnthropicClient(page, lang: lang);
   final service = RealChatService(
     keys: keys,
     anthropicClient: client,
@@ -205,6 +207,29 @@ void main() {
       final created = events.whereType<ArtifactCreated>().single;
       expect(created.artifact.latest.content, contains(_flowerInPage));
       expect(client.seenSystemPrompt, contains(existingImageInstruction));
+    });
+
+    test('a jsx component gets the image too', () async {
+      // "Put it in a jsx website" produces a *code* artifact. Substitution used
+      // to be gated on html, so the model was asked to leave a placeholder that
+      // nothing ever replaced — shipping a component with a literal
+      // {{shift:image}} in its src.
+      final (events, _) = await _runLive('now put it in a jsx website',
+          lang: 'jsx',
+          page: 'import React from "react";\n'
+              '\n'
+              'export default function App() {\n'
+              '  return (\n'
+              '    <main>\n'
+              '      <h1>Blooms</h1>\n'
+              '      <img src="{{shift:image}}" alt="flower" />\n'
+              '    </main>\n'
+              '  );\n'
+              '}');
+
+      final created = events.whereType<ArtifactCreated>().single;
+      expect(created.artifact.latest.content, contains(_flowerInPage));
+      expect(created.artifact.latest.content, isNot(contains('{{shift:image}}')));
     });
 
     test('a model that ignores the placeholder still gets the image', () async {

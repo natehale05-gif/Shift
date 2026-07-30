@@ -122,22 +122,30 @@ String embedImageAsHero(
 /// A placeholder lets the model *place* the image while the app supplies it.
 const String generatedImagePlaceholder = '{{shift:image}}';
 
-/// Puts [pngBytes] into [html]: at the placeholder the model was asked to
+/// Puts [pngBytes] into [source]: at the placeholder the model was asked to
 /// leave, or — when it left none — at the top of the body.
 ///
 /// The fallback is what makes this reliable rather than merely likely. A model
 /// that ignores the instruction still ends up with the image on the page,
 /// which is the whole point of doing this in the app instead of the prompt.
+///
+/// It only applies to HTML, though: a React component has no `<body>` to
+/// insert into, and splicing a tag into JSX by string surgery would produce
+/// something that does not compile. There the placeholder is the only route,
+/// which is why substituting it has to work for every artifact kind.
 String applyGeneratedImage(
-  String html,
+  String source,
   Uint8List pngBytes, {
   String altText = 'Generated image',
 }) {
-  if (html.contains(generatedImagePlaceholder)) {
-    return html.replaceAll(generatedImagePlaceholder,
-        'data:image/png;base64,${base64Encode(pngBytes)}');
+  final dataUri = 'data:image/png;base64,${base64Encode(pngBytes)}';
+  if (source.contains(generatedImagePlaceholder)) {
+    return source.replaceAll(generatedImagePlaceholder, dataUri);
   }
-  return embedImageAsHero(html, pngBytes, altText: altText);
+  if (!RegExp(r'<body[^>]*>', caseSensitive: false).hasMatch(source)) {
+    return source;
+  }
+  return embedImageAsHero(source, pngBytes, altText: altText);
 }
 
 /// Whether the prompt reads as referring to an artifact that already exists

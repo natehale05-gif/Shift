@@ -82,8 +82,23 @@ class StudioDetection {
         if (lower.contains(keyword)) return entry.key;
       }
     }
+    for (final keyword in _spokenFallback) {
+      if (lower.contains(keyword)) return StudioType.voiceStudio;
+    }
     return StudioType.middleware;
   }
+
+  /// Words that mean "speak this" only once nothing more specific has matched.
+  ///
+  /// "Generate audio talking about pink flowers" matched no table at all, so it
+  /// came out as a plain chat reply: the app said "here's a short pass at it"
+  /// and then produced nothing. But a bare 'audio' cannot go in the voice table
+  /// — that table is checked before Music Studio's, so it would take 'audio
+  /// bed' away from scoring. Running these last can only turn a *middleware*
+  /// answer into a spoken one, never steal a match from another studio.
+  static const _spokenFallback = [
+    'audio', 'spoken', 'say this', 'speak this', 'out loud',
+  ];
 
   static const _searchKeywords = [
     'search', 'news', 'latest', 'today', 'this week', 'current',
