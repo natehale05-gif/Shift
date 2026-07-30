@@ -34,10 +34,30 @@ export function masterKeyBytes(env) {
   if (!raw) {
     throw new Error('SHIFT_KMS_KEY is not set — refusing to store secrets.');
   }
-  const bytes = base64ToBytes(raw);
+
+  // Strip whitespace before decoding. This value is pasted by a human, often
+  // from a phone, and a trailing newline is invisible in every UI that shows
+  // it — but `atob` rejects it, so the vault would fail on every call with an
+  // error that names the key and tells you nothing about why. Base64 has no
+  // whitespace in it, so removing it cannot change a valid value. Same lesson
+  // as F3, where a provider key pasted with a line break in it produced a 401
+  // that blamed the key.
+  const cleaned = raw.replace(/\s+/g, '');
+
+  let bytes;
+  try {
+    bytes = base64ToBytes(cleaned);
+  } catch {
+    throw new Error(
+      'SHIFT_KMS_KEY is not valid base64. Generate a fresh one rather than ' +
+        'editing this by hand.',
+    );
+  }
+
   if (bytes.length !== 32) {
     throw new Error(
-      `SHIFT_KMS_KEY must be 32 bytes base64 (AES-256), got ${bytes.length}.`,
+      `SHIFT_KMS_KEY must decode to 32 bytes for AES-256, got ${bytes.length}. ` +
+        'It should be the 44-character string a generator produced, ending "=".',
     );
   }
   return bytes;

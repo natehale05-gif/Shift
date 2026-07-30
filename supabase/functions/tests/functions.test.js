@@ -104,6 +104,46 @@ test('a missing master key refuses to start rather than defaulting', () => {
   );
 });
 
+test('a master key pasted with stray whitespace still works', async () => {
+  // This value is typed in by a human, often on a phone, and a trailing
+  // newline is invisible in every UI that displays it — but `atob` rejects it.
+  // Without this the vault fails on every single call, with an error naming
+  // the key and explaining nothing.
+  const clean = Buffer.from(new Uint8Array(32).fill(7)).toString('base64');
+
+  for (const messy of [`${clean}\n`, ` ${clean} `, `${clean}\r\n`, `${clean}\t`]) {
+    assert.deepEqual(
+      masterKeyBytes({ SHIFT_KMS_KEY: messy }),
+      masterKeyBytes({ SHIFT_KMS_KEY: clean }),
+      `whitespace variant ${JSON.stringify(messy.slice(-3))} should decode the same`,
+    );
+  }
+
+  // …and a key stored one way still opens a record sealed the other way,
+  // which is what matters if the secret is ever re-pasted.
+  const sealed = await seal('sk-ant-abcdwxyz', masterKeyBytes({ SHIFT_KMS_KEY: clean }));
+  assert.equal(
+    await open(sealed, masterKeyBytes({ SHIFT_KMS_KEY: `${clean}\n` })),
+    'sk-ant-abcdwxyz',
+  );
+});
+
+test('a mistyped master key says what is wrong with it', () => {
+  // "not valid base64" and "decoded to the wrong length" are different
+  // mistakes with different fixes, and the person reading the log is the
+  // person who pasted it.
+  assert.throws(
+    () => masterKeyBytes({ SHIFT_KMS_KEY: 'this is definitely not base64!!' }),
+    /base64|32 bytes/,
+  );
+  assert.throws(
+    () => masterKeyBytes({
+      SHIFT_KMS_KEY: Buffer.from(new Uint8Array(16)).toString('base64'),
+    }),
+    /got 16/,
+  );
+});
+
 test('hex encoding survives a round trip, since bytea travels as hex', () => {
   const bytes = new Uint8Array([0, 1, 15, 16, 255]);
   assert.deepEqual(hexToBytes(bytesToHex(bytes)), bytes);
