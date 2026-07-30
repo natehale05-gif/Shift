@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../../features/artifacts/interactive/interactive_render.dart';
 import 'dart:async';
+import 'dart:math' show max;
 import 'dart:convert';
 
 import 'package:uuid/uuid.dart';
@@ -81,6 +82,56 @@ Executor chooseExecutor(
     _ => Executor.mock,
   };
 }
+
+/// Whether this turn is asking for speech rather than a score.
+///
+/// [ChatRoute.voice] always is. [ChatRoute.audio] is shared between Music and
+/// Voice Studio, so the wording decides — "generate audio talking about pink
+/// flowers" wants a voice, "an audio bed for my ad" wants music.
+///
+/// Pure, so the one sentence that decides whether a paid voice key is used at
+/// all can be asserted directly.
+bool _wantsSpokenAudio(ChatRoute route, String userInput) =>
+    route == ChatRoute.voice ||
+    (route == ChatRoute.audio &&
+        StudioDetection.detectStudio(userInput) == StudioType.voiceStudio);
+
+@visibleForTesting
+bool wantsSpokenAudio(ChatRoute route, String userInput) =>
+    _wantsSpokenAudio(route, userInput);
+
+/// The brief a voiceover turn hands the text provider.
+///
+/// "A voiceover talking about pink flowers" is a brief, not a line to read
+/// aloud — speaking the prompt back verbatim would be the wrong deliverable.
+String voiceScriptPrompt(String userInput) =>
+    'Write the words to be spoken aloud for this request: "$userInput".\n\n'
+    'Return only the script — no title, no stage directions, no speaker '
+    'labels, no quotation marks around it. Around 60-90 words, written to be '
+    'heard rather than read.';
+
+/// The script demo mode reads when no text provider answered.
+String mockVoiceScript(String userInput) =>
+    'Here is a short piece about ${userInput.trim()}. '
+    'This is the built-in synthesizer standing in for a real voice — add a '
+    'voice provider key in Settings and the same script comes back spoken.';
+
+/// A readable reason a voice call failed, from the status alone.
+///
+/// The same shape as `heygenProblem`: the point is that the user learns
+/// whether it was the key, the plan or the request, rather than being handed a
+/// synthesized card in silence.
+String elevenLabsProblem(int statusCode, String body) => switch (statusCode) {
+      401 || 403 =>
+        'ElevenLabs rejected the key, so this is the built-in synthesizer. '
+            'Check it in Settings.',
+      422 => 'ElevenLabs could not read that request, so this is the built-in '
+          'synthesizer.',
+      429 => 'ElevenLabs is rate-limiting or the character quota is used up, '
+          'so this is the built-in synthesizer.',
+      _ => 'ElevenLabs returned $statusCode, so this is the built-in '
+          'synthesizer.',
+    };
 
 /// Live-mode middleware: routes each message (LLM classifier with keyword
 /// fallback), then executes on the best available provider. Routes no live
@@ -359,6 +410,23 @@ class RealChatService implements ChatService {
         await _runShortReels(controller, userInput);
         await controller.close();
         return;
+      }
+
+      // A voiceover is a real deliverable when a voice provider is keyed: the
+      // best text provider writes the script and ElevenLabs speaks it.
+      //
+      // This used to fall off the end of the client-kind switch below — which
+      // knows about chat clients only — into the mock, so a user with a paid
+      // ElevenLabs key got the built-in synthesizer's "Aria · Friendly" card
+      // and no indication that their key had never been touched.
+      if (_wantsSpokenAudio(route, userInput)) {
+        final voiceId = chooseProvider(ChatRoute.voice,
+            registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+        if (voiceId != null) {
+          await _runVoice(controller, userInput);
+          await controller.close();
+          return;
+        }
       }
 
       // Avatar = a talking-head video: a real Heygen render when a Heygen key
@@ -1295,7 +1363,11 @@ class RealChatService implements ChatService {
             // output — it never saw the picture. It was asked to leave a
             // placeholder; if it did, the bytes land exactly where it put
             // them, and if it did not they land at the top of the page.
-            if (existingImage != null && artifact.kind == ArtifactKind.html) {
+            // Every artifact kind, not just HTML. "Put it in a jsx website"
+            // produces a *code* artifact, and gating on html meant the model
+            // was asked to leave a placeholder that nothing ever replaced —
+            // shipping a component with a literal {{shift:image}} in its src.
+            if (existingImage != null) {
               final bytes = await _resolveImageBytes(existingImage);
               if (bytes != null) {
                 // Replaces the one version rather than adding a second: this
@@ -1423,6 +1495,89 @@ class RealChatService implements ChatService {
     return null;
   }
 
+  /// A real spoken voiceover: the best text provider writes the script, the
+  /// voice provider speaks it, and the card carries the actual audio.
+  ///
+  /// The script is written rather than read straight from the prompt because
+  /// "a voiceover talking about pink flowers" is a brief, not a line to read —
+  /// speaking it back verbatim would be the wrong deliverable.
+  Future<void> _runVoice(
+    StreamController<ChatEvent> controller,
+    String userInput,
+  ) async {
+    controller.add(const RoutingDetected(StudioType.voiceStudio));
+
+    var script = '';
+    try {
+      script = (await _writeText(voiceScriptPrompt(userInput))).trim();
+    } catch (_) {
+      // Fall through to the template below.
+    }
+    if (script.isEmpty) script = mockVoiceScript(userInput);
+
+    final base = AudioResult(
+      kind: AudioKind.voice,
+      title: 'Voiceover',
+      subtitle: 'Voiceover',
+      durationSec: max(4, (script.split(RegExp(r'\s+')).length / 2.5).round()),
+      seed: StudioResponseBank.seedFromString(userInput),
+      transcript: script,
+    );
+
+    final spoken = await _speakOrKeep(base, script);
+    if (spoken.problem != null) {
+      // Silence here is what made this feel broken: the user got a synthesized
+      // card and no way to tell whether the key, the account or the network
+      // was at fault.
+      controller.add(MessageDelta('${spoken.problem}\n\n'));
+    }
+    controller.add(StudioResultReady(spoken.audio));
+    controller.add(const MessageDelta(
+        '\n\nPlay or download it from the card above — say the word for a '
+        'different tone, pace or voice.'));
+    controller.add(const MessageComplete());
+  }
+
+  /// [base] upgraded to real speech when a voice provider is keyed, or kept as
+  /// the synthesized card with a reason when it is not or the call fails.
+  Future<({AudioResult audio, String? problem})> _speakOrKeep(
+    AudioResult base,
+    String script,
+  ) async {
+    final voiceId = chooseProvider(ChatRoute.voice,
+        registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+    if (voiceId != 'elevenlabs') return (audio: base, problem: null);
+    try {
+      final pcm = await _elevenLabs.speak(
+          apiKey: keys.keyFor('elevenlabs'), text: script);
+      if (pcm.isEmpty) {
+        return (audio: base, problem: 'ElevenLabs returned no audio, so this '
+            'is the built-in synthesizer.');
+      }
+      return (
+        audio: AudioResult(
+          kind: base.kind,
+          title: base.title,
+          subtitle: base.subtitle,
+          durationSec: base.durationSec,
+          seed: base.seed,
+          transcript: base.transcript,
+          audioBytes: AudioSynthService.wavFromPcm16(pcm,
+              sampleRate: ElevenLabsClient.sampleRate),
+        ),
+        problem: null
+      );
+    } on SseHttpException catch (e) {
+      return (audio: base, problem: elevenLabsProblem(e.statusCode, e.body));
+    } catch (e) {
+      return (
+        audio: base,
+        problem: 'Couldn\'t reach ElevenLabs, so this is the built-in '
+            'synthesizer. ($e)'
+      );
+    }
+  }
+
   /// The audio card for a media pair, spoken by a real voice provider when one
   /// is keyed and synthesized locally otherwise.
   ///
@@ -1437,26 +1592,7 @@ class RealChatService implements ChatService {
   ) async {
     final result = mediaPairAudio(kind, userInput, script);
     if (result.kind != AudioKind.voice) return result;
-    final voiceId =
-        chooseProvider(ChatRoute.voice, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
-    if (voiceId != 'elevenlabs') return result;
-    try {
-      final pcm = await _elevenLabs.speak(
-          apiKey: keys.keyFor('elevenlabs'), text: script);
-      if (pcm.isEmpty) return result;
-      return AudioResult(
-        kind: result.kind,
-        title: result.title,
-        subtitle: result.subtitle,
-        durationSec: result.durationSec,
-        seed: result.seed,
-        transcript: result.transcript,
-        audioBytes: AudioSynthService.wavFromPcm16(pcm,
-            sampleRate: ElevenLabsClient.sampleRate),
-      );
-    } catch (_) {
-      return result;
-    }
+    return (await _speakOrKeep(result, script)).audio;
   }
 
   Future<List<Uint8List>> _generatePhotos(

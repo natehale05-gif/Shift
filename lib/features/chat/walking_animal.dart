@@ -185,65 +185,96 @@ class WalkingAnimalPainter extends CustomPainter {
   }
 
   void _paintDeer(Canvas canvas, Paint fill, Paint stroke, double gait) {
+    // A walking animal's head rises and falls once per stride. Without it the
+    // legs move under a body that is bolted in place, which is the single
+    // thing that most makes a silhouette look like a puppet.
+    final bob = sin(gait * 2 * pi) * 0.7;
+
     // Legs behind the body, so the body's fill hides the hips.
     _leg(canvas, stroke, 13, 22, 17, gait, width: 1.7);
     _leg(canvas, stroke, 28, 22, 17, gait + 0.5, width: 1.7);
     _leg(canvas, stroke, 16, 22, 17, gait + 0.5, width: 1.9);
     _leg(canvas, stroke, 31, 22, 17, gait, width: 1.9);
 
-    // Body.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(center: const Offset(21, 18), width: 23, height: 11),
-        const Radius.circular(5.5),
-      ),
+    // Body: a curved back and a deeper chest than a rounded rectangle gives.
+    // Deer are narrow at the waist and heavy at the shoulder, and that taper
+    // is most of what separates one from a generic four-legged animal.
+    canvas.drawPath(
+      Path()
+        ..moveTo(11.5, 17)
+        ..cubicTo(13, 11.5, 26, 10.5, 31.5, 13.5 + bob)
+        ..cubicTo(33.5, 15, 33, 21, 30, 23 + bob)
+        ..cubicTo(24, 25.5, 15, 25, 12, 22)
+        ..close(),
       fill,
     );
 
-    // Neck: thick stroke rather than a shape, so it joins the body cleanly.
-    canvas.drawLine(const Offset(30, 16), const Offset(35.5, 8),
-        stroke..strokeWidth = 4.4);
-
-    // Head, muzzle pointing forward.
     canvas.save();
-    canvas.translate(36.5, 6.5);
-    canvas.rotate(0.45);
+    canvas.translate(0, bob);
+
+    // Neck: tapered rather than a uniform bar — thick at the shoulder, thin
+    // at the throat.
+    canvas.drawPath(
+      Path()
+        ..moveTo(28.5, 17)
+        ..lineTo(33.5, 6.5)
+        ..lineTo(36.2, 7.4)
+        ..lineTo(31.5, 18)
+        ..close(),
+      fill,
+    );
+
+    // Head and muzzle.
+    canvas.save();
+    canvas.translate(36.2, 5.8);
+    canvas.rotate(0.5);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset.zero, width: 9.5, height: 4.6),
-        const Radius.circular(2.3),
+        Rect.fromCenter(center: Offset.zero, width: 10, height: 4.4),
+        const Radius.circular(2.2),
       ),
       fill,
     );
     canvas.restore();
 
-    // Ear.
+    // Ear, angled back the way a walking deer holds it.
+    canvas.save();
+    canvas.translate(33.6, 4.2);
+    canvas.rotate(-0.5);
     canvas.drawOval(
-      Rect.fromCenter(center: const Offset(34, 4.4), width: 3.4, height: 2.2),
+      Rect.fromCenter(center: Offset.zero, width: 4.2, height: 2.1),
       fill,
     );
+    canvas.restore();
 
-    // Antlers — the whole reason a deer reads as a deer at this size.
-    stroke.strokeWidth = 1.25;
-    for (final lean in [0.0, 1.8]) {
-      final base = Offset(34.5 + lean, 3.6);
+    // Antlers — the whole reason a deer reads as a deer at this size. Curved
+    // beams with three tines each; straight lines read as twigs.
+    stroke.strokeWidth = 1.15;
+    for (final lean in [0.0, 2.0]) {
+      final x = 34.6 + lean;
+      const y = 3.2;
       canvas.drawPath(
         Path()
-          ..moveTo(base.dx, base.dy)
-          ..lineTo(base.dx + 0.8, base.dy - 5.5)
-          ..moveTo(base.dx + 0.35, base.dy - 2.4)
-          ..lineTo(base.dx - 2.2, base.dy - 4.6)
-          ..moveTo(base.dx + 0.7, base.dy - 4.4)
-          ..lineTo(base.dx + 3.1, base.dy - 6.2),
+          ..moveTo(x, y)
+          ..cubicTo(x + 1.6, y - 2.2, x + 1.4, y - 4.6, x - 0.2, y - 6.6)
+          ..moveTo(x + 1.25, y - 1.7)
+          ..cubicTo(x - 0.4, y - 2.9, x - 1.8, y - 3.4, x - 3.1, y - 3.4)
+          ..moveTo(x + 1.5, y - 3.9)
+          ..cubicTo(x + 3.1, y - 4.7, x + 4.0, y - 5.6, x + 4.4, y - 6.9),
         stroke,
       );
     }
 
-    // Short upright tail.
+    // Short upright tail, flicking with the stride.
+    canvas.save();
+    canvas.translate(11.6, 15.4);
+    canvas.rotate(sin(gait * 2 * pi) * 0.35);
     canvas.drawOval(
-      Rect.fromCenter(center: const Offset(9.2, 14.4), width: 2.6, height: 4.2),
+      Rect.fromCenter(center: const Offset(0, -1.5), width: 2.8, height: 4.6),
       fill,
     );
+    canvas.restore();
+    canvas.restore();
   }
 
   void _paintRabbit(Canvas canvas, Paint fill, Paint stroke, double gait) {
@@ -318,6 +349,8 @@ class WalkingAnimalPainter extends CustomPainter {
   }
 
   void _paintFox(Canvas canvas, Paint fill, Paint stroke, double gait) {
+    final bob = sin(gait * 2 * pi) * 0.6;
+
     _leg(canvas, stroke, 14, 25, 14, gait, width: 1.7, swing: 0.4);
     _leg(canvas, stroke, 26, 25, 14, gait + 0.5, width: 1.7, swing: 0.4);
     _leg(canvas, stroke, 16.5, 25, 14, gait + 0.5, width: 1.9, swing: 0.4);
@@ -336,14 +369,20 @@ class WalkingAnimalPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round,
     );
 
-    // Body — long and low.
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(center: const Offset(21, 21), width: 24, height: 10),
-        const Radius.circular(5),
-      ),
+    // Body — long, low, and dipping at the waist, which is what makes a fox
+    // read as a fox rather than a small dog.
+    canvas.drawPath(
+      Path()
+        ..moveTo(12, 20)
+        ..cubicTo(15, 15.5, 27, 14.5, 32, 17 + bob)
+        ..cubicTo(33.5, 18.5, 33, 23, 30, 24.5 + bob)
+        ..cubicTo(24, 26.5, 15, 26, 12.5, 24)
+        ..close(),
       fill,
     );
+
+    canvas.save();
+    canvas.translate(0, bob);
 
     // Head, then a shorter snout wedge on top of it. One pentagon made the
     // whole head a beak.
@@ -371,6 +410,7 @@ class WalkingAnimalPainter extends CustomPainter {
         fill,
       );
     }
+    canvas.restore();
   }
 
   @override

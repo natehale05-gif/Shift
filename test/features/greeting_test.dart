@@ -4,6 +4,7 @@ import 'package:shift_ai/features/chat/greeting.dart';
 DateTime at(int hour) => DateTime(2026, 7, 30, hour);
 
 void main() {
+  _bandTimeWords();
   group('time of day', () {
     test('morning runs from 5 to noon', () {
       expect(greetingFor(now: at(5)), startsWith('Good morning'));
@@ -129,5 +130,51 @@ void main() {
         expect(greetingFor(now: at(19), seed: 0, avoid: avoid), isNotEmpty);
       }
     });
+  });
+}
+
+void _bandTimeWords() {
+  // Words that name a time of day, and which band each is allowed in. The
+  // small-hours set used to carry "Good evening", so a chat opened at 2am was
+  // greeted as if it were 7pm — this asserts the rule rather than that one
+  // line, so the next slip is caught too.
+  const bands = <String, (List<String>, List<String>)>{
+    'morning': (morningVariants, ['morning']),
+    'afternoon': (afternoonVariants, ['afternoon', 'mid-day', 'midday']),
+    'evening': (eveningVariants, ['evening', 'tonight', 'night']),
+    'late': (lateVariants, ['tonight', 'night', 'late', 'midnight', 'hour']),
+  };
+  const timeWords = [
+    'morning', 'afternoon', 'evening', 'tonight', 'midnight', 'midday',
+    'mid-day',
+  ];
+
+  group('time-of-day lines only appear in their own band', () {
+    bands.forEach((name, entry) {
+      final (variants, allowed) = entry;
+      test('the $name band', () {
+        for (final line in variants) {
+          final lower = line.toLowerCase();
+          for (final word in timeWords) {
+            if (!lower.contains(word)) continue;
+            expect(allowed.contains(word), isTrue,
+                reason: '"$line" names "$word" but sits in the $name band');
+          }
+        }
+      });
+    });
+  });
+
+  test('every band offers a decent spread', () {
+    for (final variants in [
+      morningVariants,
+      afternoonVariants,
+      eveningVariants,
+      lateVariants,
+    ]) {
+      expect(variants.length, greaterThanOrEqualTo(20));
+      expect(variants.toSet().length, variants.length,
+          reason: 'a duplicate makes the rotation feel stuck');
+    }
   });
 }
