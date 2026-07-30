@@ -8,6 +8,27 @@ import '../streaming/sse_client.dart';
 import 'heygen_api_config.dart';
 import 'provider_registry.dart';
 
+/// A Heygen failure in words a user can act on.
+///
+/// Pure, and separate from the client, because the whole point is that this
+/// text reaches the chat: a Heygen key that cannot render used to fall through
+/// in silence to the simulated card, so "the Heygen API is not working" was
+/// all anyone could tell.
+String heygenProblem(int statusCode, String body) => switch (statusCode) {
+      400 => 'Heygen rejected the request (400) — usually the avatar or voice '
+          'is not available to this account. Raw response: $body',
+      401 || 403 =>
+        'Heygen rejected this key ($statusCode). Check it at app.heygen.com → '
+            'Settings → API. Raw response: $body',
+      402 => 'Heygen needs an active plan or credits before it will render '
+          '(402). Raw response: $body',
+      404 => 'Heygen has nothing at that endpoint (404) — the avatar id may '
+          'have been retired. Raw response: $body',
+      429 => 'Heygen rate-limited this key (429) — free plans allow very few '
+          'renders. Raw response: $body',
+      _ => 'Heygen API error $statusCode: $body',
+    };
+
 /// The finished output of a Heygen job: the playable clip URL plus an optional
 /// thumbnail (poster) URL.
 class HeygenVideo {
@@ -38,11 +59,21 @@ class HeygenClient implements KeyValidatable {
   Future<HeygenVideo> generateAvatarVideo({
     required String apiKey,
     required String script,
-    String avatarId = HeygenApiConfig.defaultAvatarId,
-    String voiceId = HeygenApiConfig.defaultVoiceId,
+    String? avatarId,
+    String? voiceId,
   }) async {
     final client = _clientFactory();
     try {
+      // Ask the account which avatar and voice it can use, rather than sending
+      // ids picked at build time. Heygen retires stock avatars, so a constant
+      // that worked once starts failing at submit for everyone.
+      avatarId ??= await _firstId(client, apiKey, HeygenApiConfig.avatarsEndpoint(),
+              const ['avatars', 'talking_photos'], const ['avatar_id', 'talking_photo_id']) ??
+          HeygenApiConfig.fallbackAvatarId;
+      voiceId ??= await _firstId(client, apiKey, HeygenApiConfig.voicesEndpoint(),
+              const ['voices'], const ['voice_id']) ??
+          HeygenApiConfig.fallbackVoiceId;
+
       final submit = await client.post(
         HeygenApiConfig.generateEndpoint(),
         headers: HeygenApiConfig.headers(apiKey),
@@ -107,6 +138,44 @@ class HeygenClient implements KeyValidatable {
       throw Exception('Heygen job did not finish in time.');
     } finally {
       client.close();
+    }
+  }
+
+  /// The first id under any of [listKeys] in a v2 listing, or null if the
+  /// call fails or lists nothing — in which case the caller uses its fallback
+  /// rather than giving up, since a listing that cannot be read is not proof
+  /// that generation would fail.
+  ///
+  /// Several shapes are accepted because Heygen's listings differ: avatars
+  /// come back under `avatars` and `talking_photos` with different id fields.
+  Future<String?> _firstId(
+    http.Client client,
+    String apiKey,
+    Uri endpoint,
+    List<String> listKeys,
+    List<String> idKeys,
+  ) async {
+    try {
+      final response =
+          await client.get(endpoint, headers: HeygenApiConfig.headers(apiKey));
+      if (response.statusCode < 200 || response.statusCode >= 300) return null;
+      final payload =
+          jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+      final data = payload['data'];
+      for (final listKey in listKeys) {
+        final list = data is Map ? data[listKey] : null;
+        if (list is! List) continue;
+        for (final entry in list) {
+          if (entry is! Map) continue;
+          for (final idKey in idKeys) {
+            final id = entry[idKey];
+            if (id is String && id.isNotEmpty) return id;
+          }
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
     }
   }
 

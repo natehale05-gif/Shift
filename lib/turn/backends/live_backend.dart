@@ -44,6 +44,7 @@ import '../../providers/clients/openai_image_client.dart';
 import '../../providers/clients/elevenlabs_client.dart';
 import '../../providers/clients/fal_client.dart';
 import '../../providers/clients/replicate_client.dart';
+import '../../providers/streaming/sse_client.dart';
 import '../../providers/clients/provider_capability.dart';
 import '../../providers/clients/provider_descriptor.dart';
 import '../../providers/clients/provider_registry.dart';
@@ -507,14 +508,20 @@ class RealChatService implements ChatService {
 
     // A scripted video with a Heygen key renders a real talking-avatar clip.
     if (kind == CompositionKind.scriptedVideo) {
-      final heygenVideo = await _tryHeygenVideo(script);
-      if (heygenVideo != null) {
-        controller.add(StudioResultReady(heygenVideo));
+      final attempt = await _tryHeygenVideo(script);
+      if (attempt.video != null) {
+        controller.add(StudioResultReady(attempt.video!));
         controller.add(const MessageDelta(
             '\n\nRendered — open it in a new tab from the card '
             'above.'));
         controller.add(const MessageComplete());
         return;
+      }
+      // A Heygen key that cannot render used to fall through in silence, so
+      // the user got the simulated card and no way to tell whether the key,
+      // the avatar, or the account was the problem.
+      if (attempt.problem != null) {
+        controller.add(MessageDelta('${attempt.problem}\n\n'));
       }
     }
 
@@ -528,25 +535,31 @@ class RealChatService implements ChatService {
   /// null when there is no Heygen key or the render fails (so callers fall back
   /// to the simulated card). Represented in the existing [VideoResult] card
   /// with an "Open in Heygen" link and the real thumbnail as the poster.
-  Future<VideoResult?> _tryHeygenVideo(String script) async {
-    if (!keys.hasKey('heygen')) return null;
+  Future<({VideoResult? video, String? problem})> _tryHeygenVideo(
+      String script) async {
+    if (!keys.hasKey('heygen')) return (video: null, problem: null);
     try {
       final video = await _heygen.generateAvatarVideo(
         apiKey: keys.keyFor('heygen'),
         script: script,
       );
-      return VideoResult(
-        prompt: script,
-        durationSec: 10,
-        aspectRatio: '16:9',
-        identityLock: true,
-        seed: StudioResponseBank.seedFromString(script),
-        videoUrl: video.videoUrl,
-        posterUrl: video.thumbnailUrl,
-        providerLabel: 'Heygen',
+      return (
+        video: VideoResult(
+          prompt: script,
+          durationSec: 10,
+          aspectRatio: '16:9',
+          identityLock: true,
+          seed: StudioResponseBank.seedFromString(script),
+          videoUrl: video.videoUrl,
+          posterUrl: video.thumbnailUrl,
+          providerLabel: 'Heygen',
+        ),
+        problem: null
       );
-    } catch (_) {
-      return null;
+    } on SseHttpException catch (e) {
+      return (video: null, problem: heygenProblem(e.statusCode, e.body));
+    } catch (e) {
+      return (video: null, problem: 'Heygen: $e');
     }
   }
 
@@ -575,9 +588,9 @@ class RealChatService implements ChatService {
     // A talking avatar with a Heygen key becomes a real avatar video (Heygen's
     // core product), shown in the video card instead of the portrait + voice.
     if (kind == CompositionKind.talkingAvatar) {
-      final heygenVideo = await _tryHeygenVideo(script);
-      if (heygenVideo != null) {
-        controller.add(StudioResultReady(heygenVideo));
+      final attempt = await _tryHeygenVideo(script);
+      if (attempt.video != null) {
+        controller.add(StudioResultReady(attempt.video!));
         controller.add(const MessageDelta(
             '\n\nRendered — open it in a new tab from the card '
             'above.'));
