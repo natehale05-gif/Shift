@@ -19,11 +19,6 @@ class UserPrefsStore extends ChangeNotifier {
   // across launches, not within one.
   String _lastGreeting = '';
 
-  /// The walking animal the last new chat showed. With only three of them,
-  /// plain random repeats about a third of the time, which reads as the app
-  /// being stuck rather than as chance.
-  String _lastAnimal = '';
-
   UserPrefsStore({required this.persistence});
 
   String get nickname => _nickname;
@@ -32,7 +27,6 @@ class UserPrefsStore extends ChangeNotifier {
   String get responseStyle => _responseStyle;
   String get customInstructions => _customInstructions;
   String get lastGreeting => _lastGreeting;
-  String get lastAnimal => _lastAnimal;
 
   /// Migrates the older concise/balanced/detailed values onto the named set.
   ///
@@ -58,7 +52,6 @@ class UserPrefsStore extends ChangeNotifier {
         _normalizeStyle(prefs['responseStyle'] as String? ?? 'normal');
     _customInstructions = prefs['customInstructions'] as String? ?? '';
     _lastGreeting = prefs['lastGreeting'] as String? ?? '';
-    _lastAnimal = prefs['lastAnimal'] as String? ?? '';
     notifyListeners();
   }
 
@@ -101,14 +94,6 @@ class UserPrefsStore extends ChangeNotifier {
     _persist();
   }
 
-  /// Records the animal just shown. Silent for the same reason as
-  /// [setLastGreeting] — the only reader is the *next* new chat.
-  void setLastAnimal(String value) {
-    if (value == _lastAnimal) return;
-    _lastAnimal = value;
-    _persist();
-  }
-
   Future<void> _persist() => persistence.saveUserPrefs({
         'nickname': _nickname,
         'role': _role,
@@ -116,6 +101,5 @@ class UserPrefsStore extends ChangeNotifier {
         'responseStyle': _responseStyle,
         'customInstructions': _customInstructions,
         'lastGreeting': _lastGreeting,
-        'lastAnimal': _lastAnimal,
       });
 }
