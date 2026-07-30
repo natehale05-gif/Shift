@@ -12,6 +12,11 @@ class DeckService {
 
   static const defaultSlideCount = 6;
 
+  /// The words that name the deliverable rather than the subject. Anchored at
+  /// the use site, since it has to be stripped from either end.
+  static const _deckNoun = r'(slide\s*deck|pitch\s*deck|deck|presentation|'
+      r'powerpoint|pptx|keynote|slides)';
+
   /// Extracts the deck topic and desired slide count from a free-form request.
   static ({String topic, int slideCount}) parseDeckRequest(String input) {
     final countMatch =
@@ -20,19 +25,33 @@ class DeckService {
         (countMatch != null ? int.parse(countMatch.group(1)!) : defaultSlideCount)
             .clamp(3, 20);
 
+    // Three passes, because the deck noun is not always where a single
+    // pattern would expect it. "Build me a presentation about X" puts it right
+    // after the article; "build me a small business presentation" puts it at
+    // the very end, with the topic in between. One combined pattern matched
+    // only the first, so the second kept the entire prompt as its topic and
+    // the deck was titled "build me a small business presentation".
     var topic = input
-        .replaceAll(
-            RegExp(r'(\d+)\s*slides?', caseSensitive: false), '')
+        .replaceAll(RegExp(r'(\d+)\s*slides?', caseSensitive: false), '')
+        // 1. the request preamble, whether or not a deck noun follows it
         .replaceFirst(
             RegExp(
                 r'^\s*(please\s+)?(can|could|would)?\s*(you\s+)?(please\s+)?'
-                r'(make|build|create|generate|draft|put together|design)?\s*'
-                r'(me\s+)?(a|an|the)?\s*'
-                r'(slide\s*deck|deck|presentation|powerpoint|pptx|keynote|'
-                r'pitch\s*deck|slides)\s*',
+                r'(make|build|create|generate|draft|put together|design)\s+'
+                // "an" before "a": alternation is first-match, so the shorter
+                // one would eat the "a" of "an investor" and leave "n".
+                r'(me|us)?\s*(an|a|the)?\b\s*',
                 caseSensitive: false),
             '')
+        // 2. the deck noun itself, at either end
+        .replaceFirst(
+            RegExp('^\\s*$_deckNoun\\s*', caseSensitive: false), '')
+        .replaceFirst(
+            RegExp('\\s*$_deckNoun\\s*\$', caseSensitive: false), '')
+        // 3. a preposition left dangling by either removal
         .replaceFirst(RegExp(r'^\s*(about|on|for|covering|regarding)\s+',
+            caseSensitive: false), '')
+        .replaceFirst(RegExp(r'\s+(about|on|for|covering|regarding)\s*\$',
             caseSensitive: false), '')
         .trim();
     if (topic.isEmpty) topic = 'Your Topic';

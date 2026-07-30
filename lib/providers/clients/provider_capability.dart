@@ -50,4 +50,7 @@ enum ProviderClientKind {
   openAiCompatible,
   flux,
   heygen,
+  replicate,
+  fal,
+  elevenLabs,
 }

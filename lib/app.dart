@@ -81,6 +81,10 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        // Not a store, but the asset store behind it is how generated media
+        // survives a reload — the audio card reads spoken voiceovers back
+        // from it the same way images are re-read.
+        Provider<PersistenceService>.value(value: _persistence),
         ChangeNotifierProvider.value(value: _conversationStore),
         ChangeNotifierProvider.value(value: _appSettingsStore),
         ChangeNotifierProvider(create: (_) => EcopayCalculatorStore()),

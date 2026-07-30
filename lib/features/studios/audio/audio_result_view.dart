@@ -11,6 +11,7 @@ library;
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../data/models/studio_result.dart';
+import '../../../data/persistence/persistence_service.dart';
 import '../../../core/platform/download_service.dart';
 import '../../../core/platform/web_audio_player.dart';
 import '../media/audio_synth_service.dart';
@@ -18,6 +19,7 @@ import '../media/procedural_painters.dart';
 import '../shared/result_shell.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 
 class AudioResultView extends StatefulWidget {
@@ -45,9 +47,23 @@ class _AudioResultViewState extends State<AudioResultView> {
         speechLike: widget.result.kind == AudioKind.voice,
       );
 
-  void _ensurePlayer() {
+  /// Real spoken audio when a voice provider produced it, else the local
+  /// synthesizer. [audioBytes] is only present on the turn that generated it;
+  /// after a reload the same audio comes back from the asset store.
+  Future<Uint8List> _audioBytes() async {
+    final inline = widget.result.audioBytes;
+    if (inline != null) return inline;
+    final assetId = widget.result.audioAssetId;
+    if (assetId != null) {
+      final stored = await context.read<PersistenceService>().loadAsset(assetId);
+      if (stored != null) return stored;
+    }
+    return _synthesize();
+  }
+
+  Future<void> _ensurePlayer() async {
     if (_player != null) return;
-    final player = WebAudioPlayer.fromWav(_synthesize());
+    final player = WebAudioPlayer.fromWav(await _audioBytes());
     player.onProgress.listen((_) {
       if (!mounted) return;
       setState(() => _progress = player.progress);
@@ -69,7 +85,8 @@ class _AudioResultViewState extends State<AudioResultView> {
       return;
     }
     setState(() => _preparing = true);
-    _ensurePlayer();
+    await _ensurePlayer();
+    if (!mounted) return;
     if (_progress >= 1) _player!.restart();
     await _player!.play();
     if (!mounted) return;

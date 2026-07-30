@@ -78,7 +78,7 @@ void main() {
       // two providers that do nothing else. Groq, Mistral and OpenRouter share
       // OpenAI's *chat* shape, not its images endpoint, so they stay out.
       expect(registry.providersFor(ProviderCapability.image).map((d) => d.id),
-          ['gemini', 'flux', 'openai']);
+          ['gemini', 'flux', 'replicate', 'fal', 'openai']);
     });
 
     test('search prefers Anthropic, then Gemini', () {
@@ -90,7 +90,10 @@ void main() {
       expect(registry.providersFor(ProviderCapability.avatar).map((d) => d.id),
           ['heygen']);
       expect(registry.providersFor(ProviderCapability.video), isEmpty);
-      expect(registry.providersFor(ProviderCapability.voice), isEmpty);
+      // Voice is no longer empty: ElevenLabs speaks, so a voiceover can come
+      // from a real voice instead of the local synthesizer.
+      expect(registry.providersFor(ProviderCapability.voice).map((d) => d.id),
+          ['elevenlabs']);
     });
   });
 

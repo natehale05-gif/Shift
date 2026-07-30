@@ -8,6 +8,9 @@ import 'heygen_api_config.dart';
 import 'heygen_client.dart';
 import 'openai_compatible_client.dart';
 import 'openai_image_client.dart';
+import 'elevenlabs_client.dart';
+import 'fal_client.dart';
+import 'replicate_client.dart';
 import 'provider_capability.dart';
 import 'provider_descriptor.dart';
 
@@ -163,10 +166,10 @@ final openaiDescriptor = ProviderDescriptor(
     ProviderCapability.code: 1,
     ProviderCapability.writing: 1,
     ProviderCapability.routing: 1,
-    // Behind Gemini (0) and Flux (1), which are the dedicated image
-    // providers — the same "Auto prefers the specialist" ordering the text
-    // capabilities use.
-    ProviderCapability.image: 2,
+    // Last among the image providers. gpt-image-1 needs a verified
+    // organization, which the others do not, so a key that works for chat can
+    // still fail here — a poor default when another image key is present.
+    ProviderCapability.image: 4,
   },
   hintPrefix: 'sk-',
   guidanceText: 'Chat, code, writing and image generation with GPT models. '
@@ -324,6 +327,90 @@ final heygenDescriptor = ProviderDescriptor(
       'fails with a network/CORS error, it likely needs a proxy.',
 );
 
+/// Replicate — a marketplace of hosted models. Wired for image generation
+/// (FLUX Schnell by default), which is what a chat app reaches for most.
+final replicateDescriptor = ProviderDescriptor(
+  id: 'replicate',
+  displayName: 'Replicate',
+  persistenceKeyName: 'shift_ai.replicate_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.replicate,
+  baseUrl: ReplicateClient.base,
+  capabilities: const {ProviderCapability.image},
+  models: const [
+    ProviderModel(
+      id: ReplicateClient.defaultModel,
+      displayName: 'FLUX Schnell (Replicate)',
+      capabilities: {ProviderCapability.image},
+    ),
+  ],
+  // Behind Gemini and Flux's own API, ahead of OpenAI: Replicate runs the same
+  // FLUX weights, and unlike gpt-image-1 it needs no organization verification.
+  preferenceRanks: const {ProviderCapability.image: 2},
+  hintPrefix: 'r8_',
+  guidanceText: 'Image generation through Replicate\'s hosted models. Stored '
+      'only in this browser; calls go direct to Replicate.',
+  consoleUrl: 'replicate.com/account/api-tokens',
+  browserWarning:
+      'Replicate may block direct browser calls (CORS). If a key test or '
+      'generation fails with a network/CORS error, it likely needs a proxy.',
+);
+
+/// fal.ai — fast hosted image models. Synchronous, so a picture is one round
+/// trip rather than submit-and-poll.
+final falDescriptor = ProviderDescriptor(
+  id: 'fal',
+  displayName: 'fal.ai',
+  persistenceKeyName: 'shift_ai.fal_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.fal,
+  baseUrl: FalClient.base,
+  capabilities: const {ProviderCapability.image},
+  models: const [
+    ProviderModel(
+      id: FalClient.defaultModel,
+      displayName: 'FLUX Schnell (fal)',
+      capabilities: {ProviderCapability.image},
+    ),
+  ],
+  preferenceRanks: const {ProviderCapability.image: 3},
+  hintPrefix: '',
+  guidanceText: 'Fast image generation through fal.ai. Stored only in this '
+      'browser; calls go direct to fal.',
+  consoleUrl: 'fal.ai/dashboard/keys',
+  browserWarning:
+      'fal may block direct browser calls (CORS). If a key test or generation '
+      'fails with a network/CORS error, it likely needs a proxy.',
+);
+
+/// ElevenLabs — text to speech. The first provider to advertise
+/// [ProviderCapability.voice]: until now every voiceover came from the local
+/// synthesizer, which is a tone, not a voice.
+final elevenLabsDescriptor = ProviderDescriptor(
+  id: 'elevenlabs',
+  displayName: 'ElevenLabs',
+  persistenceKeyName: 'shift_ai.elevenlabs_key.v1',
+  authScheme: AuthScheme.header,
+  clientKind: ProviderClientKind.elevenLabs,
+  baseUrl: ElevenLabsClient.base,
+  capabilities: const {ProviderCapability.voice},
+  models: const [
+    ProviderModel(
+      id: ElevenLabsClient.defaultModel,
+      displayName: 'Eleven Multilingual v2',
+      capabilities: {ProviderCapability.voice},
+    ),
+  ],
+  preferenceRanks: const {ProviderCapability.voice: 0},
+  hintPrefix: 'sk_',
+  guidanceText: 'Real spoken voiceovers instead of the built-in synthesizer. '
+      'Stored only in this browser; calls go direct to ElevenLabs.',
+  consoleUrl: 'elevenlabs.io',
+  browserWarning:
+      'ElevenLabs may block direct browser calls (CORS). If a key test or a '
+      'voiceover fails with a network/CORS error, it likely needs a proxy.',
+);
+
 /// The set of providers the app knows about, plus lookups over them. Pure
 /// data — no network, no state — so it is trivially unit-testable and safe to
 /// construct anywhere.
@@ -342,6 +429,9 @@ class ProviderRegistry {
         mistralDescriptor,
         openrouterDescriptor,
         fluxDescriptor,
+        replicateDescriptor,
+        falDescriptor,
+        elevenLabsDescriptor,
         heygenDescriptor,
       ]);
 
@@ -412,6 +502,9 @@ class ClientRegistry {
           ProviderClientKind.gemini: () => GeminiClient(),
           ProviderClientKind.flux: () => FluxClient(),
           ProviderClientKind.heygen: () => HeygenClient(),
+          ProviderClientKind.elevenLabs: () => ElevenLabsClient(),
+          ProviderClientKind.replicate: () => ReplicateClient(),
+          ProviderClientKind.fal: () => FalClient(),
           ...?factories,
         },
         _openAiFactory = openAiClient ?? (() => OpenAiCompatibleClient());

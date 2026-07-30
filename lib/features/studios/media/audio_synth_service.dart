@@ -60,6 +60,40 @@ class AudioSynthService {
     return 1.0;
   }
 
+  /// Wraps raw little-endian 16-bit mono PCM in a WAV container.
+  ///
+  /// A provider that speaks (ElevenLabs) can return PCM, and everything
+  /// downstream here — the card's player, the download button, the off-web
+  /// file handoff — already understands WAV. Wrapping is a header; transcoding
+  /// MP3 would be a decoder.
+  static Uint8List wavFromPcm16(Uint8List pcm, {int sampleRate = 44100}) {
+    const channels = 1;
+    const bitsPerSample = 16;
+    final byteRate = sampleRate * channels * bitsPerSample ~/ 8;
+    const blockAlign = channels * bitsPerSample ~/ 8;
+    final dataSize = pcm.lengthInBytes;
+
+    final header = BytesBuilder()
+      ..add(ascii.encode('RIFF'))
+      ..add(_uint32(36 + dataSize))
+      ..add(ascii.encode('WAVE'))
+      ..add(ascii.encode('fmt '))
+      ..add(_uint32(16))
+      ..add(_uint16(1))
+      ..add(_uint16(channels))
+      ..add(_uint32(sampleRate))
+      ..add(_uint32(byteRate))
+      ..add(_uint16(blockAlign))
+      ..add(_uint16(bitsPerSample))
+      ..add(ascii.encode('data'))
+      ..add(_uint32(dataSize));
+
+    return (BytesBuilder()
+          ..add(header.toBytes())
+          ..add(pcm))
+        .toBytes();
+  }
+
   static Uint8List _wavBytes(Int16List samples) {
     const channels = 1;
     const bitsPerSample = 16;

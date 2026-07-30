@@ -63,14 +63,43 @@ void main() {
           'openai');
     });
 
-    test('image preference: Gemini, then Flux, then OpenAI', () {
+    test('image preference: Gemini, Flux, Replicate, fal, then OpenAI', () {
       String? pick(Set<String> keys) =>
           chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only(keys));
 
-      expect(pick({'gemini', 'flux', 'openai'}), 'gemini');
-      expect(pick({'flux', 'openai'}), 'flux');
+      expect(pick({'gemini', 'flux', 'replicate', 'fal', 'openai'}), 'gemini');
+      expect(pick({'flux', 'replicate', 'fal', 'openai'}), 'flux');
+      expect(pick({'replicate', 'fal', 'openai'}), 'replicate');
+      expect(pick({'fal', 'openai'}), 'fal');
       expect(pick({'openai'}), 'openai');
       expect(pick({}), isNull);
+    });
+
+    test('each new image provider works on its own', () {
+      // A key that resolves to nothing is a key that silently does nothing:
+      // the turn falls through to the mock and the user gets demo artwork.
+      for (final id in ['replicate', 'fal']) {
+        expect(chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only({id})),
+            id,
+            reason: id);
+      }
+    });
+
+    test('a voiceover now has a real provider to go to', () {
+      // Nothing advertised `voice` before ElevenLabs, so every voiceover came
+      // from the local synthesizer no matter which keys were present.
+      expect(chooseProvider(ChatRoute.voice, registry: registry, hasKey: only({'elevenlabs'})),
+          'elevenlabs');
+      expect(chooseProvider(ChatRoute.audio, registry: registry, hasKey: only({'elevenlabs'})),
+          'elevenlabs');
+      expect(chooseProvider(ChatRoute.voice, registry: registry, hasKey: only({'openai'})),
+          isNull,
+          reason: 'a text key is not a voice key');
+    });
+
+    test('the voice providers do not accidentally serve image turns', () {
+      expect(chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only({'elevenlabs'})),
+          isNull);
     });
 
     test('the other OpenAI-compatible providers still have no image endpoint',
