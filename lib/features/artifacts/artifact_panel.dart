@@ -97,21 +97,36 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
     // not its source.
     final showCodeToggle = !artifact.interactive;
     final onCodeTab = showCodeToggle && panel.tab == ArtifactTab.code;
-    final showToolbar =
-        showCodeToggle || _isRunnable(artifact) || artifact.versions.length > 1;
+    final multipleVersions = artifact.versions.length > 1;
+    // Full-bleed when it owns the screen: a left border implies something to
+    // the left of it.
+    final fullScreen = panel.expanded || !_sideBySide(context);
 
     return Container(
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
-        border: Border(left: BorderSide(color: colors.border)),
+        border: fullScreen
+            ? null
+            : Border(left: BorderSide(color: colors.border)),
       ),
-      child: Column(
+      child: SafeArea(
+        bottom: false,
+        left: false,
+        right: false,
+        // Only meaningful once the panel covers the status bar, which is the
+        // point of going full-screen on a phone.
+        top: fullScreen,
+        child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // One row, not two. Copy, download and run moved into the overflow
+          // menu: they are things you do once, at the end, and each was
+          // costing a permanent 40px of a screen whose whole job is showing
+          // the artifact.
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg,
-              AppSpacing.md,
+              AppSpacing.sm,
               AppSpacing.sm,
               AppSpacing.sm,
             ),
@@ -127,21 +142,49 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Copy contents',
-                  iconSize: 17,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.copy_rounded),
-                  onPressed: () =>
-                      Clipboard.setData(ClipboardData(text: content)),
+                if (showCodeToggle)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpacing.xs),
+                    child: SegmentedButton<ArtifactTab>(
+                      style: const ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: ArtifactTab.preview,
+                          label: Text('Preview'),
+                        ),
+                        ButtonSegment(
+                          value: ArtifactTab.code,
+                          label: Text('Code'),
+                        ),
+                      ],
+                      selected: {panel.tab},
+                      onSelectionChanged: (selection) => context
+                          .read<ArtifactPanelStore>()
+                          .selectTab(selection.first),
+                    ),
+                  ),
+                _PanelMenu(
+                  runnable: _isRunnable(artifact),
+                  running: _running,
+                  onRun: () => _run(content),
+                  onCopy: () => Clipboard.setData(ClipboardData(text: content)),
+                  onDownload: () => _download(artifact, content),
                 ),
-                IconButton(
-                  tooltip: 'Download',
-                  iconSize: 18,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.download_rounded),
-                  onPressed: () => _download(artifact, content),
-                ),
+                if (_sideBySide(context))
+                  IconButton(
+                    tooltip: panel.expanded ? 'Exit full screen' : 'Full screen',
+                    iconSize: 18,
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(panel.expanded
+                        ? Icons.close_fullscreen_rounded
+                        : Icons.open_in_full_rounded),
+                    onPressed: () =>
+                        context.read<ArtifactPanelStore>().toggleExpanded(),
+                  ),
                 IconButton(
                   tooltip: 'Close',
                   iconSize: 18,
@@ -152,62 +195,22 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
               ],
             ),
           ),
-          // Preview/Code toggle for website/app builds; interactive results
-          // render only. The code stays downloadable from the header either way.
-          if (showToolbar) ...[
+          // Versions are the one control worth its own row, and only when
+          // there is more than one to step between.
+          if (multipleVersions) ...[
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-              child: Row(
-                children: [
-                  if (showCodeToggle)
-                    SegmentedButton<ArtifactTab>(
-                      style: ButtonStyle(
-                        visualDensity: VisualDensity.compact,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      segments: const [
-                        ButtonSegment(
-                          value: ArtifactTab.preview,
-                          label: Text('Preview'),
-                          icon: Icon(Icons.visibility_outlined, size: 16),
-                        ),
-                        ButtonSegment(
-                          value: ArtifactTab.code,
-                          label: Text('Code'),
-                          icon: Icon(Icons.code_rounded, size: 16),
-                        ),
-                      ],
-                      selected: {panel.tab},
-                      onSelectionChanged: (selection) => context
-                          .read<ArtifactPanelStore>()
-                          .selectTab(selection.first),
-                    ),
-                  const Spacer(),
-                  if (_isRunnable(artifact))
-                    TextButton.icon(
-                      onPressed: _running ? null : () => _run(content),
-                      icon: _running
-                          ? const SizedBox(
-                              width: 12,
-                              height: 12,
-                              child:
-                                  CircularProgressIndicator(strokeWidth: 1.6),
-                            )
-                          : const Icon(Icons.play_arrow_rounded, size: 18),
-                      label: const Text('Run'),
-                    ),
-                  if (artifact.versions.length > 1)
-                    _VersionStepper(
-                      versionIndex: versionIndex,
-                      versionCount: artifact.versions.length,
-                      onSelect: (index) => context
-                          .read<ArtifactPanelStore>()
-                          .selectVersion(index),
-                    ),
-                ],
+              padding:
+                  const EdgeInsets.only(right: AppSpacing.sm, bottom: AppSpacing.xs),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _VersionStepper(
+                  versionIndex: versionIndex,
+                  versionCount: artifact.versions.length,
+                  onSelect: (index) =>
+                      context.read<ArtifactPanelStore>().selectVersion(index),
+                ),
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
           ],
           Divider(height: 1, color: colors.border),
           Expanded(
@@ -226,7 +229,76 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
             ConsoleOutputView(lines: _consoleLines!),
           ],
         ],
+        ),
       ),
+    );
+  }
+
+  /// Mirrors the chat screen's own threshold: below it the panel is always
+  /// full-screen, so offering a full-screen toggle would be meaningless.
+  static bool _sideBySide(BuildContext context) =>
+      MediaQuery.sizeOf(context).width >= 880;
+}
+
+/// Copy, download and run — the actions you reach for once, kept out of the
+/// way of the thing you are looking at.
+class _PanelMenu extends StatelessWidget {
+  final bool runnable;
+  final bool running;
+  final VoidCallback onRun;
+  final VoidCallback onCopy;
+  final VoidCallback onDownload;
+
+  const _PanelMenu({
+    required this.runnable,
+    required this.running,
+    required this.onRun,
+    required this.onCopy,
+    required this.onDownload,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      tooltip: 'Artifact actions',
+      icon: const Icon(Icons.more_horiz_rounded, size: 18),
+      padding: EdgeInsets.zero,
+      onSelected: (value) => switch (value) {
+        'copy' => onCopy(),
+        'download' => onDownload(),
+        'run' => running ? null : onRun(),
+        _ => null,
+      },
+      itemBuilder: (context) => [
+        if (runnable)
+          const PopupMenuItem(
+            value: 'run',
+            child: ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(Icons.play_arrow_rounded, size: 18),
+              title: Text('Run'),
+            ),
+          ),
+        const PopupMenuItem(
+          value: 'copy',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.copy_rounded, size: 17),
+            title: Text('Copy contents'),
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'download',
+          child: ListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            leading: Icon(Icons.download_rounded, size: 18),
+            title: Text('Download'),
+          ),
+        ),
+      ],
     );
   }
 }

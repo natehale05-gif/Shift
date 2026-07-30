@@ -14,6 +14,7 @@ import '../../data/models/studio_result.dart';
 import '../../data/models/studio_type.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../features/artifacts/artifact_composition.dart';
+import '../fence_filter.dart';
 import '../request_title.dart';
 import '../studio_detection.dart';
 import '../../features/studios/media/audio_synth_service.dart';
@@ -1144,12 +1145,26 @@ class RealChatService implements ChatService {
     Artifact? reviseTarget,
   }) async {
     final buffer = StringBuffer();
+    // Fenced code is held back rather than streamed into the transcript: when
+    // it becomes an artifact, streaming it too showed the same page twice —
+    // once as a wall of markup in the chat, once as the artifact. The prose
+    // around it still streams. Anything held that does not become an artifact
+    // is replayed below, so nothing is ever silently dropped.
+    final fences = FenceFilter();
     var failed = false;
+    var producedArtifact = false;
 
     await for (final event in events) {
-      if (event is MessageDelta) buffer.write(event.chunk);
+      if (event is MessageDelta) {
+        buffer.write(event.chunk);
+        final prose = fences.feed(event.chunk);
+        if (prose.isNotEmpty) controller.add(MessageDelta(prose));
+        continue; // the filtered delta above replaces this one
+      }
       if (event is MessageError) failed = true;
       if (event is MessageComplete && !failed) {
+        final trailing = fences.flush();
+        if (trailing.isNotEmpty) controller.add(MessageDelta(trailing));
         // Code-routed replies whose fenced block is substantial become an
         // artifact, mirroring the mock's behavior.
         //
@@ -1185,7 +1200,14 @@ class RealChatService implements ChatService {
             } else {
               controller.add(ArtifactCreated(artifact));
             }
+            producedArtifact = true;
           }
+        }
+        // Held code that no artifact was made of belongs back in the reply:
+        // a snippet too short to be a deliverable, or a turn where extraction
+        // declined. Withholding is a presentation choice, never a deletion.
+        if (!producedArtifact && fences.sawFence) {
+          controller.add(MessageDelta(fences.heldText));
         }
       }
       controller.add(event);

@@ -9,11 +9,24 @@ class ArtifactPanelStore extends ChangeNotifier {
   String? _artifactId;
   int _versionIndex = 0;
   ArtifactTab _tab = ArtifactTab.preview;
+  bool _expanded = false;
 
   bool get isOpen => _artifactId != null;
   String? get artifactId => _artifactId;
   int get versionIndex => _versionIndex;
   ArtifactTab get tab => _tab;
+
+  /// Whether the artifact fills the window instead of sharing it with the
+  /// chat. A page squeezed into a 42%-wide column is being previewed at a
+  /// width nobody will view it at, so the deliverable gets the whole screen
+  /// on request. Below the side-by-side threshold the panel is full-screen
+  /// regardless and this is ignored.
+  bool get expanded => _expanded;
+
+  void toggleExpanded() {
+    _expanded = !_expanded;
+    notifyListeners();
+  }
 
   void open(String artifactId, {int? versionIndex}) {
     _artifactId = artifactId;
@@ -25,6 +38,7 @@ class ArtifactPanelStore extends ChangeNotifier {
     _artifactId = null;
     _versionIndex = 0;
     _tab = ArtifactTab.preview;
+    _expanded = false;
     notifyListeners();
   }
 
