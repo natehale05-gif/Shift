@@ -30,6 +30,30 @@ void main() {
     expect(events.last, isA<MessageComplete>());
   }, timeout: const Timeout(Duration(minutes: 2)));
 
+  test('a turn that asks does not first promise the deliverable', () async {
+    // "Here's the image you asked for:" followed by a question is a promise
+    // the turn does not keep — the routing intro belongs only to turns that
+    // actually generate something.
+    final events = await MockChatService()
+        .sendMessage(conversation: _empty(), userInput: 'make me a logo')
+        .toList();
+
+    final text = events.whereType<MessageDelta>().map((e) => e.chunk).join();
+    expect(text, isNot(contains('Here\'s the image')));
+    expect(text, StudioResponseBank.clarifyingQuestion(
+        StudioType.imageStudio, 'make me a logo'));
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('the closed half of the question arrives as tappable options', () async {
+    final events = await MockChatService()
+        .sendMessage(conversation: _empty(), userInput: 'make me a logo')
+        .toList();
+
+    final offered = events.whereType<ChoiceOffered>().single;
+    expect(offered.options, isNotEmpty);
+    expect(offered.multiSelect, isFalse);
+  }, timeout: const Timeout(Duration(minutes: 2)));
+
   test('a descriptive image prompt skips the question and generates '
       'directly', () async {
     final events = await MockChatService()

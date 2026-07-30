@@ -109,6 +109,43 @@ void main() {
       expect(message.usage!.outputTokens, 20);
     });
 
+    test('a choice offer becomes an unanswered ChoiceBlock after the prose',
+        () {
+      final message = _fold(_empty(), const [
+        MessageDelta('What is it for?'),
+        ChoiceOffered(
+          id: 'q1',
+          question: 'Which platform?',
+          options: ['TikTok', 'Email'],
+        ),
+      ]);
+
+      expect(message.blocks, hasLength(2));
+      expect((message.blocks[0] as TextBlock).text, 'What is it for?');
+      final choice = message.blocks[1] as ChoiceBlock;
+      expect(choice.id, 'q1');
+      expect(choice.options, ['TikTok', 'Email']);
+      expect(choice.answered, isFalse);
+    });
+
+    test('a ChoiceBlock survives a round trip through JSON as answered', () {
+      const block = ChoiceBlock(
+        id: 'q1',
+        question: 'Which platform?',
+        options: ['TikTok', 'Email'],
+        multiSelect: true,
+        chosen: ['Email'],
+      );
+
+      final restored = MessageBlock.fromJson(block.toJson()) as ChoiceBlock;
+      expect(restored.id, 'q1');
+      expect(restored.question, 'Which platform?');
+      expect(restored.options, ['TikTok', 'Email']);
+      expect(restored.multiSelect, isTrue);
+      expect(restored.chosen, ['Email']);
+      expect(restored.answered, isTrue);
+    });
+
     test('error with no prior content produces readable error text', () {
       final message = _fold(_empty(), const [MessageError('boom')]);
       expect(message.status, MessageStatus.error);

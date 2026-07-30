@@ -16,6 +16,7 @@ import '../../data/models/studio_type.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../features/artifacts/artifact_composition.dart';
 import '../conversation_media.dart';
+import '../choice_parsing.dart';
 import '../fence_filter.dart';
 import '../request_title.dart';
 import '../studio_detection.dart';
@@ -1472,12 +1473,31 @@ class RealChatService implements ChatService {
             producedArtifact = true;
           }
         }
+        // A question the model asked with tappable answers. Parsed from the
+        // whole reply rather than the held text, so it works whether or not
+        // anything else was fenced.
+        final choice = findChoiceIn(buffer.toString());
+        if (choice != null) {
+          controller.add(ChoiceOffered(
+            id: _uuid.v4(),
+            question: choice.question,
+            options: choice.options,
+            multiSelect: choice.multiSelect,
+          ));
+        }
+
         // Held code that no artifact was made of belongs back in the reply:
         // a snippet too short to be a deliverable, a turn where extraction
         // declined, or a reply that was cut off. Withholding is a
         // presentation choice, never a deletion.
         if (!producedArtifact && fences.sawFence) {
-          controller.add(MessageDelta(fences.replayText()));
+          // Minus the choice block, but only when it actually became buttons.
+          // A block that failed to parse is just text the model wrote, and
+          // dropping it would lose content to a malformation the user never
+          // sees.
+          final held = fences.replayText();
+          final replay = choice == null ? held : stripChoiceBlock(held);
+          if (replay.isNotEmpty) controller.add(MessageDelta(replay));
         }
       }
       controller.add(event);

@@ -342,6 +342,34 @@ class ConversationStore extends ChangeNotifier {
     persistence.saveConversations(const []);
   }
 
+  /// Records the answer to a [ChoiceBlock] and sends it as the user's turn.
+  ///
+  /// Deliberately not a new send path. Stamping the block and then calling
+  /// [sendMessage] means branching, regeneration, export, search and the
+  /// shared conversation history all keep working with no knowledge that the
+  /// text was tapped rather than typed — which is the whole reason the answer
+  /// is a normal message and not a new kind of event.
+  Future<void> answerChoice({
+    required String messageId,
+    required String blockId,
+    required List<String> chosen,
+  }) async {
+    if (chosen.isEmpty) return;
+    final conversationId = _currentId;
+    if (conversationId == null) return;
+    _updateMessage(
+      conversationId,
+      messageId,
+      (m) => m.copyWith(
+        blocks: m.blocks
+            .map((b) =>
+                b is ChoiceBlock && b.id == blockId ? b.withChoice(chosen) : b)
+            .toList(),
+      ),
+    );
+    await sendMessage(chosen.join(', '));
+  }
+
   Future<void> sendMessage(
     String text, {
     StudioRequest? structuredRequest,

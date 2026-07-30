@@ -1,4 +1,5 @@
 import '../data/models/project.dart';
+import 'choice_parsing.dart';
 
 /// Budget for inlined project knowledge, in characters — roughly 4k tokens.
 /// Real providers get the same assembled prompt, so the budget applies
@@ -101,6 +102,8 @@ String assembleSystemPrompt({
     }
   }
 
+  buffer.write('\n\n$choiceInstruction');
+
   return buffer.toString();
 }
 
@@ -118,15 +121,6 @@ const String codeArtifactInstruction =
     'snippets, no splitting a file across several blocks. Keep any '
     'explanation outside the block, and keep it short.';
 
-/// Appended when the page being written should carry an image the user already
-/// generated in this conversation.
-///
-/// A generated image is a block in the transcript, not something sent back up
-/// with the next request, so the model genuinely cannot see it. Told nothing,
-/// it does the reasonable thing with what it knows: apologizes that it cannot
-/// embed a photo, invents a filename, draws an SVG stand-in, and asks the user
-/// to save a file next to a page that has no "next to". The app has the bytes
-/// and substitutes them — the model's job is only to say where they go.
 /// The audio counterpart. Without it the model reaches for the browser's
 /// speech-synthesis API and writes a page that reads the script aloud in a
 /// robot voice — instead of the recording the user just generated.
@@ -139,6 +133,15 @@ const String existingAudioInstruction =
     'filename, do not ask the user to save a file, and do not say you are '
     'unable to include the audio.';
 
+/// Appended when the page being written should carry an image the user already
+/// generated in this conversation.
+///
+/// A generated image is a block in the transcript, not something sent back up
+/// with the next request, so the model genuinely cannot see it. Told nothing,
+/// it does the reasonable thing with what it knows: apologizes that it cannot
+/// embed a photo, invents a filename, draws an SVG stand-in, and asks the user
+/// to save a file next to a page that has no "next to". The app has the bytes
+/// and substitutes them — the model's job is only to say where they go.
 const String existingImageInstruction =
     'The user already generated an image earlier in this conversation and '
     'wants it on this page. Write the <img> tag with src="{{shift:image}}" — '

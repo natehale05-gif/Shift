@@ -122,6 +122,13 @@ List<HistoryPart> _assistantParts(ChatMessage message) {
             'the side panel]'));
       // The model's own scratch and its tool chips are not worth replaying —
       // they are about how the last answer was produced, not what it was.
+      case ChoiceBlock(:final question, :final options, :final chosen):
+        // Both halves matter. Without the question the answer is a bare word
+        // with nothing to attach it to; without the options the model cannot
+        // tell a chosen answer from a typed one.
+        parts.add(HistoryText(chosen.isEmpty
+            ? '[asked: $question — offered ${options.join(", ")}]'
+            : '[asked: $question — the user chose ${chosen.join(", ")}]'));
       case ThinkingBlock():
       case ToolUseBlock():
         break;
