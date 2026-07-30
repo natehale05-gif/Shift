@@ -3,6 +3,7 @@ import '../data/models/studio_request.dart';
 import '../data/models/studio_type.dart';
 import '../features/artifacts/artifact_composition.dart' show ArtifactMediaKind;
 import '../features/artifacts/interactive/interactive_content.dart' show InteractiveKind;
+import 'conversation_media.dart' show GeneratedImage;
 import 'studio_composition.dart' show CompositionKind;
 
 /// What kind of turn this is, decided before anything is generated.
@@ -124,12 +125,20 @@ class StudioTurn extends TurnPlan {
   /// differently — see `findRevisionTarget`.
   final Artifact? reviseTarget;
 
+  /// An image the conversation already produced that this turn should put on
+  /// the page, rather than generating another one. Null on every other turn.
+  ///
+  /// Decided here so demo and live modes reuse the same picture the user is
+  /// looking at — see `existingImageForPage`.
+  final GeneratedImage? existingImage;
+
   const StudioTurn({
     this.structuredRequest,
     this.composeTarget,
     this.composeKind,
     this.contributors = const {},
     this.reviseTarget,
+    this.existingImage,
     required super.studio,
     required super.effectiveInput,
     required super.isAnsweringClarification,

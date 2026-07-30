@@ -1,3 +1,4 @@
+import 'conversation_media.dart';
 import 'studio_detection.dart';
 import '../data/models/studio_type.dart';
 import '../features/artifacts/artifact_composition.dart';
@@ -49,17 +50,31 @@ TurnPlan planTurn(TurnInput input) {
 
   final wantsBoth = plan.kind == CompositionKind.pageAssembly;
 
+  // "Now put this image in the website." The picture is already in the
+  // conversation, so the turn reuses those exact bytes. Without this the app
+  // either generated a second, different image or — with no page to splice
+  // into — left the model to write one, and a model cannot see a generated
+  // image, so it wrote a page pointing at a filename that does not exist.
+  final existingImage =
+      fresh ? existingImageForPage(conversation, userInput) : null;
+
   final studio = interactive != null
       ? StudioType.codeStudio
-      : wantsBoth
+      // Putting an existing picture somewhere is a page build, not an image
+      // request — the image half is already done. Keyword detection reads the
+      // word "image" and says Image Studio, which is how this turn ended up
+      // asking a provider for a second flower.
+      : existingImage != null
           ? StudioType.codeStudio
-          : isCopyFed(plan.kind)
-              ? copyFedHost(plan.kind)
-              : isMediaPair(plan.kind)
-                  ? mediaPairHost(plan.kind)
-                  : (structuredRequest?.studioType ??
-                      pending?.$1 ??
-                      StudioDetection.detectStudio(userInput));
+          : wantsBoth
+              ? StudioType.codeStudio
+              : isCopyFed(plan.kind)
+                  ? copyFedHost(plan.kind)
+                  : isMediaPair(plan.kind)
+                      ? mediaPairHost(plan.kind)
+                      : (structuredRequest?.studioType ??
+                          pending?.$1 ??
+                          StudioDetection.detectStudio(userInput));
 
   final effectiveInput =
       pending != null ? '${pending.$2} $userInput'.trim() : userInput;
@@ -150,6 +165,7 @@ TurnPlan planTurn(TurnInput input) {
     composeKind: isEdit ? plan.editKind : null,
     contributors: wantsBoth ? plan.contributors : const <StudioType>{},
     reviseTarget: reviseTarget,
+    existingImage: existingImage,
     studio: studio,
     effectiveInput: effectiveInput,
     isAnsweringClarification: answering,

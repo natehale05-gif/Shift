@@ -118,13 +118,36 @@ const String codeArtifactInstruction =
     'snippets, no splitting a file across several blocks. Keep any '
     'explanation outside the block, and keep it short.';
 
-/// [systemPrompt] with the code-artifact instruction appended when this turn
-/// is code-routed. Null and empty prompts are handled, since a turn with no
-/// personalization still needs the instruction.
-String? systemPromptForCodeTurn(String? systemPrompt, {required bool isCode}) {
+/// Appended when the page being written should carry an image the user already
+/// generated in this conversation.
+///
+/// A generated image is a block in the transcript, not something sent back up
+/// with the next request, so the model genuinely cannot see it. Told nothing,
+/// it does the reasonable thing with what it knows: apologizes that it cannot
+/// embed a photo, invents a filename, draws an SVG stand-in, and asks the user
+/// to save a file next to a page that has no "next to". The app has the bytes
+/// and substitutes them — the model's job is only to say where they go.
+const String existingImageInstruction =
+    'The user already generated an image earlier in this conversation and '
+    'wants it on this page. Write the <img> tag with src="{{shift:image}}" — '
+    'that exact placeholder — and style and place it as you see fit. The app '
+    'replaces the placeholder with the real image. Do not invent a filename, '
+    'do not ask the user to save a file, do not draw a substitute in SVG, and '
+    'do not say you are unable to include the image.';
+
+/// [systemPrompt] with the code-turn instructions appended. Null and empty
+/// prompts are handled, since a turn with no personalization still needs them.
+String? systemPromptForCodeTurn(
+  String? systemPrompt, {
+  required bool isCode,
+  bool hasGeneratedImage = false,
+}) {
   if (!isCode) return systemPrompt;
-  final base = systemPrompt?.trim() ?? '';
-  return base.isEmpty
-      ? codeArtifactInstruction
-      : '$base\n\n$codeArtifactInstruction';
+  final parts = [
+    if (systemPrompt != null && systemPrompt.trim().isNotEmpty)
+      systemPrompt.trim(),
+    codeArtifactInstruction,
+    if (hasGeneratedImage) existingImageInstruction,
+  ];
+  return parts.join('\n\n');
 }
