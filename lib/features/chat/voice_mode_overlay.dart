@@ -8,24 +8,28 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../../data/stores/conversation_store.dart';
 import '../voice/voice_mode_controller.dart';
+import '../../data/stores/api_keys_store.dart';
 
 /// Opens hands-free voice mode: you talk, it answers out loud, and it starts
 /// listening again. Everything said lands in the conversation as normal
 /// messages, so it can be continued by typing afterwards.
 Future<void> showVoiceModeOverlay(BuildContext context) {
   final conversations = context.read<ConversationStore>();
+  final keys = context.read<ApiKeysStore>();
   return showDialog(
     context: context,
     barrierDismissible: false,
     barrierColor: Colors.black.withValues(alpha: 0.92),
-    builder: (_) => _VoiceModeOverlay(conversations: conversations),
+    builder: (_) =>
+        _VoiceModeOverlay(conversations: conversations, keys: keys),
   );
 }
 
 class _VoiceModeOverlay extends StatefulWidget {
   final ConversationStore conversations;
+  final ApiKeysStore keys;
 
-  const _VoiceModeOverlay({required this.conversations});
+  const _VoiceModeOverlay({required this.conversations, required this.keys});
 
   @override
   State<_VoiceModeOverlay> createState() => _VoiceModeOverlayState();
@@ -34,7 +38,10 @@ class _VoiceModeOverlay extends StatefulWidget {
 class _VoiceModeOverlayState extends State<_VoiceModeOverlay>
     with SingleTickerProviderStateMixin {
   late final VoiceModeController _controller =
-      VoiceModeController(conversations: widget.conversations);
+      VoiceModeController(
+        conversations: widget.conversations,
+        keys: widget.keys,
+      );
   late final AnimationController _pulse = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 2200),

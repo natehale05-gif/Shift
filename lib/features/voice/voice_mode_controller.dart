@@ -5,6 +5,10 @@ import 'package:flutter/foundation.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/stores/conversation_store.dart';
 import 'speech_service.dart';
+import '../studios/media/audio_synth_service.dart';
+import '../../providers/clients/elevenlabs_client.dart';
+import '../../data/stores/api_keys_store.dart';
+import '../../core/platform/web_audio_player.dart';
 
 /// Where a hands-free turn is in its cycle.
 enum VoicePhase {
@@ -39,7 +43,19 @@ enum VoicePhase {
 class VoiceModeController extends ChangeNotifier {
   final ConversationStore conversations;
 
-  VoiceModeController({required this.conversations});
+  /// Keys and a voice client, when the app has them. Voice mode falls back to
+  /// the platform's own speech engine without them.
+  final ApiKeysStore? keys;
+  final ElevenLabsClient _elevenLabs;
+
+  VoiceModeController({
+    required this.conversations,
+    this.keys,
+    ElevenLabsClient? elevenLabsClient,
+  }) : _elevenLabs = elevenLabsClient ?? ElevenLabsClient();
+
+  WebAudioPlayer? _player;
+  StreamSubscription<void>? _playerEnded;
 
   VoicePhase phase = VoicePhase.idle;
 
@@ -92,6 +108,10 @@ class VoiceModeController extends ChangeNotifier {
     _speech = null;
     SpeechService.stop();
     TtsService.stopSpeaking();
+    _playerEnded?.cancel();
+    _playerEnded = null;
+    _player?.dispose();
+    _player = null;
     if (_storeListener != null) {
       conversations.removeListener(_storeListener!);
       _storeListener = null;
@@ -151,6 +171,37 @@ class VoiceModeController extends ChangeNotifier {
     _speakThenListen(last.displayText);
   }
 
+  /// Speaks with a real voice when one is keyed, and with the platform engine
+  /// otherwise.
+  ///
+  /// The platform engine is the reason voice mode was silent on iPhone:
+  /// Safari's `speechSynthesis` is gated behind a user gesture that a reply
+  /// arriving asynchronously does not have, and priming it only helps if the
+  /// browser honours the priming. Playing returned audio has no such rule —
+  /// it is the same path the voiceover cards already use, which do play.
+  Future<bool> _speakWithProvider(String spoken) async {
+    final store = keys;
+    if (store == null || !store.hasKey('elevenlabs')) return false;
+    try {
+      final pcm = await _elevenLabs.speak(
+          apiKey: store.keyFor('elevenlabs'), text: spoken);
+      if (pcm.isEmpty) return false;
+      final wav = AudioSynthService.wavFromPcm16(pcm,
+          sampleRate: ElevenLabsClient.sampleRate);
+      _player?.dispose();
+      _playerEnded?.cancel();
+      final player = WebAudioPlayer.fromWav(wav);
+      _player = player;
+      _playerEnded = player.onEnded.listen((_) {
+        if (_running && phase == VoicePhase.speaking) _listen();
+      });
+      await player.play();
+      return true;
+    } catch (_) {
+      return false; // fall through to the platform engine
+    }
+  }
+
   void _speakThenListen(String reply) {
     final spoken = speakableText(reply);
     if (spoken.isEmpty) {
@@ -158,7 +209,12 @@ class VoiceModeController extends ChangeNotifier {
       return;
     }
     _setPhase(VoicePhase.speaking);
-    TtsService.speak(spoken);
+    // A real voice first; the platform engine only if there is no voice key or
+    // the call fails.
+    _speakWithProvider(spoken).then((spokenByProvider) {
+      if (spokenByProvider || !_running) return;
+      TtsService.speak(spoken);
+    });
     // The TTS engines do not report completion uniformly across platforms, so
     // the pause is estimated from length rather than awaited. Reading too
     // early would talk over the answer; the estimate errs long.
