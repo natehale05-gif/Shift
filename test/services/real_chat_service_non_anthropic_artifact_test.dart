@@ -21,6 +21,19 @@ const _pageHtml = '<!DOCTYPE html>\n'
     '</body>\n'
     '</html>';
 
+/// A page whose headline reflects the request, the way a real model's would.
+///
+/// The fixture used to return one canned page for every prompt. That was
+/// invisible while titles came from the request, and became visible the moment
+/// they came from the page — two different requests producing byte-identical
+/// pages is not something a model does.
+String _pageFor(String prompt) {
+  final subject = prompt.split(' ').last;
+  return '<!DOCTYPE html>\n<html>\n<head><title>The $subject</title></head>\n'
+      '<body>\n<h1>The $subject</h1>\n'
+      '<p>Not written by Claude.</p>\n</body>\n</html>';
+}
+
 class _ForcedRouter extends ModelRouter {
   final ChatRoute _route;
   _ForcedRouter([this._route = ChatRoute.code]);
@@ -44,7 +57,7 @@ class _FakeGeminiClient extends GeminiClient {
   /// what is asked cannot tell "the route gate held" apart from "the reply
   /// contained nothing worth extracting".
   final String reply;
-  _FakeGeminiClient({this.reply = 'Sure:\n\n```html\n$_pageHtml\n```'});
+  _FakeGeminiClient({this.reply = ''});
 
   @override
   Stream<ChatEvent> streamChat({
@@ -57,7 +70,9 @@ class _FakeGeminiClient extends GeminiClient {
     bool grounding = false,
   }) async* {
     callCount++;
-    yield MessageDelta(reply);
+    yield MessageDelta(reply.isEmpty
+        ? 'Sure:\n\n```html\n${_pageFor(userInput)}\n```'
+        : reply);
     yield const MessageComplete();
   }
 }
@@ -66,7 +81,7 @@ class _FakeOpenAiClient extends OpenAiCompatibleClient {
   int callCount = 0;
 
   final String reply;
-  _FakeOpenAiClient({this.reply = 'Sure:\n\n```html\n$_pageHtml\n```'});
+  _FakeOpenAiClient({this.reply = ''});
 
   @override
   Stream<ChatEvent> streamChat({
@@ -81,7 +96,9 @@ class _FakeOpenAiClient extends OpenAiCompatibleClient {
     Map<String, String> extraHeaders = const {},
   }) async* {
     callCount++;
-    yield MessageDelta(reply);
+    yield MessageDelta(reply.isEmpty
+        ? 'Sure:\n\n```html\n${_pageFor(userInput)}\n```'
+        : reply);
     yield const MessageComplete();
   }
 }
@@ -239,7 +256,7 @@ void main() {
 
       final created = events.whereType<ArtifactCreated>().single;
       expect(created.artifact.kind, ArtifactKind.html);
-      expect(created.artifact.latest.content, contains('Northbound'));
+      expect(created.artifact.latest.content, contains('<!DOCTYPE html>'));
     });
 
     test('a code fragment in a chat answer stays in the chat', () async {

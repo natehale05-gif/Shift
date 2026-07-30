@@ -74,3 +74,77 @@ String titleFromRequest(String userInput, {String fallback = 'Untitled page'}) {
 
   return title[0].toUpperCase() + title.substring(1);
 }
+
+/// A title read out of what was actually built, falling back to the request.
+///
+/// The request is a poor name for the thing it asked for: "build me a landing
+/// page for my bakery" names the *errand*, not the deliverable, and two pages
+/// for the same bakery get near-identical names. The finished page already
+/// carries a better one — its `<title>`, or its headline — chosen by whoever
+/// wrote it with the whole page in view.
+///
+/// Pure, so the rule is the same in both backends and testable without
+/// generating anything.
+String titleFromArtifact(
+  String content, {
+  String? language,
+  required String request,
+}) {
+  final fromContent = _htmlTitle(content) ?? _codeTitle(content, language);
+  if (fromContent != null) return fromContent;
+  return titleFromRequest(request);
+}
+
+/// `<title>` first, then the first `<h1>` — a page's own name for itself.
+String? _htmlTitle(String content) {
+  for (final pattern in [
+    RegExp(r'<title[^>]*>([\s\S]*?)</title>', caseSensitive: false),
+    RegExp(r'<h1[^>]*>([\s\S]*?)</h1>', caseSensitive: false),
+  ]) {
+    final match = pattern.firstMatch(content);
+    if (match == null) continue;
+    // Strip any nested markup — a headline is often wrapped in a span.
+    final text = match
+        .group(1)!
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (_usable(text)) return _cap(text);
+  }
+  return null;
+}
+
+/// For code: the thing it declares. A component called `PricingTable` is a
+/// better name than the sentence that asked for one.
+String? _codeTitle(String content, String? language) {
+  final match = RegExp(
+    r'\b(?:export\s+default\s+)?(?:class|function|const|def|struct|interface)'
+    r'\s+([A-Za-z_][A-Za-z0-9_]*)',
+  ).firstMatch(content);
+  final name = match?.group(1);
+  if (name == null || name.length < 3) return null;
+  if (const {'main', 'app', 'index', 'test', 'init'}.contains(name.toLowerCase())) {
+    return null;
+  }
+  // CamelCase and snake_case both become words.
+  final words = name
+      .replaceAll('_', ' ')
+      .replaceAllMapped(RegExp(r'(?<=[a-z0-9])(?=[A-Z])'), (_) => ' ')
+      .trim();
+  final suffix = language == null || language.isEmpty ? '' : ' ($language)';
+  return '${_cap(words)}$suffix';
+}
+
+/// Rejects the names that are worse than the request: boilerplate a template
+/// left behind, and anything too long or too short to read as a name.
+bool _usable(String text) {
+  if (text.length < 3 || text.length > 60) return false;
+  const boilerplate = {
+    'document', 'untitled', 'untitled document', 'title', 'page', 'home',
+    'index', 'my website', 'website', 'hello world', 'new document',
+  };
+  return !boilerplate.contains(text.toLowerCase());
+}
+
+String _cap(String text) =>
+    text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
