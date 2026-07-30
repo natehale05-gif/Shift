@@ -26,6 +26,43 @@ trap cleanup EXIT
 
 psql -h "$HOST" -p "$PORT" -U "$USER" -d postgres -q -c "create database \"$DB\""
 
+# Reproduce the host's starting state before applying anything.
+#
+# This is not decoration. Supabase creates the three roles *and* ships
+#
+#   alter default privileges in schema public
+#     grant all on tables to anon, authenticated, service_role;
+#
+# so every table a migration creates arrives with full privileges already
+# granted to both client roles. Without this block the local database is more
+# restrictive than production, and a migration that fails to revoke those grants
+# passes here and ships a hole — which is exactly what happened: the
+# column-level grant protecting `provider_keys.ciphertext` was silently
+# overridden on the real project while every local assertion passed.
+#
+# The rule this encodes: a test environment that is *safer* than production
+# tests nothing.
+psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -q -v ON_ERROR_STOP=1 <<'SQL'
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'anon') then
+    create role anon nologin noinherit;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'authenticated') then
+    create role authenticated nologin noinherit;
+  end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then
+    create role service_role nologin noinherit bypassrls;
+  end if;
+end
+$$;
+grant usage on schema public to anon, authenticated, service_role;
+alter default privileges in schema public
+  grant all on tables to anon, authenticated, service_role;
+alter default privileges in schema public
+  grant all on sequences to anon, authenticated, service_role;
+SQL
+
 for migration in "$root"/supabase/migrations/*.sql; do
   echo "applying $(basename "$migration")"
   psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -q -v ON_ERROR_STOP=1 \
@@ -57,3 +94,56 @@ if [ -n "$missing" ]; then
   exit 1
 fi
 echo "every table forces row security"
+
+# The privilege surface, asserted as a whole rather than one column at a time.
+#
+# Row security is the first layer and these grants are the second, and the
+# second is the one that can be switched off from outside the file that
+# declares it. Naming every privilege a client role is allowed to hold means a
+# grant that reappears — from a host default, or from a later migration
+# forgetting to revoke — fails here instead of shipping.
+unexpected=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(format('%s:%s:%s', grantee, table_name, privilege_type), ', ')
+  from information_schema.role_table_grants
+  where table_schema = 'public'
+    and grantee in ('anon', 'authenticated')
+    and (grantee, table_name, privilege_type) not in (
+      ('authenticated', 'profiles', 'SELECT'),
+      ('authenticated', 'profiles', 'UPDATE'),
+      ('authenticated', 'provider_keys', 'SELECT'),
+      ('authenticated', 'provider_keys', 'DELETE'),
+      ('authenticated', 'provider_key_metadata', 'SELECT'),
+      ('authenticated', 'subscriptions', 'SELECT'),
+      ('authenticated', 'usage_events', 'SELECT'),
+      ('authenticated', 'connections', 'SELECT'),
+      ('authenticated', 'connections', 'DELETE'),
+      ('authenticated', 'scheduled_tasks', 'SELECT'),
+      ('authenticated', 'scheduled_tasks', 'INSERT'),
+      ('authenticated', 'scheduled_tasks', 'UPDATE'),
+      ('authenticated', 'scheduled_tasks', 'DELETE'),
+      ('authenticated', 'workspaces', 'SELECT'),
+      ('authenticated', 'workspaces', 'DELETE')
+    )")
+
+if [ -n "$unexpected" ]; then
+  echo "FAIL: privileges a client role should not hold: $unexpected" >&2
+  exit 1
+fi
+echo "client roles hold only their intended privileges"
+
+# `provider_keys` and `connections` appear above with table-wide SELECT because
+# information_schema reports a column grant that way. What matters is which
+# columns, so check those directly — this is the assertion the host's default
+# privileges defeated.
+secret=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(format('%s.%s', table_name, column_name), ', ')
+  from information_schema.column_privileges
+  where table_schema = 'public'
+    and grantee in ('anon', 'authenticated')
+    and column_name in ('ciphertext', 'access_ciphertext', 'refresh_ciphertext')")
+
+if [ -n "$secret" ]; then
+  echo "FAIL: a client role can read a secret column: $secret" >&2
+  exit 1
+fi
+echo "no client role can read a ciphertext column"
