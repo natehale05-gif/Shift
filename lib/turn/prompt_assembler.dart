@@ -127,6 +127,18 @@ const String codeArtifactInstruction =
 /// embed a photo, invents a filename, draws an SVG stand-in, and asks the user
 /// to save a file next to a page that has no "next to". The app has the bytes
 /// and substitutes them — the model's job is only to say where they go.
+/// The audio counterpart. Without it the model reaches for the browser's
+/// speech-synthesis API and writes a page that reads the script aloud in a
+/// robot voice — instead of the recording the user just generated.
+const String existingAudioInstruction =
+    'The user already generated audio earlier in this conversation and wants '
+    'it on this page. Write an <audio controls> element with '
+    'src="{{shift:audio}}" — that exact placeholder — and lay the page out '
+    'around it. The app replaces the placeholder with the real recording. Do '
+    'not use speechSynthesis or any text-to-speech API, do not invent a '
+    'filename, do not ask the user to save a file, and do not say you are '
+    'unable to include the audio.';
+
 const String existingImageInstruction =
     'The user already generated an image earlier in this conversation and '
     'wants it on this page. Write the <img> tag with src="{{shift:image}}" — '
@@ -141,6 +153,7 @@ String? systemPromptForCodeTurn(
   String? systemPrompt, {
   required bool isCode,
   bool hasGeneratedImage = false,
+  bool hasGeneratedAudio = false,
 }) {
   if (!isCode) return systemPrompt;
   final parts = [
@@ -148,6 +161,7 @@ String? systemPromptForCodeTurn(
       systemPrompt.trim(),
     codeArtifactInstruction,
     if (hasGeneratedImage) existingImageInstruction,
+    if (hasGeneratedAudio) existingAudioInstruction,
   ];
   return parts.join('\n\n');
 }

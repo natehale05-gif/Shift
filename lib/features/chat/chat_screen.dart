@@ -19,6 +19,7 @@ import 'composer/chat_input_bar.dart';
 import 'message/message_view.dart';
 import '../../core/widgets/glass_app_bar.dart';
 import '../../core/shell/home_menu_button.dart';
+import 'export_chooser.dart';
 
 /// The message column and composer share this width so the conversation
 /// reads as a single centered prose column, like the Claude app.
@@ -258,18 +259,10 @@ class _ChatHeaderMenu extends StatelessWidget {
             switch (action) {
               case 'rename':
                 _rename(context, convo);
-              case 'pin':
-                store.togglePin(convo.id);
               case 'star':
                 store.toggleStar(convo.id);
-              case 'archive':
-                store.toggleArchive(convo.id);
-              case 'export_md':
-                ConversationExport.downloadMarkdown(convo);
-              case 'export_json':
-                ConversationExport.downloadJson(convo);
-              case 'export_pdf':
-                ConversationExport.exportPdf(convo);
+              case 'export':
+                showExportChooser(context, convo);
               case 'delete':
                 store.deleteConversation(convo.id);
             }
@@ -277,29 +270,13 @@ class _ChatHeaderMenu extends StatelessWidget {
           itemBuilder: (context) => [
             const PopupMenuItem(value: 'rename', child: Text('Rename')),
             PopupMenuItem(
-              value: 'pin',
-              child: Text(convo.pinned ? 'Unpin' : 'Pin'),
-            ),
-            PopupMenuItem(
               value: 'star',
               child: Text(convo.starred ? 'Unstar' : 'Star'),
             ),
-            PopupMenuItem(
-              value: 'archive',
-              child: Text(convo.archived ? 'Unarchive' : 'Archive'),
-            ),
-            const PopupMenuItem(
-              value: 'export_md',
-              child: Text('Export as Markdown'),
-            ),
-            const PopupMenuItem(
-              value: 'export_json',
-              child: Text('Export as JSON'),
-            ),
-            const PopupMenuItem(
-              value: 'export_pdf',
-              child: Text('Export as PDF'),
-            ),
+            // One entry instead of three near-identical ones. The format is a
+            // detail of the export, not three different things to do, and
+            // three of the seven items in this menu were the same verb.
+            const PopupMenuItem(value: 'export', child: Text('Export…')),
             const PopupMenuDivider(),
             const PopupMenuItem(value: 'delete', child: Text('Delete')),
           ],

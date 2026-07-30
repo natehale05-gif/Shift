@@ -5,8 +5,11 @@ import '../data/models/conversation.dart';
 import '../data/models/message_block.dart';
 import '../data/models/studio_result.dart';
 
-/// An image this conversation has already produced, described well enough for
-/// either backend to get the bytes back.
+/// What kind of thing the conversation produced.
+enum GeneratedMediaKind { image, audio }
+
+/// A piece of media this conversation has already produced, described well
+/// enough for either backend to get the bytes back.
 ///
 /// The three fields are three different lifetimes of the same picture:
 /// [pngBytes] is the copy still in memory from the session that made it,
@@ -17,12 +20,14 @@ class GeneratedImage {
   final Uint8List? pngBytes;
   final String? assetId;
   final int? seed;
+  final GeneratedMediaKind kind;
 
   const GeneratedImage({
     required this.alt,
     this.pngBytes,
     this.assetId,
     this.seed,
+    this.kind = GeneratedMediaKind.image,
   });
 }
 
@@ -48,6 +53,19 @@ GeneratedImage? latestGeneratedImage(Conversation conversation) {
     if (result is ImageResult) {
       return GeneratedImage(alt: result.prompt, seed: result.seed);
     }
+    // A voiceover or a score is the same situation as a picture: the user is
+    // looking at something the app made and wants it on the page. Left to
+    // itself the model wrote a page that reads the script with the browser's
+    // speech engine, which is not the voice they just paid for.
+    if (result is AudioResult) {
+      return GeneratedImage(
+        alt: result.title,
+        pngBytes: result.audioBytes,
+        assetId: result.audioAssetId,
+        seed: result.audioBytes == null ? result.seed : null,
+        kind: GeneratedMediaKind.audio,
+      );
+    }
   }
   return null;
 }
@@ -62,7 +80,9 @@ GeneratedImage? latestGeneratedImage(Conversation conversation) {
 final _existingImageReference = RegExp(
     r'\b(this|that|these|those|the)\s+(\w+\s+){0,3}'
     r'(images?|photos?|pictures?|logos?|graphics?|illustrations?|'
-    r'artworks?|renders?|renderings?)\b');
+    r'artworks?|renders?|renderings?|'
+    r'voiceovers?|voice-overs?|narrations?|recordings?|audios?|clips?|'
+    r'tracks?|songs?|soundtracks?)\b');
 
 /// The same request made with a bare pronoun: "put **it** in a website",
 /// "turn it into a landing page", "a site featuring it".

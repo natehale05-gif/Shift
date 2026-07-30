@@ -322,8 +322,11 @@ class RealChatService implements ChatService {
           final target = turn.composeTarget!;
           controller.add(RoutingDetected(StudioType.codeStudio));
           controller.add(ArtifactUpdated(target.withNewVersion(
-              applyGeneratedImage(target.latest.content, bytes,
-                  altText: existingImage.alt),
+              existingImage.kind == GeneratedMediaKind.audio
+                  ? applyGeneratedAudio(target.latest.content, bytes,
+                      label: existingImage.alt)
+                  : applyGeneratedImage(target.latest.content, bytes,
+                      altText: existingImage.alt),
               DateTime.now())));
           controller.add(MessageDelta(
               'Added it to "${target.title}" as a new version.'));
@@ -1049,7 +1052,10 @@ class RealChatService implements ChatService {
       attachments: attachments,
       systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
           isCode: route == ChatRoute.code,
-          hasGeneratedImage: existingImage != null),
+          hasGeneratedImage:
+              existingImage?.kind == GeneratedMediaKind.image,
+          hasGeneratedAudio:
+              existingImage?.kind == GeneratedMediaKind.audio),
       grounding: options.webSearch || route == ChatRoute.webSearch,
     );
     await _streamText(
@@ -1092,7 +1098,10 @@ class RealChatService implements ChatService {
       attachments: attachments,
       systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
           isCode: route == ChatRoute.code,
-          hasGeneratedImage: existingImage != null),
+          hasGeneratedImage:
+              existingImage?.kind == GeneratedMediaKind.image,
+          hasGeneratedAudio:
+              existingImage?.kind == GeneratedMediaKind.audio),
       extraHeaders: provider.extraHeaders,
     );
     await _streamText(
@@ -1272,7 +1281,10 @@ class RealChatService implements ChatService {
       attachments: attachments,
       systemPrompt: systemPromptForCodeTurn(options.systemPrompt,
           isCode: route == ChatRoute.code,
-          hasGeneratedImage: existingImage != null),
+          hasGeneratedImage:
+              existingImage?.kind == GeneratedMediaKind.image,
+          hasGeneratedAudio:
+              existingImage?.kind == GeneratedMediaKind.audio),
       tools: tools,
       extendedThinking: options.extendedThinking,
       maxTokens: route == ChatRoute.code
@@ -1403,8 +1415,11 @@ class RealChatService implements ChatService {
                 // would offer to step back to a page the user never saw.
                 artifact = _withContent(
                     artifact,
-                    applyGeneratedImage(artifact.latest.content, bytes,
-                        altText: existingImage.alt));
+                    existingImage.kind == GeneratedMediaKind.audio
+                        ? applyGeneratedAudio(artifact.latest.content, bytes,
+                            label: existingImage.alt)
+                        : applyGeneratedImage(artifact.latest.content, bytes,
+                            altText: existingImage.alt));
               }
             }
             if (pageContributors.isNotEmpty &&
@@ -1519,7 +1534,9 @@ class RealChatService implements ChatService {
       if (bytes != null) return bytes;
     }
     final seed = image.seed;
-    if (seed != null) return rasterizeGradientArt(seed: seed);
+    if (seed != null && image.kind == GeneratedMediaKind.image) {
+      return rasterizeGradientArt(seed: seed);
+    }
     return null;
   }
 
