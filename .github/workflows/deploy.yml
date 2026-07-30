@@ -49,19 +49,29 @@ jobs:
       # from gstatic, so the app boots even where that CDN is blocked or slow —
       # consistent with the app's CDN-free design (bundled fonts + mermaid).
       - name: Build web
-        # SHIFT_SUPABASE_URL and SHIFT_SUPABASE_ANON_KEY are public by
-        # design — they ship inside the downloaded app, and row security is
-        # what protects the data, not their secrecy. They are repository
-        # *variables* rather than secrets for exactly that reason: a secret
-        # here would imply a protection it does not provide, and GitHub masks
-        # secrets in logs, which makes a misconfigured build harder to debug
-        # for no gain. With them unset the app builds on NoBackend and works
-        # signed out, which is what the public demo does.
+        # The project's URL and anon key now live in lib/backend/
+        # backend_config.dart, so an ordinary build is configured and this step
+        # only has to get out of the way.
+        #
+        # It did not, before: it passed the repository variables
+        # unconditionally, and they had never been set — so every deploy
+        # compiled `SHIFT_SUPABASE_URL=""`, which is not "no opinion", it is
+        # "there is no backend". The app hid its account section exactly as it
+        # is supposed to when unconfigured, and sign-in was missing from the
+        # site with nothing to say why. An empty override is the one value that
+        # must never be passed by accident, so it is now passed only when both
+        # variables are actually set — which is still how a staging project or
+        # a self-hosted stack would be pointed at.
         run: |
+          defines=""
+          if [ -n "${{ vars.SHIFT_SUPABASE_URL }}" ] \
+            && [ -n "${{ vars.SHIFT_SUPABASE_ANON_KEY }}" ]; then
+            defines="--dart-define=SHIFT_SUPABASE_URL=${{ vars.SHIFT_SUPABASE_URL }}"
+            defines="$defines --dart-define=SHIFT_SUPABASE_ANON_KEY=${{ vars.SHIFT_SUPABASE_ANON_KEY }}"
+            echo "Overriding the built-in project with the repository variables."
+          fi
           flutter build web --release --no-web-resources-cdn \
-            --base-href "/${{ github.event.repository.name }}/" \
-            --dart-define=SHIFT_SUPABASE_URL="${{ vars.SHIFT_SUPABASE_URL }}" \
-            --dart-define=SHIFT_SUPABASE_ANON_KEY="${{ vars.SHIFT_SUPABASE_ANON_KEY }}"
+            --base-href "/${{ github.event.repository.name }}/" $defines
 
       # Belt-and-suspenders SPA fallback. The app itself never changes the
       # browser URL (single-route IndexedStack navigation), so this normally

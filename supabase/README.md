@@ -118,7 +118,16 @@ Nothing secret belongs in this repository or in a chat message. `.env.example`
 lists **names only**.
 
 - The Supabase project URL and anon key are public by design and ship in the
-  client.
+  client — so they are **committed**, in `lib/backend/backend_config.dart`,
+  rather than injected at build time. Injection was tried and failed in the
+  worst way available: the repository variables were never set, every deploy
+  compiled an empty URL, and the app shipped on `NoBackend` with its account
+  section correctly and silently hidden. Sign-in was missing from the live site
+  for a release and no check failed, because none existed. There is one now
+  (`test/backend/backend_config_test.dart`), asserting both that a build has a
+  backend and that the committed key is an `anon` token and not something with
+  `bypassrls`. A `--dart-define` still overrides, which is how a staging or
+  self-hosted project is pointed at.
 - The **service-role key**, the **KMS key id**, and the **Stripe keys** go into
   GitHub Actions secrets and the Supabase dashboard directly.
 - Anything pasted into a conversation is treated as compromised and rotated.
