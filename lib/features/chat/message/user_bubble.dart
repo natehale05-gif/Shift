@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 /// text, image, and artifact blocks — with a hover action row underneath.
 import 'attachment_preview_dialog.dart';
 import 'user_branch_nav.dart';
+import '../../../core/theme/tap_targets.dart';
 
 class UserBubble extends StatefulWidget {
   final ChatMessage message;
@@ -133,7 +134,7 @@ class _UserBubbleState extends State<UserBubble> {
                         attachment.name,
                         style: theme.textTheme.labelSmall,
                       ),
-                      visualDensity: VisualDensity.compact,
+                      visualDensity: touchSafeDensity,
                       onPressed: () =>
                           _previewAttachment(context, attachment),
                     ),
@@ -150,7 +151,7 @@ class _UserBubbleState extends State<UserBubble> {
                 child: IconButton(
                   tooltip: 'Edit & resend',
                   iconSize: 15,
-                  visualDensity: VisualDensity.compact,
+                  visualDensity: touchSafeDensity,
                   color: colors.textSecondary,
                   icon: const Icon(Icons.edit_outlined),
                   onPressed: _edit,

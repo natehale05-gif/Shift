@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/tap_targets.dart';
 
 /// Claude-style message layout: user turns are compact right-aligned bubbles;
 /// assistant turns are open prose — an ordered sequence of thinking, tool,
@@ -25,7 +26,7 @@ class ActionIcon extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       iconSize: 15,
-      visualDensity: VisualDensity.compact,
+      visualDensity: touchSafeDensity,
       color: color ?? colors.textSecondary,
       icon: Icon(icon),
       onPressed: onPressed,
