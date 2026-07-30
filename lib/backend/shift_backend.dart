@@ -174,13 +174,42 @@ enum BackendProblem {
 
 class BackendException implements Exception {
   final BackendProblem problem;
+
+  /// Shown to the user. A sentence, about what happened and what to do — never
+  /// an exception's `toString()`.
+  ///
+  /// The distinction is not pedantry: the first version of this leaked
+  /// `ClientException: Failed to fetch, uri=https://[project].supabase.co/
+  /// auth/v1/token?grant_type=password` into a sign-in form, which tells the
+  /// person who typed a password nothing they can act on and tells anyone
+  /// reading over their shoulder the project's address.
   final String message;
 
-  const BackendException(this.problem, this.message);
+  /// The underlying failure, for logs. Never rendered.
+  final String? detail;
+
+  const BackendException(this.problem, this.message, {this.detail});
 
   @override
-  String toString() => 'BackendException($problem): $message';
+  String toString() =>
+      'BackendException($problem): $message${detail == null ? '' : ' [$detail]'}';
 }
+
+/// The human sentence for a problem, used wherever the server did not supply
+/// one of its own.
+///
+/// Kept beside the enum so adding a member forces a decision about what the
+/// user is told, rather than leaving it to whichever call site notices.
+String defaultMessageFor(BackendProblem problem) => switch (problem) {
+      BackendProblem.notConfigured =>
+        'This build has no server behind it. Keys stay on this device.',
+      BackendProblem.notSignedIn => 'Sign in to do that.',
+      BackendProblem.credentials => 'That email and password did not match.',
+      BackendProblem.overLimit =>
+        'You have used everything your plan covers this month.',
+      BackendProblem.unavailable =>
+        'Could not reach the server. Check your connection and try again.',
+    };
 
 /// Everything the app asks of a server.
 ///

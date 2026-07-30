@@ -118,6 +118,49 @@ void main() {
       backend.dispose();
     });
 
+    test('a network failure is reported as a sentence, never as the raw '
+        'exception', () async {
+      // Caught by running it: this displayed
+      //   ClientException: Failed to fetch, uri=https://<project>.supabase.co
+      //     /auth/v1/token?grant_type=password
+      // inside the sign-in form — meaningless to the person who typed a
+      // password, and it prints the project's address on screen. The detail
+      // belongs in the log, not in the message.
+      final backend = _backend(MockClient((_) async {
+        throw const SocketExceptionStub();
+      }));
+
+      try {
+        await backend.signIn(email: 'a@test', password: 'pw');
+        fail('should have thrown');
+      } on BackendException catch (e) {
+        expect(e.message, isNot(contains('Exception')));
+        expect(e.message, isNot(contains('http')));
+        expect(e.message, isNot(contains('uri=')));
+        expect(e.message, contains('Could not reach the server'));
+        expect(e.detail, isNotNull,
+            reason: 'the cause is kept, just not shown');
+      }
+      backend.dispose();
+    });
+
+    test('a server error with no body still says something actionable',
+        () async {
+      // A bare "Something went wrong (503)" tells the user nothing to do.
+      final backend = _backend(MockClient((_) async => http.Response('', 503)));
+
+      try {
+        await backend.signIn(email: 'a@test', password: 'pw');
+        fail('should have thrown');
+      } on BackendException catch (e) {
+        expect(e.problem, BackendProblem.unavailable);
+        expect(e.message, contains('try again'));
+        expect(e.message, isNot(contains('503')));
+        expect(e.detail, contains('503'));
+      }
+      backend.dispose();
+    });
+
     test('a sign-up needing email confirmation says so instead of looking '
         'like a failure', () async {
       // The project returns a user and no token. Reporting "something went

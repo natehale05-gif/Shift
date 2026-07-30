@@ -49,7 +49,19 @@ jobs:
       # from gstatic, so the app boots even where that CDN is blocked or slow —
       # consistent with the app's CDN-free design (bundled fonts + mermaid).
       - name: Build web
-        run: flutter build web --release --no-web-resources-cdn --base-href "/${{ github.event.repository.name }}/"
+        # SHIFT_SUPABASE_URL and SHIFT_SUPABASE_ANON_KEY are public by
+        # design — they ship inside the downloaded app, and row security is
+        # what protects the data, not their secrecy. They are repository
+        # *variables* rather than secrets for exactly that reason: a secret
+        # here would imply a protection it does not provide, and GitHub masks
+        # secrets in logs, which makes a misconfigured build harder to debug
+        # for no gain. With them unset the app builds on NoBackend and works
+        # signed out, which is what the public demo does.
+        run: |
+          flutter build web --release --no-web-resources-cdn \
+            --base-href "/${{ github.event.repository.name }}/" \
+            --dart-define=SHIFT_SUPABASE_URL="${{ vars.SHIFT_SUPABASE_URL }}" \
+            --dart-define=SHIFT_SUPABASE_ANON_KEY="${{ vars.SHIFT_SUPABASE_ANON_KEY }}"
 
       # Belt-and-suspenders SPA fallback. The app itself never changes the
       # browser URL (single-route IndexedStack navigation), so this normally

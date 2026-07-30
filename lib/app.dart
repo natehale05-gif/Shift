@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'backend/backend_config.dart';
+import 'backend/no_backend.dart';
+import 'backend/shift_backend.dart';
+import 'backend/supabase_backend.dart';
 import 'core/shell/home_shell.dart';
 import 'features/memory/memory_service.dart';
 import 'turn/backends/mock_backend.dart';
 import 'data/persistence/persistence_service.dart';
 import 'turn/backends/live_backend.dart';
+import 'data/stores/account_store.dart';
 import 'data/stores/api_keys_store.dart';
 import 'data/stores/app_settings_store.dart';
 import 'core/state/artifact_panel_store.dart';
@@ -38,6 +43,8 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
   late final StylesStore _stylesStore;
   late final UsageStore _usageStore;
   late final UpdateStore _updateStore;
+  late final ShiftBackend _backend;
+  late final AccountStore _accountStore;
 
   @override
   void initState() {
@@ -79,6 +86,33 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
     // newer release once the first frame is up — never on the boot path.
     _updateStore = UpdateStore(persistence: _persistence);
     _updateStore.load().then((_) => _updateStore.checkIfDue());
+
+    // The one place that knows which backend is in use. Everything above this
+    // line talks to `ShiftBackend` and cannot tell — enforced by
+    // `tool/scan_backend_boundary.py`, which allows the concrete names only
+    // here.
+    //
+    // No configuration compiled in means `NoBackend`, which is not a failure
+    // state: the app runs on keys kept on the device exactly as it always has,
+    // and the public demo has no account at all.
+    final config = BackendConfig.fromEnvironment();
+    _backend = config == null
+        ? NoBackend()
+        : SupabaseBackend(
+            config: config,
+            loadStoredSession: () async =>
+                ShiftSession.fromJson(await _persistence.loadSession()),
+            onSessionChanged: (session) =>
+                _persistence.saveSession(session?.toJson()),
+          );
+    _accountStore =
+        AccountStore(backend: _backend, persistence: _persistence)..restore();
+  }
+
+  @override
+  void dispose() {
+    _backend.dispose();
+    super.dispose();
   }
 
   @override
@@ -100,6 +134,7 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
         ChangeNotifierProvider.value(value: _usageStore),
         ChangeNotifierProvider.value(value: _apiKeysStore),
         ChangeNotifierProvider.value(value: _updateStore),
+        ChangeNotifierProvider.value(value: _accountStore),
       ],
       child: Consumer<AppSettingsStore>(
         builder: (context, settings, _) {
