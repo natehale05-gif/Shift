@@ -170,8 +170,35 @@ class MockChatService implements ChatService {
     Artifact? reviseTarget,
     GeneratedImage? existingImage,
   ) async {
+    // Whether this turn is going to ask rather than generate. Decided up
+    // front because it changes how the reply opens: "Here's the image you
+    // asked for:" followed by a question is a promise the turn does not keep.
+    final asking = studio != StudioType.middleware &&
+        structuredRequest == null &&
+        !isAnsweringClarification &&
+        composeTarget == null &&
+        pageContributors.isEmpty
+        ? StudioResponseBank.clarifyingQuestion(studio, userInput)
+        : null;
+
     final contributorNames =
         pageContributors.map((s) => s.displayName).toList();
+    if (asking != null) {
+      await _streamText(controller, asking);
+      // The half of the question with a known answer set is offered as
+      // options rather than asked in prose — a tap instead of a keyboard.
+      final choice = StudioResponseBank.clarifyingChoice(studio);
+      if (choice != null) {
+        controller.add(ChoiceOffered(
+          id: _uuid.v4(),
+          question: choice.question,
+          options: choice.options,
+          multiSelect: choice.multiSelect,
+        ));
+      }
+      return;
+    }
+
     if (pageContributors.isNotEmpty) {
       await _streamText(controller,
           StudioResponseBank.pageAssemblyIntro(userInput, contributorNames));
@@ -190,20 +217,6 @@ class MockChatService implements ChatService {
     }
 
     if (studio == StudioType.middleware) return;
-
-    // Ask before guessing, like Claude does — but only once per request;
-    // a reply to our own question always proceeds straight to generating.
-    // A compose-into-artifact request ("add a video to the website") already
-    // carries enough intent, so it skips the question and embeds directly.
-    if (structuredRequest == null &&
-        !isAnsweringClarification &&
-        composeTarget == null) {
-      final question = StudioResponseBank.clarifyingQuestion(studio, userInput);
-      if (question != null) {
-        await _streamText(controller, '\n\n$question');
-        return;
-      }
-    }
 
     await _delay(500, 1100);
     final result = structuredRequest != null

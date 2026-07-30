@@ -4,6 +4,7 @@ import '../../data/models/citation.dart';
 import '../../data/models/studio_result.dart';
 import '../../data/models/studio_request.dart';
 import '../../data/models/studio_type.dart';
+import '../../turn/choice_parsing.dart';
 import '../artifacts/artifact_composition.dart';
 import 'brand_pack/brand_pack_service.dart';
 import 'deck/deck_service.dart';
@@ -88,55 +89,99 @@ class StudioResponseBank {
     final words = _wordCount(input);
     return switch (studio) {
       StudioType.imageStudio => words < 6
-          ? "Happy to create that — a couple quick things first: what's "
-              'the subject or brand, and any style or color preferences '
-              '(minimal, playful, bold, a specific palette)?'
+          ? "Happy to create that — what's the subject or brand?"
           : null,
       StudioType.videoStudio => words < 6
           ? "Happy to put that together — what's it for (an ad, a demo, "
-              'a personal clip), and about how long should it run?'
+              'a personal clip)?'
           : null,
       StudioType.voiceAvatarStudio => words < 8
-          ? 'I can do that — what should the voiceover actually say, and '
-              'is there a tone or specific voice you have in mind?'
+          ? 'I can do that — what should the voiceover actually say?'
           : null,
       StudioType.musicStudio => words < 5
-          ? 'Sure thing — what mood or genre are you thinking, and '
-              'roughly how long should the track run?'
+          ? 'Sure thing — roughly how long should the track run?'
           : null,
       StudioType.copyScriptsStudio => words < 6
           ? "Happy to write that — what's it for (a caption, hook, "
-              'script, ad copy, email), which platform, and what tone '
-              'should it have?'
+              'script, ad copy, email)?'
           : null,
       StudioType.codeStudio => words < 6
-          ? 'Happy to build that — which language should I use, and can '
-              'you say a bit more about what it should do?'
+          ? 'Happy to build that — can you say a bit more about what it '
+              'should do?'
           : null,
       StudioType.translateStudio => words < 4
-          ? 'Happy to translate that — what should I translate, and into '
-              'which language?'
+          ? 'Happy to translate that — what should I translate?'
           : null,
-      StudioType.deckStudio => words < 5
-          ? 'Happy to build that deck — what\'s the topic, and roughly how '
-              'many slides do you want?'
-          : null,
-      StudioType.voiceStudio => words < 6
-          ? 'I can do that — what should the voiceover say, and is there a '
-              'tone or voice you have in mind?'
-          : null,
-      StudioType.avatarStudio => words < 6
-          ? 'Happy to make that — what should the avatar say, and any look '
-              'or voice preference?'
-          : null,
+      StudioType.deckStudio =>
+        words < 5 ? 'Happy to build that deck — what\'s the topic?' : null,
+      StudioType.voiceStudio =>
+        words < 6 ? 'I can do that — what should the voiceover say?' : null,
+      StudioType.avatarStudio =>
+        words < 6 ? 'Happy to make that — what should the avatar say?' : null,
       StudioType.shortReelsStudio => words < 5
-          ? 'Love it — what\'s the topic or product, and how many reels do '
-              'you want in the pack?'
+          ? 'Love it — what\'s the topic or product for the pack?'
           : null,
-      StudioType.brandPackStudio => words < 5
-          ? 'Happy to build that — what\'s the brand name, and any vibe or '
-              'colors you\'re going for?'
-          : null,
+      StudioType.brandPackStudio =>
+        words < 5 ? 'Happy to build that — what\'s the brand name?' : null,
+      StudioType.middleware => null,
+    };
+  }
+
+  /// The closed half of [clarifyingQuestion], as tappable options.
+  ///
+  /// A thin prompt is usually missing two different things: something only the
+  /// user can describe (the subject, the script, the brand) and something with
+  /// a short known answer set (a style, a tone, a length). The prose asks the
+  /// first; this asks the second — because listing five styles in a sentence
+  /// and waiting for one to be typed back is the interaction this replaces.
+  ///
+  /// Null for a studio whose remaining question has no short answer set, and
+  /// null for middleware, which never asks at all.
+  static OfferedChoice? clarifyingChoice(StudioType studio) {
+    return switch (studio) {
+      StudioType.imageStudio => const OfferedChoice(
+          question: 'And a style to aim for?',
+          options: ['Minimal', 'Playful', 'Bold', 'Photoreal', 'Illustrated'],
+        ),
+      StudioType.videoStudio => const OfferedChoice(
+          question: 'And roughly how long?',
+          options: ['15 seconds', '30 seconds', '1 minute'],
+        ),
+      StudioType.voiceStudio ||
+      StudioType.voiceAvatarStudio ||
+      StudioType.avatarStudio =>
+        const OfferedChoice(
+          question: 'And what tone should the voice have?',
+          options: ['Warm', 'Confident', 'Energetic', 'Calm'],
+        ),
+      StudioType.musicStudio => const OfferedChoice(
+          question: 'And what mood are you after?',
+          options: ['Upbeat', 'Cinematic', 'Chill', 'Dramatic', 'Lo-fi'],
+        ),
+      StudioType.copyScriptsStudio => const OfferedChoice(
+          question: 'And where is it going?',
+          options: ['Instagram', 'TikTok', 'LinkedIn', 'Email', 'A website'],
+        ),
+      StudioType.codeStudio => const OfferedChoice(
+          question: 'And which language should I use?',
+          options: ['HTML & CSS', 'JavaScript', 'Python', 'Dart', 'Swift'],
+        ),
+      StudioType.translateStudio => const OfferedChoice(
+          question: 'And into which language?',
+          options: ['Spanish', 'French', 'German', 'Japanese', 'Mandarin'],
+        ),
+      StudioType.deckStudio => const OfferedChoice(
+          question: 'And roughly how many slides?',
+          options: ['5 slides', '10 slides', '15 slides'],
+        ),
+      StudioType.shortReelsStudio => const OfferedChoice(
+          question: 'And how many reels in the pack?',
+          options: ['3 reels', '5 reels', '10 reels'],
+        ),
+      StudioType.brandPackStudio => const OfferedChoice(
+          question: 'And what vibe are you going for?',
+          options: ['Minimal', 'Bold', 'Playful', 'Luxe', 'Technical'],
+        ),
       StudioType.middleware => null,
     };
   }

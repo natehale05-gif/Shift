@@ -99,6 +99,17 @@ ChatMessage foldMessageEvent(ChatMessage message, ChatEvent event) {
             .toList(),
       );
 
+    case ChoiceOffered(:final id, :final question, :final options, :final multiSelect):
+      return message.copyWith(blocks: [
+        ...message.blocks,
+        ChoiceBlock(
+          id: id,
+          question: question,
+          options: options,
+          multiSelect: multiSelect,
+        ),
+      ]);
+
     case StudioResultReady(:final result):
       return message.copyWith(studioResult: result);
 

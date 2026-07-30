@@ -53,6 +53,22 @@ class ToolUseFinished extends ChatEvent {
 }
 
 /// Web sources backing this reply, to render as citation chips.
+/// A question with tappable answers, for when the decision is genuinely the
+/// user's — a tone, a language, an aspect ratio. Offering the options beats
+/// asking in prose and waiting for them to be typed back.
+class ChoiceOffered extends ChatEvent {
+  final String id;
+  final String question;
+  final List<String> options;
+  final bool multiSelect;
+  const ChoiceOffered({
+    required this.id,
+    required this.question,
+    required this.options,
+    this.multiSelect = false,
+  });
+}
+
 class CitationsReady extends ChatEvent {
   final List<Citation> citations;
   const CitationsReady(this.citations);

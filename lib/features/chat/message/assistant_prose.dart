@@ -15,6 +15,7 @@ import 'typing_indicator.dart';
 import 'action_row.dart';
 import 'artifact_card.dart';
 import 'building_indicator.dart';
+import 'choice_block_view.dart';
 import 'citation_chips.dart';
 import 'continue_button.dart';
 import 'image_block_view.dart';
@@ -151,6 +152,7 @@ class AssistantProse extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
           child: ToolChip(block: block),
         ),
+      ChoiceBlock() => ChoiceBlockView(block: block, messageId: message.id),
       ImageBlock() => Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
           child: ImageBlockView(block: block),

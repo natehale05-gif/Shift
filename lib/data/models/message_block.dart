@@ -32,6 +32,13 @@ sealed class MessageBlock {
               ? base64Decode(json['pngBase64'] as String)
               : null,
         ),
+      'choice' => ChoiceBlock(
+          id: json['id'] as String,
+          question: json['question'] as String,
+          options: (json['options'] as List<dynamic>).cast<String>(),
+          multiSelect: json['multiSelect'] as bool? ?? false,
+          chosen: (json['chosen'] as List<dynamic>? ?? const []).cast<String>(),
+        ),
       'artifactRef' => ArtifactRefBlock(
           artifactId: json['artifactId'] as String,
           title: json['title'] as String,
@@ -125,6 +132,51 @@ class ImageBlock extends MessageBlock {
         'alt': alt,
         'assetId': assetId,
         // Raw bytes intentionally omitted — see class doc.
+      };
+}
+
+/// A question the assistant is asking, offered as tappable options rather than
+/// as a paragraph inviting the user to type one back.
+///
+/// [chosen] is empty while the question is live and holds the answer once it
+/// has been given — which is what makes it survive a reload as an *answered*
+/// question. A question that re-armed itself on reopen would invite answering
+/// it twice, and the second answer would arrive with no memory of the first.
+class ChoiceBlock extends MessageBlock {
+  /// Distinguishes this question from any other in the same message, so an
+  /// answer can be matched to the question it belongs to.
+  final String id;
+  final String question;
+  final List<String> options;
+  final bool multiSelect;
+  final List<String> chosen;
+
+  const ChoiceBlock({
+    required this.id,
+    required this.question,
+    required this.options,
+    this.multiSelect = false,
+    this.chosen = const [],
+  });
+
+  bool get answered => chosen.isNotEmpty;
+
+  ChoiceBlock withChoice(List<String> picked) => ChoiceBlock(
+        id: id,
+        question: question,
+        options: options,
+        multiSelect: multiSelect,
+        chosen: picked,
+      );
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'type': 'choice',
+        'id': id,
+        'question': question,
+        'options': options,
+        'multiSelect': multiSelect,
+        'chosen': chosen,
       };
 }
 
