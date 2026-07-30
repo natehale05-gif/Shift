@@ -111,16 +111,41 @@ void main() {
       expect(image!.pngBytes, _bytes);
     });
 
+    test('"put it in a website selling pink flowers" — reported again', () {
+      // Most people refer to the picture with a bare pronoun, because it is
+      // right there on screen. Requiring the noun ("this *image*") meant this
+      // fell through and the model invented an SVG flower instead.
+      expect(
+        existingImageForPage(
+            _afterGeneratingAnImage(), 'put it in a website selling pink flowers'),
+        isNotNull,
+      );
+    });
+
     test('other phrasings of the same request', () {
       for (final prompt in [
         'put that photo on the page',
         'use this image in the site',
         'add the picture you made to the landing page',
         'build a website around this image',
+        'use it on a landing page',
+        'turn it into a website',
+        'make a site with it',
+        'add it to a portfolio page',
+        'build me a shop page featuring it',
       ]) {
         expect(existingImageForPage(_afterGeneratingAnImage(), prompt), isNotNull,
             reason: prompt);
       }
+    });
+
+    test('a pronoun that is the destination, not the picture', () {
+      // "in it" points at the page being built, not at the image.
+      expect(
+        existingImageForPage(_afterGeneratingAnImage(),
+            'build a landing page and put a contact form in it'),
+        isNull,
+      );
     });
 
     test('"a hero image" still asks for a new one', () {
