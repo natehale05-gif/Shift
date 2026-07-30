@@ -41,6 +41,9 @@ import '../../providers/clients/gemini_client.dart';
 import '../../providers/clients/heygen_client.dart';
 import '../../providers/clients/openai_compatible_client.dart';
 import '../../providers/clients/openai_image_client.dart';
+import '../../providers/clients/elevenlabs_client.dart';
+import '../../providers/clients/fal_client.dart';
+import '../../providers/clients/replicate_client.dart';
 import '../../providers/clients/provider_capability.dart';
 import '../../providers/clients/provider_descriptor.dart';
 import '../../providers/clients/provider_registry.dart';
@@ -89,6 +92,9 @@ class RealChatService implements ChatService {
   final OpenAiCompatibleClient _openAi;
   final OpenAiImageClient _openAiImages;
   final FluxClient _flux;
+  final ReplicateClient _replicate;
+  final FalClient _fal;
+  final ElevenLabsClient _elevenLabs;
   final HeygenClient _heygen;
   final ProviderRegistry _registry;
   final ModelRouter _router;
@@ -101,6 +107,9 @@ class RealChatService implements ChatService {
     OpenAiCompatibleClient? openAiClient,
     OpenAiImageClient? openAiImageClient,
     FluxClient? fluxClient,
+    ReplicateClient? replicateClient,
+    FalClient? falClient,
+    ElevenLabsClient? elevenLabsClient,
     HeygenClient? heygenClient,
     ProviderRegistry? registry,
     ModelRouter? router,
@@ -110,6 +119,9 @@ class RealChatService implements ChatService {
         _openAi = openAiClient ?? OpenAiCompatibleClient(),
         _openAiImages = openAiImageClient ?? OpenAiImageClient(),
         _flux = fluxClient ?? FluxClient(),
+        _replicate = replicateClient ?? ReplicateClient(),
+        _fal = falClient ?? FalClient(),
+        _elevenLabs = elevenLabsClient ?? ElevenLabsClient(),
         _heygen = heygenClient ?? HeygenClient(),
         _registry = registry ?? ProviderRegistry.defaults(),
         _router = router ??
@@ -586,7 +598,8 @@ class RealChatService implements ChatService {
       }
     }
 
-    controller.add(StudioResultReady(mediaPairAudio(kind, userInput, script)));
+    controller.add(
+        StudioResultReady(await _spokenOrSynthesized(kind, userInput, script)));
     final followUp = mediaPairFollowUp(kind);
     if (followUp.isNotEmpty) controller.add(MessageDelta(followUp));
     controller.add(const MessageComplete());
@@ -973,6 +986,9 @@ class RealChatService implements ChatService {
   Stream<ChatEvent> _imageStream(String providerId, String prompt) {
     return switch (providerId) {
       'flux' => _flux.generateImage(apiKey: keys.keyFor('flux'), prompt: prompt),
+      'replicate' => _replicate.generateImage(
+          apiKey: keys.keyFor('replicate'), prompt: prompt),
+      'fal' => _fal.generateImage(apiKey: keys.keyFor('fal'), prompt: prompt),
       'openai' => _openAiImages.generateImage(
           apiKey: keys.keyFor('openai'),
           prompt: prompt,
@@ -1301,6 +1317,42 @@ class RealChatService implements ChatService {
       language: artifact.language,
       versions: [ArtifactVersion(content: html, createdAt: DateTime.now())],
     );
+  }
+
+  /// The audio card for a media pair, spoken by a real voice provider when one
+  /// is keyed and synthesized locally otherwise.
+  ///
+  /// A failure here falls back rather than surfacing: the turn already has a
+  /// script and a card to put it in, and a silent card is a worse outcome than
+  /// a synthesized one. Music is left alone — ElevenLabs speaks, it does not
+  /// score.
+  Future<AudioResult> _spokenOrSynthesized(
+    CompositionKind kind,
+    String userInput,
+    String script,
+  ) async {
+    final result = mediaPairAudio(kind, userInput, script);
+    if (result.kind != AudioKind.voice) return result;
+    final voiceId =
+        chooseProvider(ChatRoute.voice, registry: _registry, hasKey: keys.hasKey);
+    if (voiceId != 'elevenlabs') return result;
+    try {
+      final pcm = await _elevenLabs.speak(
+          apiKey: keys.keyFor('elevenlabs'), text: script);
+      if (pcm.isEmpty) return result;
+      return AudioResult(
+        kind: result.kind,
+        title: result.title,
+        subtitle: result.subtitle,
+        durationSec: result.durationSec,
+        seed: result.seed,
+        transcript: result.transcript,
+        audioBytes: AudioSynthService.wavFromPcm16(pcm,
+            sampleRate: ElevenLabsClient.sampleRate),
+      );
+    } catch (_) {
+      return result;
+    }
   }
 
   Future<List<Uint8List>> _generatePhotos(

@@ -45,4 +45,35 @@ void main() {
     expect(ChatRoute.imageGen.studioType, StudioType.imageStudio);
     expect(ChatRoute.chat.studioType, StudioType.middleware);
   });
+
+  group('the classifier is told about every route it can return', () {
+    test('every ChatRoute has a wire name', () {
+      // The prompt used to list eight routes while the parser accepted
+      // fourteen, so six studios could never be chosen in live mode: "build me
+      // a presentation" was classified `code` and came back as an HTML page
+      // instead of the .pptx the Deck studio exists to produce.
+      expect(routeWireNames.values.toSet(), ChatRoute.values.toSet());
+    });
+
+    test('every wire name has a definition the prompt can show', () {
+      expect(routeDefinitions.keys.toSet(), routeWireNames.keys.toSet());
+      for (final definition in routeDefinitions.values) {
+        expect(definition.trim(), isNotEmpty);
+      }
+    });
+
+    test('every wire name round-trips through the parser', () {
+      for (final entry in routeWireNames.entries) {
+        expect(parseRouteJson('{"route":"${entry.key}"}'), entry.value,
+            reason: entry.key);
+      }
+    });
+
+    test('the deck route exists and is reachable by keyword too', () {
+      expect(parseRouteJson('{"route":"deck"}'), ChatRoute.deck);
+      expect(keywordRoute('build me a small business presentation'),
+          ChatRoute.deck);
+      expect(keywordRoute('make a pitch deck for investors'), ChatRoute.deck);
+    });
+  });
 }

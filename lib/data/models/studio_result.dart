@@ -125,6 +125,19 @@ class AudioResult extends StudioResult {
   final int seed;
   final String? transcript;
 
+  /// Asset-store id of real provider audio (WAV bytes), when a voice provider
+  /// spoke this rather than the local synthesizer.
+  ///
+  /// An id rather than the bytes: a result is persisted with the conversation
+  /// as JSON, and a minute of speech inlined there would be megabytes of
+  /// base64 in the message row. Images already take this route.
+  final String? audioAssetId;
+
+  /// The bytes themselves, held only for the turn that produced them so the
+  /// card can play immediately without a round trip to storage. Never
+  /// serialized — [audioAssetId] is what survives a reload.
+  final Uint8List? audioBytes;
+
   const AudioResult({
     required this.kind,
     required this.title,
@@ -132,7 +145,20 @@ class AudioResult extends StudioResult {
     required this.durationSec,
     required this.seed,
     this.transcript,
+    this.audioAssetId,
+    this.audioBytes,
   });
+
+  AudioResult withAudioAsset(String assetId) => AudioResult(
+        kind: kind,
+        title: title,
+        subtitle: subtitle,
+        durationSec: durationSec,
+        seed: seed,
+        transcript: transcript,
+        audioAssetId: assetId,
+        audioBytes: audioBytes,
+      );
 
   factory AudioResult.fromJson(Map<String, dynamic> json) => AudioResult(
         kind: AudioKind.values.firstWhere((e) => e.name == json['kind']),
@@ -141,6 +167,7 @@ class AudioResult extends StudioResult {
         durationSec: json['durationSec'] as int,
         seed: json['seed'] as int,
         transcript: json['transcript'] as String?,
+        audioAssetId: json['audioAssetId'] as String?,
       );
 
   @override
@@ -152,6 +179,7 @@ class AudioResult extends StudioResult {
         'durationSec': durationSec,
         'seed': seed,
         'transcript': transcript,
+        if (audioAssetId != null) 'audioAssetId': audioAssetId,
       };
 }
 

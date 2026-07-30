@@ -59,23 +59,7 @@ ChatRoute? parseRouteJson(String text) {
         .replaceAll('```', '')
         .trim();
     final decoded = jsonDecode(cleaned) as Map<String, dynamic>;
-    return switch (decoded['route'] as String?) {
-      'chat' => ChatRoute.chat,
-      'code' => ChatRoute.code,
-      'writing' => ChatRoute.writing,
-      'image_gen' => ChatRoute.imageGen,
-      'web_search' => ChatRoute.webSearch,
-      'deep_research' => ChatRoute.deepResearch,
-      'video' => ChatRoute.video,
-      'audio' => ChatRoute.audio,
-      'voice' => ChatRoute.voice,
-      'avatar' => ChatRoute.avatar,
-      'translate' => ChatRoute.translate,
-      'deck' => ChatRoute.deck,
-      'short_reels' => ChatRoute.shortReels,
-      'brand_pack' => ChatRoute.brandPack,
-      _ => null,
-    };
+    return routeWireNames[decoded['route'] as String?];
   } catch (_) {
     return null;
   }
@@ -117,16 +101,61 @@ ChatRoute keywordRoute(String input) {
   return routeForStudio(studio);
 }
 
-const _routerSystemPrompt =
+/// The wire name the router model answers with, for every route the app can
+/// execute. One table, read by both [parseRouteJson] and the system prompt
+/// below.
+///
+/// These drifted apart once, and silently: the prompt offered eight routes
+/// while the parser accepted fourteen, so six studios — deck, translate,
+/// voice, avatar, short reels, brand pack — could never be chosen in live
+/// mode. "Build me a presentation" was classified `code` and came back as an
+/// HTML page instead of the .pptx the Deck studio exists to produce. A
+/// classifier that is never told an option exists cannot pick it.
+const routeWireNames = <String, ChatRoute>{
+  'chat': ChatRoute.chat,
+  'code': ChatRoute.code,
+  'writing': ChatRoute.writing,
+  'image_gen': ChatRoute.imageGen,
+  'web_search': ChatRoute.webSearch,
+  'deep_research': ChatRoute.deepResearch,
+  'video': ChatRoute.video,
+  'audio': ChatRoute.audio,
+  'voice': ChatRoute.voice,
+  'avatar': ChatRoute.avatar,
+  'translate': ChatRoute.translate,
+  'deck': ChatRoute.deck,
+  'short_reels': ChatRoute.shortReels,
+  'brand_pack': ChatRoute.brandPack,
+};
+
+/// What each route means, in the classifier's own words. Keyed by wire name so
+/// a route added to [routeWireNames] without a definition is caught by a test
+/// rather than by a user getting the wrong studio.
+const routeDefinitions = <String, String>{
+  'code': 'programming, apps, or build-me-a-website/page requests',
+  'writing': 'marketing copy, scripts, captions, posts',
+  'image_gen': 'wants a picture or image generated',
+  'web_search': 'needs fresh information from the web',
+  'deep_research': 'asks for in-depth multi-source research or a report',
+  'video': 'wants a video generated',
+  'audio': 'wants music or a soundtrack generated',
+  'voice': 'wants a voiceover, narration, or text read aloud',
+  'avatar': 'wants a talking-head or presenter video of a person',
+  'translate': 'wants text translated or localized into another language',
+  'deck': 'wants a presentation, slide deck, pitch deck, or PowerPoint',
+  'short_reels': 'wants short-form vertical video ideas, hooks, or a reel pack',
+  'brand_pack': 'wants branding — a logo, palette, or brand identity kit',
+  'chat': 'everything else',
+};
+
+final _routerSystemPrompt =
     'You are a routing classifier. Read the user\'s message and respond '
-    'with ONLY minified JSON of the form '
-    '{"route":"chat|code|writing|image_gen|web_search|deep_research|video|audio"} '
-    '— no prose, no code fences. '
-    'code = programming/build-a-page requests; writing = marketing copy, '
-    'scripts, captions; image_gen = wants a picture generated; web_search = '
-    'needs fresh information from the web; deep_research = asks for '
-    'in-depth multi-source research; video/audio = wants those media '
-    'generated; chat = everything else.';
+    'with ONLY minified JSON of the form {"route":"<one of: '
+    '${routeWireNames.keys.join('|')}>"} — no prose, no code fences. '
+    '${[
+      for (final entry in routeDefinitions.entries)
+        '${entry.key} = ${entry.value}'
+    ].join('; ')}.';
 
 /// The middleware routing brain: a small fast LLM classification (Haiku
 /// when an Anthropic key exists, Gemini Flash when only a Google key does)

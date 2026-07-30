@@ -63,4 +63,33 @@ void main() {
       expect(html, contains('A &amp; B'));
     });
   });
+
+  group('the deck noun can sit at the end of the request', () {
+    test('"build me a small business presentation" is about small business',
+        () {
+      // The noun used to have to follow the verb, so this kept the whole
+      // prompt as its topic and the deck was titled after the request.
+      expect(DeckService.parseDeckRequest('build me a small business presentation')
+          .topic,
+          'small business');
+    });
+
+    test('other trailing-noun phrasings', () {
+      String topic(String input) => DeckService.parseDeckRequest(input).topic;
+      expect(topic('make a quarterly results deck'), 'quarterly results');
+      expect(topic('create an investor pitch deck'), 'investor');
+      expect(topic('design a product launch presentation'), 'product launch');
+    });
+
+    test('the leading-noun phrasings still work', () {
+      String topic(String input) => DeckService.parseDeckRequest(input).topic;
+      expect(topic('build me a presentation about solar power'), 'solar power');
+      expect(topic('make a 5 slide deck on beekeeping'), 'beekeeping');
+    });
+
+    test('a request that is only the noun falls back rather than emptying', () {
+      expect(DeckService.parseDeckRequest('make me a presentation').topic,
+          'Your Topic');
+    });
+  });
 }

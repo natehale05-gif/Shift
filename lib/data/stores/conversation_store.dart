@@ -9,6 +9,7 @@ import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../models/message_block.dart';
 import '../models/studio_request.dart';
+import '../models/studio_result.dart';
 import '../../turn/chat_service.dart';
 import '../../turn/request_title.dart';
 import '../persistence/persistence_service.dart';
@@ -498,6 +499,19 @@ class ConversationStore extends ChangeNotifier {
             ImageBlock(alt: alt, pngBytes: pngBytes, assetId: assetId),
           ]);
         });
+      case StudioResultReady(:final result)
+          when result is AudioResult && result.audioBytes != null:
+        // Real spoken audio takes the same route generated images do: bytes to
+        // the asset store, an id on the result. Inlining a minute of speech in
+        // the conversation JSON would be megabytes of base64 in a message row.
+        final assetId = _uuid.v4();
+        persistence.saveAsset(assetId, result.audioBytes!);
+        _updateMessage(
+          conversationId,
+          messageId,
+          (m) => foldMessageEvent(
+              m, StudioResultReady(result.withAudioAsset(assetId))),
+        );
       case MessageComplete() || MessageError() || MessageIncomplete():
         _updateMessage(
           conversationId,

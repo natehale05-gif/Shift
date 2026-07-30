@@ -25,7 +25,6 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'send_button.dart';
 import 'stop_button.dart';
-import 'usage_meter.dart';
 
 
 /// Claude-style composer: a single rounded card holding the text field with
@@ -298,24 +297,23 @@ class _ChatInputBarState extends State<ChatInputBar> {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  context.watch<ApiKeysStore>().isLive
-                      ? 'Live mode — SHIFT AI can make mistakes. Usage bills to '
-                            'your API key.'
-                      : 'SHIFT AI is in demo mode — responses are simulated.',
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colors.textSecondary,
-                  ),
+          // Only demo mode says anything under the composer. The live-mode
+          // line and the usage bar were permanent furniture: a caution nobody
+          // reads twice and a daily counter for a quota this app does not
+          // enforce, both sitting under every message forever. Demo mode's
+          // line earns its place — it says the answers are not real.
+          if (!context.watch<ApiKeysStore>().isLive) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'SHIFT AI is in demo mode — responses are simulated.',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: colors.textSecondary,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
-              const UsageMeter(),
-            ],
-          ),
+            ),
+          ],
         ],
       ),
     );
