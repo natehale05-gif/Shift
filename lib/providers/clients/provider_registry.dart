@@ -7,6 +7,7 @@ import 'gemini_client.dart';
 import 'heygen_api_config.dart';
 import 'heygen_client.dart';
 import 'openai_compatible_client.dart';
+import 'openai_image_client.dart';
 import 'provider_capability.dart';
 import 'provider_descriptor.dart';
 
@@ -143,20 +144,33 @@ final openaiDescriptor = ProviderDescriptor(
   authScheme: AuthScheme.header,
   clientKind: ProviderClientKind.openAiCompatible,
   baseUrl: 'https://api.openai.com/v1',
-  capabilities: _llmCapabilities,
+  // Image is OpenAI's alone among the four OpenAI-compatible providers: they
+  // share the chat-completions shape, not the images endpoint. Without it an
+  // OpenAI-only user asking for a picture matched no image provider and got
+  // the simulated procedural artwork while their key sat unused.
+  capabilities: const {..._llmCapabilities, ProviderCapability.image},
   models: const [
     ProviderModel(id: 'gpt-4o', displayName: 'GPT-4o'),
     ProviderModel(id: 'gpt-4o-mini', displayName: 'GPT-4o mini'),
+    ProviderModel(
+      id: OpenAiImageClient.defaultModel,
+      displayName: 'GPT Image 1',
+      capabilities: {ProviderCapability.image},
+    ),
   ],
   preferenceRanks: const {
     ProviderCapability.chat: 1,
     ProviderCapability.code: 1,
     ProviderCapability.writing: 1,
     ProviderCapability.routing: 1,
+    // Behind Gemini (0) and Flux (1), which are the dedicated image
+    // providers — the same "Auto prefers the specialist" ordering the text
+    // capabilities use.
+    ProviderCapability.image: 2,
   },
   hintPrefix: 'sk-',
-  guidanceText: 'Chat, code and writing with GPT models. Stored only in this '
-      'browser; calls go direct to OpenAI.',
+  guidanceText: 'Chat, code, writing and image generation with GPT models. '
+      'Stored only in this browser; calls go direct to OpenAI.',
   consoleUrl: 'platform.openai.com',
 );
 

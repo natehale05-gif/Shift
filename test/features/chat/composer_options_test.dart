@@ -51,23 +51,22 @@ void main() {
     final options = await build(freshOptions());
     expect(options.modelPin, isNull);
     expect(options.extendedThinking, isTrue);
-    expect(options.webSearch, isFalse);
-    expect(options.deepResearch, isFalse);
   });
 
-  test('tool toggles and the model pin pass straight through', () async {
-    final o = freshOptions()
-      ..modelPin = 'claude-opus-4-8'
-      ..webSearch = true
-      ..deepResearch = true
-      ..codeExecution = true
-      ..extendedThinking = false;
-    final options = await build(o);
+  test('the composer no longer pre-declares which tools a turn may use',
+      () async {
+    // Tools are offered to the model on every turn instead of being toggled
+    // ahead of time, so nothing the composer collects can turn them on or
+    // off. Deep research is selected by asking for a researched report.
+    final options = await build(freshOptions());
+    expect(options.webSearch, isFalse);
+    expect(options.deepResearch, isFalse);
+    expect(options.codeExecution, isFalse);
+  });
+
+  test('the model pin passes straight through', () async {
+    final options = await build(freshOptions()..modelPin = 'claude-opus-4-8');
     expect(options.modelPin, 'claude-opus-4-8');
-    expect(options.webSearch, isTrue);
-    expect(options.deepResearch, isTrue);
-    expect(options.codeExecution, isTrue);
-    expect(options.extendedThinking, isFalse);
   });
 
   test('a built-in style selects its own clause by id', () async {

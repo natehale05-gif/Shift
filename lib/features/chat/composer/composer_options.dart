@@ -19,12 +19,12 @@ class ComposerOptions {
   /// Exact model id pinned from the model chip; null = auto-route.
   String? modelPin;
 
-  // Tool toggles (mirror Claude's tools/plus menu). All feed the per-turn
-  // ChatOptions and drive real behaviour in both live and demo modes.
-  bool webSearch = false;
-  bool deepResearch = false;
-  bool codeExecution = false;
-  bool extendedThinking = true;
+  // No tool toggles. Web search, code execution and extended thinking are
+  // offered to the model on every turn and it reaches for them when the
+  // answer needs them; deep research is selected by asking for a researched
+  // report. A toggle asked people to predict, before writing the message,
+  // whether the answer would need fresh information — which nobody knows in
+  // advance, so they stayed off and the tools went unused.
 
   /// Builds the options for one turn.
   ///
@@ -50,10 +50,6 @@ class ComposerOptions {
     final customStyle = styles.styleById(styleId);
     return ChatOptions(
       modelPin: modelPin,
-      webSearch: webSearch,
-      deepResearch: deepResearch,
-      codeExecution: codeExecution,
-      extendedThinking: extendedThinking,
       systemPrompt: assembleSystemPrompt(
         nickname: prefs.nickname,
         role: prefs.role,

@@ -97,6 +97,28 @@ class StudioDetection {
     return _searchKeywords.any(lower.contains);
   }
 
+  /// Whether the prompt asks for a *researched report* rather than an answer
+  /// that happens to need a look-up.
+  ///
+  /// Deliberately much narrower than [wantsWebSearch]: deep research runs
+  /// several rounds of searching and synthesis, so it costs real time and real
+  /// tokens. It used to need a composer toggle, which meant it effectively
+  /// never ran; the fix is to recognise the request, not to run it whenever
+  /// anything sounds searchable. A bare "research X" stays a web-search turn.
+  static bool wantsDeepResearch(String input) =>
+      _deepResearchRequest.hasMatch(input.toLowerCase());
+
+  static final _deepResearchRequest = RegExp(
+    r'\b('
+    r'deep research|deep-research|'
+    r'research (report|brief|memo|summary|paper)|'
+    r'(in.?depth|thorough|comprehensive|detailed|extensive) '
+    r'(research|report|analysis|investigation|write.?up)|'
+    r'(research|investigate|analyz|analys) .{0,40}\b(thoroughly|in depth|'
+    r'in.?depth|and (write|produce|give) me a (report|brief|memo))'
+    r')\b',
+  );
+
   static const _htmlArtifactKeywords = [
     'landing page', 'website', 'web page', 'webpage', 'html page',
     'portfolio page', 'homepage',

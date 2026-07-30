@@ -73,10 +73,12 @@ void main() {
           noGemini);
     });
 
-    test('image prefers Gemini, then Flux (LLM providers do not advertise '
-        'image)', () {
+    test('image prefers the dedicated providers, then OpenAI', () {
+      // OpenAI joins the list because it has an images endpoint, behind the
+      // two providers that do nothing else. Groq, Mistral and OpenRouter share
+      // OpenAI's *chat* shape, not its images endpoint, so they stay out.
       expect(registry.providersFor(ProviderCapability.image).map((d) => d.id),
-          ['gemini', 'flux']);
+          ['gemini', 'flux', 'openai']);
     });
 
     test('search prefers Anthropic, then Gemini', () {

@@ -7,7 +7,7 @@
 /// below the fold.
 ///
 /// Pure so the rotation is provable without rendering anything: given the
-/// same clock, name and seed, the same greeting comes back.
+/// same clock, name, seed and [avoid], the same greeting comes back.
 library;
 
 /// Greets by time of day, using [name] when the user has told us one.
@@ -15,17 +15,43 @@ library;
 /// [seed] chooses among the variants for that time of day. Callers should
 /// derive it from something stable for the chat — not from the frame — or the
 /// greeting will change while the user is reading it.
+///
+/// [avoid] is the greeting shown last time. It is skipped, so opening two new
+/// chats in a row never shows the same line twice — the thing that made a
+/// random pick feel broken rather than varied. Matching is done on the line
+/// alone, before [name] is appended, so it survives the user setting or
+/// changing their nickname.
 String greetingFor({
   required DateTime now,
   String? name,
   int seed = 0,
+  String? avoid,
 }) {
-  final variants = _variantsFor(now.hour);
+  final all = _variantsFor(now.hour);
+  // If avoiding the last line would leave nothing — a band with one variant,
+  // or a stored value that is somehow every entry — fall back to the full set
+  // rather than returning nothing at all.
+  final pool = [for (final line in all) if (line != avoid) line];
+  final variants = pool.isEmpty ? all : pool;
   final line = variants[seed.abs() % variants.length];
   final trimmed = name?.trim() ?? '';
   if (trimmed.isEmpty) return line;
   return '$line, $trimmed';
 }
+
+/// The chosen line *without* the name — what gets stored as "shown last time".
+///
+/// Same arguments as [greetingFor] minus the name, so it returns exactly the
+/// variant that call picked. Derived this way rather than by splitting the
+/// rendered string on its last comma: a greeting that contains a comma of its
+/// own ("Winding down, or just starting") would be stored truncated, and would
+/// then never match — silently disabling the avoidance for that one line.
+String greetingLineFor({
+  required DateTime now,
+  int seed = 0,
+  String? avoid,
+}) =>
+    greetingFor(now: now, seed: seed, avoid: avoid);
 
 /// Bands chosen to match how people actually describe the day rather than
 /// splitting it into equal quarters: "morning" runs to noon, "evening" starts
@@ -38,6 +64,14 @@ List<String> _variantsFor(int hour) {
       'Morning',
       'Ready when you are',
       "Let's make something",
+      'Fresh start',
+      'What are we making today',
+      'Early start',
+      'The day is wide open',
+      'First thing on the list',
+      'Where do we begin',
+      'Coffee first, then what',
+      'Something new',
     ];
   }
   if (hour >= 12 && hour < 17) {
@@ -46,6 +80,14 @@ List<String> _variantsFor(int hour) {
       'Afternoon',
       'What are we building',
       'Ready when you are',
+      "Let's pick up where we left off",
+      'Halfway through',
+      'What needs making',
+      'Back at it',
+      'Plenty of day left',
+      'What can I help with',
+      'Something to build',
+      'Where to next',
     ];
   }
   if (hour >= 17 && hour < 22) {
@@ -54,6 +96,14 @@ List<String> _variantsFor(int hour) {
       'Evening',
       'What are we making tonight',
       'Ready when you are',
+      'Winding down, or just starting',
+      'One more thing',
+      'What can I help with',
+      "Let's finish something",
+      'The quiet part of the day',
+      'Still something to make',
+      'Evening shift',
+      'What is on your mind',
     ];
   }
   return const [
@@ -61,5 +111,13 @@ List<String> _variantsFor(int hour) {
     'Working late',
     'Good evening',
     'Ready when you are',
+    'Burning the midnight oil',
+    'The quiet hours',
+    'Late one tonight',
+    'Nobody else is awake',
+    'What are we making at this hour',
+    'No rush',
+    'Just us',
+    'Still going',
   ];
 }
