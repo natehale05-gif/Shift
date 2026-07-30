@@ -122,6 +122,11 @@ String embedImageAsHero(
 /// A placeholder lets the model *place* the image while the app supplies it.
 const String generatedImagePlaceholder = '{{shift:image}}';
 
+/// The same, for a voiceover or a score. A model told nothing writes a page
+/// that reads the script with the browser's speech engine — which is not the
+/// voice the user just generated.
+const String generatedAudioPlaceholder = '{{shift:audio}}';
+
 /// Puts [pngBytes] into [source]: at the placeholder the model was asked to
 /// leave, or — when it left none — at the top of the body.
 ///
@@ -263,4 +268,38 @@ String embedImageGallery(
   if (bodyMatch == null) return '$galleryHtml\n$html';
   final insertAt = bodyMatch.end;
   return '${html.substring(0, insertAt)}\n$galleryHtml${html.substring(insertAt)}';
+}
+
+/// Puts generated audio into [source]: at the placeholder the model was asked
+/// to leave, or — when it left none — as a player at the top of the body.
+///
+/// Same shape as [applyGeneratedImage], and same reason for the fallback: a
+/// model that ignores the instruction still ends up with the real recording on
+/// the page rather than a browser speech-synthesis stand-in.
+String applyGeneratedAudio(
+  String source,
+  Uint8List wavBytes, {
+  String label = 'Audio',
+}) {
+  if (source.contains(generatedAudioPlaceholder)) {
+    return source.replaceAll(generatedAudioPlaceholder,
+        'data:audio/wav;base64,${base64Encode(wavBytes)}');
+  }
+  if (!RegExp(r'<body[^>]*>', caseSensitive: false).hasMatch(source)) {
+    return source;
+  }
+  // Written here rather than reused from `studio_composition`, which already
+  // imports this file — borrowing it back would make the two mutually
+  // dependent for one string of markup.
+  final safeLabel = label.replaceAll('<', '&lt;').replaceAll('"', "'");
+  final player = '<figure style="max-width:640px;margin:0 auto 24px;'
+      'padding:0 24px;text-align:center;">'
+      '<figcaption style="font:600 14px system-ui;color:#6e6e73;'
+      'margin-bottom:8px;">$safeLabel</figcaption>'
+      '<audio controls src="data:audio/wav;base64,${base64Encode(wavBytes)}" '
+      'style="width:100%;"></audio></figure>';
+  final bodyMatch =
+      RegExp(r'<body[^>]*>', caseSensitive: false).firstMatch(source);
+  final insertAt = bodyMatch!.end;
+  return '${source.substring(0, insertAt)}\n$player${source.substring(insertAt)}';
 }

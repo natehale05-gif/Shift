@@ -16,6 +16,9 @@ import 'package:shift_ai/turn/backends/live_backend.dart';
 import 'package:shift_ai/turn/backends/mock_backend.dart';
 import 'package:shift_ai/turn/chat_service.dart';
 import 'package:shift_ai/turn/prompt_assembler.dart';
+import 'package:shift_ai/turn/conversation_media.dart';
+import 'package:shift_ai/data/models/studio_result.dart';
+import 'package:shift_ai/features/artifacts/artifact_composition.dart';
 
 /// Not real PNG bytes — nothing decodes them here, they only have to come out
 /// the other end base64-encoded into the page.
@@ -265,6 +268,70 @@ void main() {
       expect(updated.artifact.latest.content, contains(_flowerInPage));
       // No provider call at all: the picture exists, and the page exists.
       expect(client.callCount, 0);
+    });
+  });
+
+  group('generated audio', () {
+    test('a voiceover in the conversation is offered to the page', () {
+      // "Put it in a website" after a voiceover made the model write a page
+      // that reads the script with the browser's speech engine — a robot
+      // voice instead of the one the user just generated.
+      final conversation = Conversation(
+        id: 'c1',
+        title: 'Voice over of a cowboy',
+        createdAt: DateTime(2026, 7, 30),
+        updatedAt: DateTime(2026, 7, 30),
+        messages: [
+          ChatMessage(
+            id: 'u1',
+            conversationId: 'c1',
+            role: MessageRole.user,
+            text: 'generate a voice over of a cowboy talking about dogs',
+            timestamp: DateTime(2026, 7, 30),
+          ),
+          ChatMessage(
+            id: 'a1',
+            conversationId: 'c1',
+            role: MessageRole.assistant,
+            text: "Here's the voiceover:",
+            studioResult: AudioResult(
+              kind: AudioKind.voice,
+              title: 'Voiceover',
+              subtitle: 'Voiceover',
+              durationSec: 12,
+              seed: 7,
+              transcript: 'Well now, let me tell ya somethin about dogs.',
+              audioBytes: Uint8List.fromList(List.filled(64, 3)),
+            ),
+            timestamp: DateTime(2026, 7, 30),
+          ),
+        ],
+      );
+
+      final media = existingImageForPage(conversation, 'put it in a website');
+      expect(media, isNotNull);
+      expect(media!.kind, GeneratedMediaKind.audio);
+      expect(media.pngBytes, isNotNull);
+    });
+
+    test('the real recording goes in, not a speech-synthesis stand-in', () {
+      final page = '<html><body><h1>Cowboy</h1>'
+          '<audio controls src="{{shift:audio}}"></audio></body></html>';
+      final out = applyGeneratedAudio(
+          page, Uint8List.fromList([82, 73, 70, 70]), label: 'Voiceover');
+
+      expect(out, contains('data:audio/wav;base64,'));
+      expect(out, isNot(contains('{{shift:audio}}')));
+    });
+
+    test('a model that ignores the placeholder still gets a player', () {
+      final out = applyGeneratedAudio(
+          '<html><body><h1>Cowboy</h1></body></html>',
+          Uint8List.fromList([82, 73, 70, 70]));
+
+      expect(out, contains('<audio controls'));
+      expect(out, contains('data:audio/wav;base64,'));
+      expect(out, contains('<h1>Cowboy</h1>'));
     });
   });
 

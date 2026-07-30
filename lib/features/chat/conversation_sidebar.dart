@@ -4,13 +4,13 @@ import 'package:provider/provider.dart';
 
 import '../../data/models/conversation.dart';
 import '../../data/models/project.dart';
-import 'conversation_export.dart';
 import '../../data/stores/conversation_store.dart';
 import '../../data/stores/project_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../projects/project_detail_sheet.dart';
 import '../../core/theme/tap_targets.dart';
+import 'export_chooser.dart';
 
 class ConversationSidebar extends StatefulWidget {
   /// Called after "New chat" is pressed or a conversation is selected —
@@ -25,7 +25,6 @@ class ConversationSidebar extends StatefulWidget {
 
 class _ConversationSidebarState extends State<ConversationSidebar> {
   String _query = '';
-  bool _showArchived = false;
 
   /// Buckets a conversation by how recently it was last touched, matching
   /// Claude's Today / Yesterday / Previous-N-days grouping.
@@ -49,8 +48,10 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
     final colors = theme.extension<AppSemanticColors>()!;
 
     final results = store.search(_query);
-    final visible = results.where((c) => !c.archived).toList();
-    final archived = results.where((c) => c.archived).toList();
+    // Archiving is gone, so nothing new can land in the archive — and a chat
+    // archived before it went would otherwise be stranded in a section nobody
+    // can reach. Everything is just a chat again.
+    final visible = results;
     final pinned = visible.where((c) => c.pinned).toList();
     final starred =
         visible.where((c) => c.starred && !c.pinned).toList();
@@ -135,37 +136,6 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
                 for (final conversation in starred) tileFor(conversation),
               ],
               ...grouped,
-              if (archived.isNotEmpty) ...[
-                InkWell(
-                  onTap: () => setState(() => _showArchived = !_showArchived),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.lg,
-                      AppSpacing.md,
-                      AppSpacing.lg,
-                      AppSpacing.xs,
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Archived (${archived.length})',
-                          style: theme.textTheme.labelSmall,
-                        ),
-                        const Spacer(),
-                        Icon(
-                          _showArchived
-                              ? Icons.expand_less_rounded
-                              : Icons.expand_more_rounded,
-                          size: 16,
-                          color: colors.textSecondary,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                if (_showArchived)
-                  for (final conversation in archived) tileFor(conversation),
-              ],
               if (results.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(AppSpacing.lg),
@@ -428,20 +398,12 @@ class _ConversationTile extends StatelessWidget {
             switch (action) {
               case 'rename':
                 _rename(context);
-              case 'pin':
-                store.togglePin(conversation.id);
               case 'star':
                 store.toggleStar(conversation.id);
-              case 'archive':
-                store.toggleArchive(conversation.id);
               case 'project':
                 _moveToProject(context);
-              case 'export_md':
-                ConversationExport.downloadMarkdown(conversation);
-              case 'export_json':
-                ConversationExport.downloadJson(conversation);
-              case 'export_pdf':
-                ConversationExport.exportPdf(conversation);
+              case 'export':
+                showExportChooser(context, conversation);
               case 'delete':
                 store.deleteConversation(conversation.id);
             }
@@ -449,32 +411,16 @@ class _ConversationTile extends StatelessWidget {
           itemBuilder: (context) => [
             const PopupMenuItem(value: 'rename', child: Text('Rename')),
             PopupMenuItem(
-              value: 'pin',
-              child: Text(conversation.pinned ? 'Unpin' : 'Pin'),
-            ),
-            PopupMenuItem(
               value: 'star',
               child: Text(conversation.starred ? 'Unstar' : 'Star'),
-            ),
-            PopupMenuItem(
-              value: 'archive',
-              child: Text(conversation.archived ? 'Unarchive' : 'Archive'),
             ),
             const PopupMenuItem(
               value: 'project',
               child: Text('Move to project…'),
             ),
             const PopupMenuItem(
-              value: 'export_md',
-              child: Text('Export as Markdown'),
-            ),
-            const PopupMenuItem(
-              value: 'export_json',
-              child: Text('Export as JSON'),
-            ),
-            const PopupMenuItem(
-              value: 'export_pdf',
-              child: Text('Export as PDF'),
+              value: 'export',
+              child: Text('Export…'),
             ),
             const PopupMenuDivider(),
             const PopupMenuItem(value: 'delete', child: Text('Delete')),

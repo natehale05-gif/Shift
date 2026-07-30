@@ -505,7 +505,9 @@ class MockChatService implements ChatService {
       if (bytes != null) return bytes;
     }
     final seed = image.seed;
-    if (seed != null) return rasterizeGradientArt(seed: seed);
+    if (seed != null && image.kind == GeneratedMediaKind.image) {
+      return rasterizeGradientArt(seed: seed);
+    }
     return null;
   }
 
@@ -617,7 +619,9 @@ class MockChatService implements ChatService {
       if (existingImage != null) {
         final bytes = await _resolveImageBytes(existingImage);
         if (bytes != null) {
-          content = applyGeneratedImage(content, bytes, altText: existingImage.alt);
+          content = existingImage.kind == GeneratedMediaKind.audio
+              ? applyGeneratedAudio(content, bytes, label: existingImage.alt)
+              : applyGeneratedImage(content, bytes, altText: existingImage.alt);
         }
       }
       controller.add(ArtifactCreated(Artifact(
