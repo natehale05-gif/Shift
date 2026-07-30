@@ -36,6 +36,15 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      # The analyzer only resolves the default branch of a conditional import,
+      # so a stale `if (dart.library.html)` path passes analysis and fails only
+      # at build. And an interface alone does not keep a backend swappable —
+      # one direct import from a widget re-welds it, quietly.
+      - name: Check conditional imports and the backend boundary
+        run: |
+          python3 tool/scan_conditional_imports.py
+          python3 tool/scan_backend_boundary.py
+
       # --no-web-resources-cdn bundles CanvasKit locally instead of loading it
       # from gstatic, so the app boots even where that CDN is blocked or slow —
       # consistent with the app's CDN-free design (bundled fonts + mermaid).
