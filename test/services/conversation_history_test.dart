@@ -46,7 +46,16 @@ void main() {
     expect(turns, hasLength(3));
     expect(turns[1].role, MessageRole.assistant);
     expect(turns[1].text, contains('a pink flower'));
-    expect(turns[1].hasImage, isTrue);
+
+    // This used to assert the image was *in* the assistant turn, which is the
+    // behaviour that made Anthropic reject the whole request:
+    // `'image' blocks are not permitted within assistant turns`. The intent of
+    // the test is unchanged and still holds — the turn is not invisible and
+    // the picture does reach the model — but it rides in the user turn that
+    // refers to it.
+    expect(turns[1].hasImage, isFalse);
+    expect(turns[2].role, MessageRole.user);
+    expect(turns[2].hasImage, isTrue);
   });
 
   test('a voiceover-only turn survives, with its script', () {
@@ -144,5 +153,123 @@ void main() {
     final turns = buildHistory([_user('hi'), _assistant()]);
 
     expect(turns, hasLength(1));
+  });
+
+  group('images never ride in an assistant turn', () {
+    // The live failure, verbatim from the API:
+    //
+    //   HTTP 400 invalid_request_error
+    //   messages.1.content: 'image' blocks are not permitted within assistant
+    //   turns.
+    //
+    // Generate an image, then say "now build a website and use this image",
+    // and the whole request was rejected — so the turn produced an error
+    // rather than merely losing the picture.
+
+    test('a generated image is hoisted into the following user turn', () {
+      final turns = buildHistory([
+        _user('draw me a corgi'),
+        _assistant(blocks: [
+          ImageBlock(alt: 'a corgi', pngBytes: _bytes),
+        ]),
+        _user('now build a website for dog treats and use this image'),
+      ]);
+
+      for (final turn in turns) {
+        if (turn.role == MessageRole.assistant) {
+          expect(turn.hasImage, isFalse,
+              reason: 'the API rejects the whole request for this');
+        }
+      }
+
+      final withImage = turns.where((t) => t.hasImage).toList();
+      expect(withImage, hasLength(1));
+      expect(withImage.single.role, MessageRole.user);
+      expect(withImage.single.text, contains('dog treats'),
+          reason: 'the picture travels with the request that refers to it');
+    });
+
+    test('the assistant still says what it made', () {
+      // The note is what a later "use this image" attaches to, so hoisting the
+      // bytes must not take the sentence with them.
+      final turns = buildHistory([
+        _user('draw me a corgi'),
+        _assistant(blocks: [
+          ImageBlock(alt: 'a corgi', pngBytes: _bytes),
+        ]),
+        _user('now use it'),
+      ]);
+
+      final assistant =
+          turns.firstWhere((t) => t.role == MessageRole.assistant);
+      expect(assistant.text, contains('[generated image: a corgi]'));
+    });
+
+    test('an image with no user turn after it becomes a trailing user turn',
+        () {
+      // The case that actually broke: the client appends the current message
+      // after this list, and merges into this turn.
+      final turns = buildHistory([
+        _user('draw me a corgi'),
+        _assistant(blocks: [
+          ImageBlock(alt: 'a corgi', pngBytes: _bytes),
+        ]),
+      ]);
+
+      expect(turns.last.role, MessageRole.user);
+      expect(turns.last.hasImage, isTrue);
+    });
+
+    test('several generated images all arrive in one user turn', () {
+      final turns = buildHistory([
+        _user('draw two'),
+        _assistant(blocks: [
+          ImageBlock(alt: 'first', pngBytes: _bytes),
+          ImageBlock(alt: 'second', pngBytes: _bytes),
+        ]),
+        _user('use them both'),
+      ]);
+
+      final userTurns =
+          turns.where((t) => t.role == MessageRole.user && t.hasImage);
+      expect(userTurns, hasLength(1));
+      expect(
+        userTurns.single.parts.whereType<HistoryImage>().length,
+        2,
+      );
+    });
+
+    test('turns still alternate, which is what the API requires', () {
+      final turns = buildHistory([
+        _user('draw me a corgi'),
+        _assistant(blocks: [
+          ImageBlock(alt: 'a corgi', pngBytes: _bytes),
+          const TextBlock('Here it is.'),
+        ]),
+        _user('now a website'),
+        _assistant(blocks: [const TextBlock('Done.')]),
+      ]);
+
+      for (var i = 1; i < turns.length; i++) {
+        expect(turns[i].role, isNot(turns[i - 1].role),
+            reason: 'two turns in a row with the same role is a 400');
+      }
+    });
+
+    test('with images off, nothing carries bytes and the notes remain', () {
+      final turns = buildHistory([
+        _user('draw me a corgi'),
+        _assistant(blocks: [
+          ImageBlock(alt: 'a corgi', pngBytes: _bytes),
+        ]),
+        _user('now a website'),
+      ], includeImages: false);
+
+      expect(turns.any((t) => t.hasImage), isFalse);
+      expect(
+        turns.map((t) => t.text).join(' '),
+        contains('[generated image: a corgi]'),
+      );
+    });
   });
 }

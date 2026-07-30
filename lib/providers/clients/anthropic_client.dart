@@ -39,8 +39,13 @@ class AnthropicClient implements KeyValidatable {
     // the new user turn is re-added below (with this call's attachments) —
     // otherwise it would be duplicated as two consecutive user messages.
     final history = List.of(conversation.messages);
+    // `blocks.isEmpty` as well as empty text: a real streaming placeholder has
+    // neither yet, but an *image-only* assistant turn also has empty text —
+    // and dropping that would delete the very picture the next message is
+    // about, silently, one turn before the request that needs it.
     if (history.isNotEmpty &&
         history.last.role == MessageRole.assistant &&
+        history.last.blocks.isEmpty &&
         history.last.text.trim().isEmpty) {
       history.removeLast();
       if (history.isNotEmpty &&
@@ -59,7 +64,10 @@ class AnthropicClient implements KeyValidatable {
     for (final turn in buildHistory(history)) {
       messages.add({
         'role': turn.role == MessageRole.user ? 'user' : 'assistant',
-        'content': [
+        // Explicitly `dynamic`, not inferred: the literal would otherwise be
+        // a `List<Map<String, Object>>`, and merging the current turn's blocks
+        // into it below throws at runtime on a type nothing checks statically.
+        'content': <Map<String, dynamic>>[
           for (final part in turn.parts)
             if (part is HistoryImage)
               {
@@ -75,10 +83,19 @@ class AnthropicClient implements KeyValidatable {
         ],
       });
     }
-    messages.add({
-      'role': 'user',
-      'content': _contentBlocks(userInput, attachments),
-    });
+    // Merge rather than append when history already ends with a user turn.
+    //
+    // It does exactly when the previous assistant turn generated an image:
+    // the picture is hoisted into a user turn (assistant turns may not carry
+    // images), and that turn is this one. Appending a second user message
+    // instead would send two in a row, which the API rejects — and would
+    // separate the image from the request that refers to it.
+    final current = _contentBlocks(userInput, attachments);
+    if (messages.isNotEmpty && messages.last['role'] == 'user') {
+      (messages.last['content'] as List).addAll(current);
+    } else {
+      messages.add({'role': 'user', 'content': current});
+    }
 
     return {
       'model': model,
