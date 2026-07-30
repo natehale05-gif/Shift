@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 0.1.13+14
+version: 0.1.14+15
 
 environment:
   sdk: ^3.9.2
@@ -92,6 +92,13 @@ flutter:
   # ```mermaid diagrams inline in chat.
   assets:
     - assets/js/mermaid.min.js
+    # React + a JSX transformer, so a React artifact can be *run* in the
+    # preview rather than only listed as source. Fetched on demand on the web
+    # (nothing is downloaded until a JSX artifact is previewed); see
+    # assets/js/jsx/README.md for why Sucrase rather than Babel.
+    - assets/js/jsx/react.min.js
+    - assets/js/jsx/react-dom.min.js
+    - assets/js/jsx/sucrase.min.js
     # Lets the Linux GTK runner set the window and taskbar icon at startup —
     # flutter_launcher_icons has no Linux target.
     - assets/icon/app_icon.png

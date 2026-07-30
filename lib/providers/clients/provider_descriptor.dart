@@ -75,6 +75,10 @@ class ProviderDescriptor {
   /// Rendered as a caution line in Settings; null when browser calls are fine.
   final String? browserWarning;
 
+  /// Set when the provider sends no CORS headers, so browser-direct calls
+  /// cannot work. See [browserBlocked].
+  final bool corsBlocked;
+
   const ProviderDescriptor({
     required this.id,
     required this.displayName,
@@ -91,9 +95,19 @@ class ProviderDescriptor {
     this.guidanceText = '',
     this.consoleUrl = '',
     this.browserWarning,
+    this.corsBlocked = false,
   });
 
   bool get isBrowserRisky => browserWarning != null;
+
+  /// Whether this provider's API refuses browser-direct calls outright.
+  ///
+  /// Distinct from [isBrowserRisky], which is a caution. This is a fact about
+  /// the provider: no CORS headers means a browser cannot call it at all, no
+  /// matter how good the key is. Auto skips these on web instead of routing a
+  /// turn into a wall — a user with an OpenAI key *and* a Replicate key should
+  /// get their picture from OpenAI, not a fetch error from Replicate.
+  bool get browserBlocked => corsBlocked;
 
   bool supports(ProviderCapability capability) =>
       capabilities.contains(capability);

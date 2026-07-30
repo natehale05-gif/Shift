@@ -97,6 +97,56 @@ void main() {
           reason: 'a text key is not a voice key');
     });
 
+    test('a browser skips providers that refuse browser-direct calls', () {
+      // Replicate and fal send no CORS headers, so a browser cannot call them
+      // however good the key is. Routing there anyway produced a fetch error
+      // where a picture was asked for, while a usable OpenAI key sat further
+      // down the same list.
+      String? pick(Set<String> keys, {required bool onWeb}) => chooseProvider(
+          ChatRoute.imageGen,
+          registry: registry,
+          hasKey: only(keys),
+          onWeb: onWeb);
+
+      expect(pick({'replicate', 'openai'}, onWeb: true), 'openai');
+      expect(pick({'replicate', 'openai'}, onWeb: false), 'replicate',
+          reason: 'the downloaded app has no CORS to answer to');
+      expect(pick({'flux', 'gemini'}, onWeb: true), 'gemini');
+    });
+
+    test('a browser with only a blocked key gets the mock, not an error', () {
+      // Better the simulated card than a fetch failure: the turn at least
+      // produces something, and Settings says why the key is idle.
+      for (final id in ['replicate', 'fal', 'flux']) {
+        expect(
+            chooseProvider(ChatRoute.imageGen,
+                registry: registry, hasKey: only({id}), onWeb: true),
+            isNull,
+            reason: id);
+      }
+    });
+
+    test('off-web nothing is skipped', () {
+      // The desktop and mobile apps are not browsers, so every key works.
+      for (final id in ['replicate', 'fal', 'flux']) {
+        expect(
+            chooseProvider(ChatRoute.imageGen,
+                registry: registry, hasKey: only({id}), onWeb: false),
+            id,
+            reason: id);
+      }
+    });
+
+    test('the providers that do allow browser calls are never skipped', () {
+      for (final id in ['gemini', 'openai']) {
+        expect(
+            chooseProvider(ChatRoute.imageGen,
+                registry: registry, hasKey: only({id}), onWeb: true),
+            id,
+            reason: id);
+      }
+    });
+
     test('the voice providers do not accidentally serve image turns', () {
       expect(chooseProvider(ChatRoute.imageGen, registry: registry, hasKey: only({'elevenlabs'})),
           isNull);

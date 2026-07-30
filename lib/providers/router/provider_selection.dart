@@ -26,16 +26,23 @@ ProviderCapability capabilityForRoute(ChatRoute route) => switch (route) {
     };
 
 /// The best available provider for [route]: the first provider in the
-/// capability's preference order that the user has a key for. Returns null when
-/// none is available (the caller then falls back to the mock). Pure — the
-/// [hasKey] predicate is injected, so this is exhaustively unit-testable.
+/// capability's preference order that the user has a key for, skipping any
+/// that a browser cannot reach when [onWeb]. Returns null when none is
+/// available (the caller then falls back to the mock). Pure — [hasKey] and
+/// [onWeb] are injected, so this is exhaustively unit-testable.
 String? chooseProvider(
   ChatRoute route, {
   required ProviderRegistry registry,
   required bool Function(String providerId) hasKey,
+  bool onWeb = false,
 }) {
   final capability = capabilityForRoute(route);
   for (final descriptor in registry.providersFor(capability)) {
+    // A provider that refuses browser-direct calls is not a candidate in a
+    // browser, however good the key is. Routing to one anyway produced a fetch
+    // error where a picture was asked for, while a perfectly usable OpenAI key
+    // sat further down the same list.
+    if (onWeb && descriptor.browserBlocked) continue;
     if (hasKey(descriptor.id)) return descriptor.id;
   }
   return null;
