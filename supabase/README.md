@@ -75,8 +75,32 @@ lists **names only**.
   GitHub Actions secrets and the Supabase dashboard directly.
 - Anything pasted into a conversation is treated as compromised and rotated.
 
+## Edge functions
+
+`functions/` holds them, and they are **plain HTTP handlers** —
+`(Request, context) => Response`, written against WebCrypto and nothing else.
+No handler imports a Supabase library; `_shared/handler.js` is the only file
+that knows where it is running, so the bodies move to Node, Bun or Workers by
+swapping that one adapter. It is also what makes them testable with no platform
+at all:
+
+```sh
+node --test supabase/functions/tests/*.test.js
+```
+
+| Function | What it does |
+|---|---|
+| `provider-key` | the encrypting front door to the vault — the only way a secret gets in |
+
+**The master key is an environment variable, not a hosted KMS.** The *shape* is
+a KMS's — a master that never leaves the server, a fresh IV per record, and a
+`kms_key_id` column recording which master encrypted what so a rotation can find
+its work — but moving to real KMS means replacing `masterKeyBytes()` and nothing
+else. The stored record format does not change. Said plainly here rather than
+implied by the column name.
+
 ## What is not here yet
 
-Edge functions (key vault write/use, Stripe webhook, task runner), the client
-`ShiftBackend` seam, and billing. Each needs a live project to verify against,
+The Stripe webhook and billing portal, the scheduled-task runner, and the
+client wiring. Each needs a live project or real Stripe keys to verify against,
 which is the next thing to set up.

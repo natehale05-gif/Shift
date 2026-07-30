@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Marks these handlers as ES modules so Node's test runner loads them. Deno already treats them as modules; this file exists only so the same sources can be run and tested outside the edge runtime."
+}

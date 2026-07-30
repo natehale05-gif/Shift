@@ -51,3 +51,13 @@ jobs:
           PGPORT: '5433'
           PGUSER: postgres
         run: ./tool/test_migrations.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The handlers are written against Request/Response/WebCrypto and nothing
+      # else, which is what lets them run here at all — and is the same
+      # property that would let them move off Deno.
+      - name: Test the edge function handlers
+        run: node --test supabase/functions/tests/*.test.js
