@@ -1,6 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift_ai/data/models/project.dart';
+import 'package:shift_ai/data/stores/styles_store.dart';
 import 'package:shift_ai/turn/prompt_assembler.dart';
+
+/// The instructions a built-in style carries, the way the composer resolves
+/// them — built-ins and custom styles go through the same lookup now.
+String _style(String id) =>
+    builtInStyles.firstWhere((s) => s.id == id).instructions;
 
 void main() {
   group('assembleSystemPrompt', () {
@@ -15,7 +21,7 @@ void main() {
     test('nickname, style, and instructions each layer in', () {
       final prompt = assembleSystemPrompt(
         nickname: 'Nate',
-        responseStyle: 'concise',
+        styleInstruction: _style('concise'),
         customInstructions: 'Always use metric units.',
       );
       expect(prompt, contains('Address the user as "Nate"'));
@@ -23,8 +29,9 @@ void main() {
       expect(prompt, contains('Always use metric units.'));
     });
 
-    test('balanced style adds no style clause', () {
-      final prompt = assembleSystemPrompt(responseStyle: 'balanced');
+    test('Normal adds no style clause — it is the absence of a style', () {
+      final prompt = assembleSystemPrompt(styleInstruction: _style('normal'));
+      expect(prompt.contains('\n\nStyle:'), isFalse);
       expect(prompt.contains('short and direct'), isFalse);
       expect(prompt.contains('thorough'), isFalse);
     });
@@ -33,7 +40,7 @@ void main() {
       final prompt = assembleSystemPrompt(
         role: 'product designer',
         traits: 'direct and encouraging',
-        responseStyle: 'formal',
+        styleInstruction: _style('formal'),
         memories: ['Prefers TypeScript', 'Lives in Kyoto'],
       );
       expect(prompt, contains('product designer'));
@@ -44,7 +51,7 @@ void main() {
     });
 
     test('explanatory style asks for teaching depth', () {
-      final prompt = assembleSystemPrompt(responseStyle: 'explanatory');
+      final prompt = assembleSystemPrompt(styleInstruction: _style('explanatory'));
       expect(prompt, contains('teach'));
     });
 

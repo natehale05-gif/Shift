@@ -85,24 +85,24 @@ void main() {
     expect(store.current!.starred, isFalse);
   });
 
-  test('pin and archive toggle on the conversation; archiving the current '
-      'chat moves selection away', () async {
-    final (store, _) = await _makeStore();
-    store.startNewConversation();
-    await store.sendMessage('first');
-    final first = store.current!.id;
-    store.startNewConversation();
-    await store.sendMessage('second');
-    final second = store.current!.id;
+  test('a conversation saved by an older build with pin/archive flags still '
+      'loads', () async {
+    // Pinning and archiving went with their menu entries. Their JSON keys may
+    // still be sitting in someone's IndexedDB, and an unknown key must not
+    // stop a chat from loading.
+    final restored = Conversation.fromJson({
+      'id': 'c1',
+      'title': 'Old chat',
+      'createdAt': DateTime(2026, 7, 20).toIso8601String(),
+      'updatedAt': DateTime(2026, 7, 20).toIso8601String(),
+      'messages': <dynamic>[],
+      'starred': true,
+      'pinned': true,
+      'archived': true,
+    });
 
-    store.togglePin(second);
-    expect(store.current!.pinned, isTrue);
-
-    // Archiving the current chat selects the next visible one.
-    store.toggleArchive(second);
-    expect(store.conversations.firstWhere((c) => c.id == second).archived,
-        isTrue);
-    expect(store.current!.id, first);
+    expect(restored.title, 'Old chat');
+    expect(restored.starred, isTrue);
   });
 
   test('search matches titles and message text case-insensitively',

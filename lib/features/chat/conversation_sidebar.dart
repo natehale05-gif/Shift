@@ -48,15 +48,11 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
     final colors = theme.extension<AppSemanticColors>()!;
 
     final results = store.search(_query);
-    // Archiving is gone, so nothing new can land in the archive — and a chat
-    // archived before it went would otherwise be stranded in a section nobody
-    // can reach. Everything is just a chat again.
-    final visible = results;
-    final pinned = visible.where((c) => c.pinned).toList();
-    final starred =
-        visible.where((c) => c.starred && !c.pinned).toList();
-    final rest =
-        visible.where((c) => !c.pinned && !c.starred).toList();
+    // Starred is the only section. Pinning and archiving went with their menu
+    // entries; leaving the fields behind meant a Pinned header that nothing
+    // could ever fill and an archive nothing could reach.
+    final starred = results.where((c) => c.starred).toList();
+    final rest = results.where((c) => !c.starred).toList();
 
     _ConversationTile tileFor(Conversation c) => _ConversationTile(
           conversation: c,
@@ -127,10 +123,6 @@ class _ConversationSidebarState extends State<ConversationSidebar> {
           child: ListView(
             children: [
               _ProjectsSection(projectStore: projectStore),
-              if (pinned.isNotEmpty) ...[
-                const _SectionHeader(label: 'Pinned'),
-                for (final conversation in pinned) tileFor(conversation),
-              ],
               if (starred.isNotEmpty) ...[
                 const _SectionHeader(label: 'Starred'),
                 for (final conversation in starred) tileFor(conversation),

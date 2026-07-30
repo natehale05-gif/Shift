@@ -15,7 +15,6 @@ String assembleSystemPrompt({
   String? nickname,
   String role = '',
   String traits = '',
-  String responseStyle = 'normal',
   String styleInstruction = '',
   String customInstructions = '',
   Project? project,
@@ -45,23 +44,11 @@ String assembleSystemPrompt({
     buffer.write('\n\nTraits SHIFT AI should have: ${traits.trim()}.');
   }
 
-  // A custom style's own instructions take precedence over the built-in set.
+  // One clause, whatever the style. Built-ins carry their instructions the
+  // same way custom styles do, so this no longer has to know which kind it
+  // was handed — Normal is simply the style with nothing to say.
   if (styleInstruction.trim().isNotEmpty) {
     buffer.write('\n\nStyle: ${styleInstruction.trim()}');
-  } else {
-    switch (responseStyle) {
-      case 'concise':
-        buffer.write('\n\nStyle: keep responses short and direct — lead with '
-            'the answer, minimal preamble.');
-      case 'explanatory':
-        buffer.write('\n\nStyle: give thorough, well-structured responses that '
-            'teach — explain the reasoning and include helpful examples.');
-      case 'formal':
-        buffer.write('\n\nStyle: write in a polished, professional register — '
-            'complete sentences, no slang or emoji.');
-      default:
-        break; // normal: no extra instruction
-    }
   }
 
   if (customInstructions.trim().isNotEmpty) {
