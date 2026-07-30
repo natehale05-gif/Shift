@@ -91,6 +91,13 @@ node --test supabase/functions/tests/*.test.js
 | Function | What it does |
 |---|---|
 | `provider-key` | the encrypting front door to the vault — the only way a secret gets in |
+| `stripe-webhook` | the only writer of `subscriptions` — entitlement comes from Stripe or from nowhere |
+
+`stripe-webhook` is deliberately **unauthenticated**: Stripe has no JWT, so the
+signature *is* the authentication. That is why verification is the first thing
+it does and why a bad signature returns 400 without touching the database — an
+endpoint that skips it is a public URL anyone can POST "this account is now a
+paying member" to.
 
 **The master key is an environment variable, not a hosted KMS.** The *shape* is
 a KMS's — a master that never leaves the server, a fresh IV per record, and a
@@ -101,6 +108,6 @@ implied by the column name.
 
 ## What is not here yet
 
-The Stripe webhook and billing portal, the scheduled-task runner, and the
-client wiring. Each needs a live project or real Stripe keys to verify against,
+The billing portal (creating a Checkout session), the scheduled-task runner,
+the metered proxy that spends managed keys, and the client wiring. Each needs a live project or real Stripe keys to verify against,
 which is the next thing to set up.
