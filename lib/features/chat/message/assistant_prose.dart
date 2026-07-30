@@ -36,8 +36,14 @@ class AssistantProse extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final showTyping =
-        message.status == MessageStatus.streaming && message.blocks.isEmpty;
+    // One indicator for every kind of work. Thinking on its own is not
+    // content — it is collapsed behind a disclosure, so a message holding
+    // only thinking still looks like nothing is happening. Keeping the dots
+    // up until real content arrives means a deck, a brand pack and a plain
+    // answer all wait the same way, instead of each studio announcing itself
+    // in its own prose.
+    final showTyping = message.status == MessageStatus.streaming &&
+        message.blocks.every((b) => b is ThinkingBlock);
 
     // Render the response the ‹1/2› navigator currently points at (the newest
     // by default; older regenerations when the user steps back).

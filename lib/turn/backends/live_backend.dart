@@ -641,8 +641,6 @@ class RealChatService implements ChatService {
       controller.add(const MessageComplete());
       return;
     }
-    controller.add(MessageDelta('Translating into $target…\n\n'));
-
     var translated = '';
     try {
       translated = (await _completeText(
@@ -675,9 +673,6 @@ class RealChatService implements ChatService {
   ) async {
     controller.add(const RoutingDetected(StudioType.deckStudio));
     final req = DeckService.parseDeckRequest(userInput);
-    controller.add(MessageDelta(
-        'Building a ${req.slideCount}-slide deck on "${req.topic}"…\n\n'));
-
     DeckResult? deck;
     try {
       final reply = await _completeText(
@@ -710,7 +705,6 @@ class RealChatService implements ChatService {
       StreamController<ChatEvent> controller, String userInput) async {
     controller.add(const RoutingDetected(StudioType.brandPackStudio));
     final name = BrandPackService.parseBrandName(userInput);
-    controller.add(MessageDelta('Designing a brand pack for "$name"…\n\n'));
     final seed = BrandPackService.seedFor(name);
 
     Uint8List? logo;
@@ -757,9 +751,6 @@ class RealChatService implements ChatService {
   ) async {
     controller.add(const RoutingDetected(StudioType.codeStudio));
     final topic = InteractiveArtifacts.parseTopic(userInput, kind);
-    controller.add(
-        MessageDelta('Building an interactive ${kind.label} for "$topic"…\n\n'));
-
     String reply = '';
     try {
       reply = await _completeText(
@@ -867,9 +858,6 @@ class RealChatService implements ChatService {
       StreamController<ChatEvent> controller, String userInput) async {
     controller.add(const RoutingDetected(StudioType.shortReelsStudio));
     final req = ShortReelsService.parseReelsRequest(userInput);
-    controller.add(MessageDelta(
-        'Cutting a ${req.count}-reel pack on "${req.topic}"…\n\n'));
-
     ShortReelsPackResult? pack;
     try {
       final reply = await _completeText(
@@ -1026,8 +1014,6 @@ class RealChatService implements ChatService {
     Artifact target,
     String prompt,
   ) async {
-    controller.add(MessageDelta(
-        'Adding an image to "${target.title}"…\n\n'));
     Uint8List? bytes;
     await for (final event in _imageStream(providerId, prompt)) {
       switch (event) {
@@ -1045,7 +1031,7 @@ class RealChatService implements ChatService {
     controller
         .add(ArtifactUpdated(target.withNewVersion(updatedHtml, DateTime.now())));
     controller.add(MessageDelta(
-        '\n\nDone — it\'s live in "${target.title}" as a new version.'));
+        'Done — it\'s live in "${target.title}" as a new version.'));
     controller.add(const MessageComplete());
   }
 
@@ -1058,7 +1044,6 @@ class RealChatService implements ChatService {
     if (close) {
       controller.add(RoutingDetected(ChatRoute.imageGen.studioType));
     }
-    controller.add(const MessageDelta('Creating that image…\n\n'));
     await controller.addStream(_imageStream(providerId, prompt));
     if (close) await controller.close();
   }
