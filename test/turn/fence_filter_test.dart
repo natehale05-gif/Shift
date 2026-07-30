@@ -94,4 +94,35 @@ void main() {
     final fenced = FenceFilter()..feed('```\ncode\n```');
     expect(fenced.sawFence, isTrue);
   });
+
+  test('a stream that ends inside a fence reports it', () {
+    final cut = FenceFilter()..feed('Here:\n```html\n<html>');
+    cut.flush();
+    expect(cut.unterminated, isTrue);
+
+    final whole = FenceFilter()..feed('Here:\n```html\n<html></html>\n```');
+    whole.flush();
+    expect(whole.unterminated, isFalse);
+  });
+
+  test('replaying a truncated block closes the fence', () {
+    // Markdown with an open fence renders every following message as code,
+    // so replaying the held text verbatim would swallow the rest of the
+    // conversation into one grey box.
+    final cut = FenceFilter()..feed('Here:\n```html\n<html>');
+    cut.flush();
+    expect(cut.replayText(), '```html\n<html>\n```');
+  });
+
+  test('replaying a complete block leaves it exactly as it arrived', () {
+    final whole = FenceFilter()..feed('```html\n<html></html>\n```');
+    whole.flush();
+    expect(whole.replayText(), '```html\n<html></html>\n```');
+  });
+
+  test('replaying nothing held is empty, not a bare fence', () {
+    final plain = FenceFilter()..feed('just prose');
+    plain.flush();
+    expect(plain.replayText(), isEmpty);
+  });
 }
