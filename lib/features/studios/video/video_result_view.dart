@@ -20,6 +20,8 @@ import '../shared/round_icon_button.dart';
 import '../shared/studio_badge.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../../data/stores/conversation_store.dart';
 
 class VideoResultView extends StatefulWidget {
   final VideoResult result;
@@ -67,6 +69,24 @@ class _VideoResultViewState extends State<VideoResultView> {
     if (bytes == null) return;
     final filename = '${DownloadService.slugify(widget.result.prompt, fallback: 'video')}_thumbnail.png';
     DownloadService.downloadBytes(bytes, filename, mimeType: 'image/png');
+  }
+
+  /// Saves the rendered clip. The bytes are in memory on the turn that made
+  /// it and in the asset store afterwards, so both are tried.
+  Future<void> _saveVideo() async {
+    final result = widget.result;
+    var bytes = result.videoBytes;
+    final assetId = result.videoAssetId;
+    if (bytes == null && assetId != null && mounted) {
+      bytes = await context.read<ConversationStore>().persistence
+          .loadAsset(assetId);
+    }
+    if (bytes == null) return;
+    await DownloadService.downloadBytes(
+      bytes,
+      '${DownloadService.slugify(result.prompt, fallback: 'video')}.mp4',
+      mimeType: 'video/mp4',
+    );
   }
 
   @override
@@ -126,13 +146,24 @@ class _VideoResultViewState extends State<VideoResultView> {
                   onPressed: _download,
                 ),
               ),
-            if (isReal)
+            if (result.videoUrl != null)
               // No in-app player — link out to the finished clip.
               Center(
                 child: FilledButton.icon(
                   onPressed: () => openUrl(result.videoUrl!),
                   icon: const Icon(Icons.open_in_new_rounded, size: 18),
                   label: Text('Open in ${result.providerLabel ?? 'browser'}'),
+                ),
+              )
+            else if (isReal)
+              // A provider that returns bytes rather than a hosted URL — its
+              // content endpoint needs the API key, so there is nothing a
+              // player or a link could point at. Save it instead.
+              Center(
+                child: FilledButton.icon(
+                  onPressed: _saveVideo,
+                  icon: const Icon(Icons.download_rounded, size: 18),
+                  label: const Text('Save video (MP4)'),
                 ),
               )
             else ...[

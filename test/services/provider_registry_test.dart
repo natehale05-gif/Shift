@@ -86,10 +86,14 @@ void main() {
           ['anthropic', 'gemini']);
     });
 
-    test('avatar resolves to Heygen; video and voice have no provider', () {
+    test('avatar is Heygen, video is OpenAI, voice is ElevenLabs', () {
       expect(registry.providersFor(ProviderCapability.avatar).map((d) => d.id),
           ['heygen']);
-      expect(registry.providersFor(ProviderCapability.video), isEmpty);
+      // Video used to be empty, which is why every clip was simulated. A
+      // talking head is still Heygen's — that is the avatar capability, and a
+      // different thing from rendering a scene from a prompt.
+      expect(registry.providersFor(ProviderCapability.video).map((d) => d.id),
+          ['openai']);
       // Voice is no longer empty: ElevenLabs speaks, so a voiceover can come
       // from a real voice instead of the local synthesizer.
       expect(registry.providersFor(ProviderCapability.voice).map((d) => d.id),

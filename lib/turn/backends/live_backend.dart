@@ -43,6 +43,7 @@ import '../../providers/clients/gemini_client.dart';
 import '../../providers/clients/heygen_client.dart';
 import '../../providers/clients/openai_compatible_client.dart';
 import '../../providers/clients/openai_image_client.dart';
+import '../../providers/clients/openai_video_client.dart';
 import '../../providers/clients/elevenlabs_client.dart';
 import '../../providers/clients/fal_client.dart';
 import '../../providers/clients/replicate_client.dart';
@@ -159,6 +160,7 @@ class RealChatService implements ChatService {
   final FalClient _fal;
   final ElevenLabsClient _elevenLabs;
   final HeygenClient _heygen;
+  final OpenAiVideoClient _openAiVideo;
   final ProviderRegistry _registry;
   final ModelRouter _router;
   final MockChatService _mockFallback;
@@ -180,6 +182,7 @@ class RealChatService implements ChatService {
     FalClient? falClient,
     ElevenLabsClient? elevenLabsClient,
     HeygenClient? heygenClient,
+    OpenAiVideoClient? openAiVideoClient,
     ProviderRegistry? registry,
     ModelRouter? router,
     MockChatService? mockFallback,
@@ -193,6 +196,7 @@ class RealChatService implements ChatService {
         _fal = falClient ?? FalClient(),
         _elevenLabs = elevenLabsClient ?? ElevenLabsClient(),
         _heygen = heygenClient ?? HeygenClient(),
+        _openAiVideo = openAiVideoClient ?? OpenAiVideoClient(),
         _registry = registry ?? ProviderRegistry.defaults(),
         _router = router ??
             ModelRouter(
@@ -437,6 +441,20 @@ class RealChatService implements ChatService {
             registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
         if (voiceId != null) {
           await _runVoice(controller, userInput);
+          await controller.close();
+          return;
+        }
+      }
+
+      // Video: a real render when a video provider is keyed. Before this the
+      // route had no executor at all — it fell off the end of the client-kind
+      // switch into the mock, so every video was the simulated card no matter
+      // which keys were present.
+      if (route == ChatRoute.video) {
+        final videoId = chooseProvider(ChatRoute.video,
+            registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+        if (videoId != null) {
+          await _runVideo(controller, userInput);
           await controller.close();
           return;
         }
@@ -1538,6 +1556,50 @@ class RealChatService implements ChatService {
       return rasterizeGradientArt(seed: seed);
     }
     return null;
+  }
+
+  /// A real rendered video, or the simulated card with the reason when the
+  /// render could not happen.
+  Future<void> _runVideo(
+    StreamController<ChatEvent> controller,
+    String userInput,
+  ) async {
+    controller.add(const RoutingDetected(StudioType.videoStudio));
+
+    final seed = StudioResponseBank.seedFromString(userInput);
+    final simulated = VideoResult(
+      prompt: userInput,
+      durationSec: 4,
+      aspectRatio: '16:9',
+      identityLock: false,
+      seed: seed,
+    );
+
+    String? problem;
+    Uint8List? bytes;
+    try {
+      bytes = await _openAiVideo.render(
+          apiKey: keys.keyFor('openai'), prompt: userInput);
+    } on SseHttpException catch (e) {
+      problem = openAiVideoProblem(e.statusCode, e.body);
+    } catch (e) {
+      problem = 'Couldn\'t reach OpenAI for the video, so this is a '
+          'simulated clip. ($e)';
+    }
+
+    if (problem != null) controller.add(MessageDelta('$problem\n\n'));
+    controller.add(StudioResultReady(bytes == null
+        ? simulated
+        : VideoResult(
+            prompt: userInput,
+            durationSec: 4,
+            aspectRatio: '16:9',
+            identityLock: false,
+            seed: seed,
+            providerLabel: 'Sora',
+            videoBytes: bytes,
+          )));
+    controller.add(const MessageComplete());
   }
 
   /// A real spoken voiceover: the best text provider writes the script, the

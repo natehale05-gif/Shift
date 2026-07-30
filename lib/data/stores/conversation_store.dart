@@ -500,6 +500,19 @@ class ConversationStore extends ChangeNotifier {
           ]);
         });
       case StudioResultReady(:final result)
+          when result is VideoResult && result.videoBytes != null:
+        // A rendered clip goes the same way: bytes to the asset store, an id
+        // on the result. OpenAI's content endpoint needs the API key, so there
+        // is no URL a player could use.
+        final videoAssetId = _uuid.v4();
+        persistence.saveAsset(videoAssetId, result.videoBytes!);
+        _updateMessage(
+          conversationId,
+          messageId,
+          (m) => foldMessageEvent(
+              m, StudioResultReady(result.withVideoAsset(videoAssetId))),
+        );
+      case StudioResultReady(:final result)
           when result is AudioResult && result.audioBytes != null:
         // Real spoken audio takes the same route generated images do: bytes to
         // the asset store, an id on the result. Inlining a minute of speech in
