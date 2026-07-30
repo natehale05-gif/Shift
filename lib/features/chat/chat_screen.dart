@@ -7,11 +7,12 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/conversation.dart';
 import '../../data/models/studio_type.dart';
 import 'chat_find.dart';
+import 'greeting.dart';
 import 'conversation_export.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../core/state/artifact_panel_store.dart';
 import '../../data/stores/conversation_store.dart';
-import '../../data/stores/usage_store.dart';
+import '../../data/stores/user_prefs_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
@@ -571,12 +572,32 @@ class _FindBar extends StatelessWidget {
   }
 }
 
-class _EmptyState extends StatelessWidget {
+/// The new-chat screen: a greeting and what the app can do, then the
+/// composer. The canned prompts that used to sit here wrote a message for
+/// you, were identical on every visit, and pushed the composer off the bottom
+/// of a phone screen.
+class _EmptyState extends StatefulWidget {
   const _EmptyState();
+
+  @override
+  State<_EmptyState> createState() => _EmptyStateState();
+}
+
+class _EmptyStateState extends State<_EmptyState> {
+  /// Fixed for as long as this blank chat is on screen. Rotating per frame
+  /// would change the greeting while the user is reading it, and rotating per
+  /// keystroke would be worse.
+  late final int _seed = DateTime.now().millisecondsSinceEpoch ~/ 1000;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final greeting = greetingFor(
+      now: DateTime.now(),
+      name: context.watch<UserPrefsStore>().nickname,
+      seed: _seed,
+    );
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
@@ -587,26 +608,22 @@ class _EmptyState extends StatelessWidget {
             children: [
               Icon(
                 Icons.auto_awesome_rounded,
-                size: 36,
+                size: 32,
                 color: theme.colorScheme.primary,
               ),
-              const SizedBox(height: AppSpacing.lg),
+              const SizedBox(height: AppSpacing.md),
               Text(
-                'One studio. Every AI tool.',
+                greeting,
                 style: AppTypography.serifDisplay(
-                  fontSize: 32,
+                  fontSize: 30,
                   color: theme.textTheme.headlineMedium!.color!,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Talk to SHIFT AI like you would a person — it routes your '
-                'request to the right specialized studio automatically.',
-                style: theme.textTheme.bodyMedium,
-                textAlign: TextAlign.center,
-              ),
               const SizedBox(height: AppSpacing.lg),
+              // Kept: these say what the app is for, which a greeting cannot.
+              // Unlike the prompts they are labels, not actions — nothing here
+              // sends a message on your behalf.
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
@@ -625,37 +642,10 @@ class _EmptyState extends StatelessWidget {
                     StudioType.codeStudio,
                   ])
                     Chip(
-                      avatar: Icon(studio.icon, size: 16, color: studio.accent),
+                      avatar: Icon(studio.icon, size: 14, color: studio.accent),
                       label: Text(studio.shortName),
-                    ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.xl),
-              Text(
-                'Try one of these',
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color:
-                      theme.extension<AppSemanticColors>()!.textSecondary,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                alignment: WrapAlignment.center,
-                children: [
-                  for (final prompt in const [
-                    'Make a recipe card for banana bread',
-                    'Draw a flowchart of a sign-up flow',
-                    'Build a landing page for a coffee shop',
-                    'Write a haiku about the ocean',
-                  ])
-                    ActionChip(
-                      label: Text(prompt),
-                      onPressed: () {
-                        context.read<ConversationStore>().sendMessage(prompt);
-                        context.read<UsageStore>().recordMessage();
-                      },
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                 ],
               ),
