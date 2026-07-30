@@ -77,6 +77,16 @@ class VideoResult extends StudioResult {
   /// The provider label shown on the "Open in …" link (e.g. 'Heygen').
   final String? providerLabel;
 
+  /// Asset-store id of a rendered clip, when the provider returns bytes rather
+  /// than a hosted URL — OpenAI's content endpoint needs the API key, so a
+  /// bare URL in a player would 401.
+  final String? videoAssetId;
+
+  /// The bytes themselves, held only for the turn that produced them. Never
+  /// serialized — [videoAssetId] is what survives a reload. Same arrangement
+  /// as [AudioResult.audioBytes].
+  final Uint8List? videoBytes;
+
   const VideoResult({
     required this.prompt,
     required this.durationSec,
@@ -86,9 +96,25 @@ class VideoResult extends StudioResult {
     this.videoUrl,
     this.posterUrl,
     this.providerLabel,
+    this.videoAssetId,
+    this.videoBytes,
   });
 
-  bool get isRealVideo => videoUrl != null;
+  VideoResult withVideoAsset(String assetId) => VideoResult(
+        prompt: prompt,
+        durationSec: durationSec,
+        aspectRatio: aspectRatio,
+        identityLock: identityLock,
+        seed: seed,
+        videoUrl: videoUrl,
+        posterUrl: posterUrl,
+        providerLabel: providerLabel,
+        videoAssetId: assetId,
+        videoBytes: videoBytes,
+      );
+
+  bool get isRealVideo =>
+      videoUrl != null || videoAssetId != null || videoBytes != null;
 
   factory VideoResult.fromJson(Map<String, dynamic> json) => VideoResult(
         prompt: json['prompt'] as String,
@@ -99,6 +125,7 @@ class VideoResult extends StudioResult {
         videoUrl: json['videoUrl'] as String?,
         posterUrl: json['posterUrl'] as String?,
         providerLabel: json['providerLabel'] as String?,
+        videoAssetId: json['videoAssetId'] as String?,
       );
 
   @override
@@ -112,6 +139,7 @@ class VideoResult extends StudioResult {
         if (videoUrl != null) 'videoUrl': videoUrl,
         if (posterUrl != null) 'posterUrl': posterUrl,
         if (providerLabel != null) 'providerLabel': providerLabel,
+        if (videoAssetId != null) 'videoAssetId': videoAssetId,
       };
 }
 

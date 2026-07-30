@@ -151,7 +151,13 @@ final openaiDescriptor = ProviderDescriptor(
   // share the chat-completions shape, not the images endpoint. Without it an
   // OpenAI-only user asking for a picture matched no image provider and got
   // the simulated procedural artwork while their key sat unused.
-  capabilities: const {..._llmCapabilities, ProviderCapability.image},
+  // Video via Sora. OpenAI is the only provider here that renders a clip from
+  // a prompt; Heygen renders a talking head, which is the avatar capability.
+  capabilities: const {
+    ..._llmCapabilities,
+    ProviderCapability.image,
+    ProviderCapability.video,
+  },
   models: const [
     ProviderModel(id: 'gpt-4o', displayName: 'GPT-4o'),
     ProviderModel(id: 'gpt-4o-mini', displayName: 'GPT-4o mini'),
@@ -170,6 +176,7 @@ final openaiDescriptor = ProviderDescriptor(
     // organization, which the others do not, so a key that works for chat can
     // still fail here — a poor default when another image key is present.
     ProviderCapability.image: 4,
+    ProviderCapability.video: 0,
   },
   hintPrefix: 'sk-',
   guidanceText: 'Chat, code, writing and image generation with GPT models. '

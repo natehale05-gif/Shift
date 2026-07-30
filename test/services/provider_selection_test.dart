@@ -172,13 +172,29 @@ void main() {
           isNull);
     });
 
-    test('video and audio have no live provider', () {
-      for (final keys in [<String>{}, {'anthropic', 'gemini', 'openai', 'groq'}]) {
+    test('video renders on OpenAI, and on nothing else', () {
+      // Video had no provider at all, so every clip was the simulated card
+      // however many keys were present. OpenAI renders it now; the others
+      // still cannot, so a Gemini-or-Groq user keeps the simulation.
+      expect(
+          chooseProvider(ChatRoute.video,
+              registry: registry, hasKey: only({'openai'})),
+          'openai');
+      for (final keys in [<String>{}, {'anthropic', 'gemini', 'groq'}]) {
         expect(chooseProvider(ChatRoute.video, registry: registry, hasKey: only(keys)),
             isNull);
-        expect(chooseProvider(ChatRoute.audio, registry: registry, hasKey: only(keys)),
-            isNull);
       }
+    });
+
+    test('audio still needs a voice key', () {
+      expect(
+          chooseProvider(ChatRoute.audio,
+              registry: registry, hasKey: only({'elevenlabs'})),
+          'elevenlabs');
+      expect(
+          chooseProvider(ChatRoute.audio,
+              registry: registry, hasKey: only({'anthropic', 'gemini'})),
+          isNull);
     });
   });
 
