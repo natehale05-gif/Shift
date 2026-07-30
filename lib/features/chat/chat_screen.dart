@@ -42,8 +42,8 @@ class ChatScreen extends StatelessWidget {
             Consumer<ArtifactPanelStore>(
               builder: (context, panel, _) =>
                   panel.isOpen && (!sideBySide || panel.expanded)
-                      ? const Positioned.fill(child: ArtifactPanel())
-                      : const SizedBox.shrink(),
+                  ? const Positioned.fill(child: ArtifactPanel())
+                  : const SizedBox.shrink(),
             ),
           ],
         );
@@ -57,46 +57,40 @@ class ChatScreen extends StatelessWidget {
     bool sideBySide,
   ) {
     return Scaffold(
-          appBar: GlassAppBar(
-            title: const _ChatTitle(),
-            leading: const HomeMenuButton(),
-            actions: [
-              const _ChatHeaderMenu(),
-              IconButton(
-                tooltip: 'New chat',
-                icon: const Icon(Icons.add_comment_outlined),
-                onPressed: () =>
-                    context.read<ConversationStore>().startNewConversation(),
-              ),
-              const SizedBox(width: AppSpacing.sm),
+      appBar: GlassAppBar(
+        title: const _ChatTitle(),
+        leading: const HomeMenuButton(),
+        actions: [
+          const _ChatHeaderMenu(),
+          IconButton(
+            tooltip: 'New chat',
+            icon: const Icon(Icons.add_comment_outlined),
+            onPressed: () =>
+                context.read<ConversationStore>().startNewConversation(),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+      ),
+      body: Consumer<ArtifactPanelStore>(
+        builder: (context, panel, _) {
+          // Side-by-side panel needs real width; below that the panel
+          // covers the whole screen (handled by the caller's Stack). The
+          // threshold is measured against the chat area (the sidebar is
+          // already subtracted), so keep it low enough that a common
+          // desktop window with the sidebar open still shows chat +
+          // artifact together — the panel is at most 560px, leaving the
+          // chat a comfortable column.
+          final panelWidth = (constraints.maxWidth * 0.42).clamp(380.0, 560.0);
+          return Row(
+            children: [
+              const Expanded(child: _ChatBody()),
+              if (panel.isOpen && sideBySide && !panel.expanded)
+                SizedBox(width: panelWidth, child: const ArtifactPanel()),
             ],
-          ),
-          body: Consumer<ArtifactPanelStore>(
-            builder: (context, panel, _) {
-              // Side-by-side panel needs real width; below that the panel
-              // covers the whole screen (handled by the caller's Stack). The
-              // threshold is measured against the chat area (the sidebar is
-              // already subtracted), so keep it low enough that a common
-              // desktop window with the sidebar open still shows chat +
-              // artifact together — the panel is at most 560px, leaving the
-              // chat a comfortable column.
-              final panelWidth = (constraints.maxWidth * 0.42).clamp(
-                380.0,
-                560.0,
-              );
-              return Row(
-                children: [
-                  const Expanded(child: _ChatBody()),
-                  if (panel.isOpen && sideBySide && !panel.expanded)
-                    SizedBox(
-                      width: panelWidth,
-                      child: const ArtifactPanel(),
-                    ),
-                ],
-              );
-            },
-          ),
-        );
+          );
+        },
+      ),
+    );
   }
 }
 
@@ -325,6 +319,12 @@ class _ChatBody extends StatefulWidget {
 class _ChatBodyState extends State<_ChatBody> {
   final _scrollController = ScrollController();
 
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_trackStickiness);
+  }
+
   // In-chat find (Cmd/Ctrl+F): match message indices + the active one.
   bool _findActive = false;
   final _findController = TextEditingController();
@@ -333,13 +333,40 @@ class _ChatBodyState extends State<_ChatBody> {
   int _activeMatch = 0;
   final Map<int, GlobalKey> _itemKeys = {};
 
-  void _scrollToBottom() {
-    if (_findActive || !_scrollController.hasClients) return;
-    _scrollController.animateTo(
-      _scrollController.position.maxScrollExtent,
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
-    );
+  /// Whether the transcript should keep following new content.
+  ///
+  /// False as soon as the user scrolls up to read something, true again when
+  /// they come back to the bottom. Without it, auto-scroll drags them back
+  /// down mid-sentence every time another token arrives.
+  bool _stickToBottom = true;
+  bool _scrollScheduled = false;
+
+  void _trackStickiness() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    _stickToBottom = position.maxScrollExtent - position.pixels < 80;
+  }
+
+  /// Follows new content, at most once per frame.
+  ///
+  /// This used to be an unconditional `addPostFrameCallback` in `build`, and
+  /// `build` runs on every streamed token — so a reply scheduled dozens of
+  /// overlapping 250ms scroll animations a second, each cancelling the one
+  /// before it. None of them ever finished, and all of them cost frames.
+  void _scheduleAutoScroll() {
+    if (!_stickToBottom || _scrollScheduled) return;
+    _scrollScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollScheduled = false;
+      if (!_stickToBottom || _findActive || !_scrollController.hasClients) {
+        return;
+      }
+      final position = _scrollController.position;
+      if (position.pixels >= position.maxScrollExtent) return;
+      // A jump, not an animation: content grows a few pixels at a time while
+      // streaming, so this is imperceptible — and it cannot pile up.
+      position.jumpTo(position.maxScrollExtent);
+    });
   }
 
   void _openFind() {
@@ -357,7 +384,8 @@ class _ChatBodyState extends State<_ChatBody> {
   }
 
   void _runFind(String query) {
-    final messages = context.read<ConversationStore>().current?.messages ??
+    final messages =
+        context.read<ConversationStore>().current?.messages ??
         const <ChatMessage>[];
     final matches = findMatchingMessageIndices(messages, query);
     setState(() {
@@ -369,8 +397,7 @@ class _ChatBodyState extends State<_ChatBody> {
 
   void _stepMatch(int delta) {
     if (_matches.isEmpty) return;
-    setState(() =>
-        _activeMatch = (_activeMatch + delta) % _matches.length);
+    setState(() => _activeMatch = (_activeMatch + delta) % _matches.length);
     if (_activeMatch < 0) _activeMatch += _matches.length;
     _scrollToMatch();
   }
@@ -380,8 +407,11 @@ class _ChatBodyState extends State<_ChatBody> {
       final key = _itemKeys[_matches[_activeMatch]];
       final ctx = key?.currentContext;
       if (ctx != null) {
-        Scrollable.ensureVisible(ctx,
-            alignment: 0.15, duration: const Duration(milliseconds: 250));
+        Scrollable.ensureVisible(
+          ctx,
+          alignment: 0.15,
+          duration: const Duration(milliseconds: 250),
+        );
       }
     });
   }
@@ -390,6 +420,7 @@ class _ChatBodyState extends State<_ChatBody> {
   void dispose() {
     _findController.dispose();
     _findFocus.dispose();
+    _scrollController.removeListener(_trackStickiness);
     _scrollController.dispose();
     super.dispose();
   }
@@ -399,10 +430,9 @@ class _ChatBodyState extends State<_ChatBody> {
     final store = context.watch<ConversationStore>();
     final messages = store.current?.messages ?? const [];
     final colors = Theme.of(context).extension<AppSemanticColors>()!;
-    final activeMatchIndex =
-        _matches.isEmpty ? -1 : _matches[_activeMatch];
+    final activeMatchIndex = _matches.isEmpty ? -1 : _matches[_activeMatch];
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
+    _scheduleAutoScroll();
 
     return CallbackShortcuts(
       bindings: {
@@ -444,35 +474,43 @@ class _ChatBodyState extends State<_ChatBody> {
                     itemBuilder: (context, index) {
                       final key = _itemKeys.putIfAbsent(index, GlobalKey.new);
                       final isActiveMatch = index == activeMatchIndex;
-                      return Center(
-                        key: key,
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            maxWidth: _kProseColumnWidth,
-                          ),
-                          child: Container(
-                            decoration: isActiveMatch
-                                ? BoxDecoration(
-                                    color: colors.surfaceAlt,
-                                    borderRadius: BorderRadius.circular(
-                                        AppSpacing.radiusMd),
-                                    border: Border.all(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .primary),
-                                  )
-                                : null,
-                            padding: isActiveMatch
-                                ? const EdgeInsets.all(AppSpacing.sm)
-                                : EdgeInsets.zero,
-                            child: MessageView(
-                              message: messages[index],
-                              isLast: index == messages.length - 1,
-                              onOpenArtifact: (ref) =>
-                                  context.read<ArtifactPanelStore>().open(
-                                        ref.artifactId,
-                                        versionIndex: ref.versionIndex,
+                      // One layer per message. While a reply streams, only the
+                      // last item changes — without a boundary every token
+                      // repaints the whole visible transcript, which is the
+                      // most expensive thing the screen does.
+                      return RepaintBoundary(
+                        child: Center(
+                          key: key,
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxWidth: _kProseColumnWidth,
+                            ),
+                            child: Container(
+                              decoration: isActiveMatch
+                                  ? BoxDecoration(
+                                      color: colors.surfaceAlt,
+                                      borderRadius: BorderRadius.circular(
+                                        AppSpacing.radiusMd,
                                       ),
+                                      border: Border.all(
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      ),
+                                    )
+                                  : null,
+                              padding: isActiveMatch
+                                  ? const EdgeInsets.all(AppSpacing.sm)
+                                  : EdgeInsets.zero,
+                              child: MessageView(
+                                message: messages[index],
+                                isLast: index == messages.length - 1,
+                                onOpenArtifact: (ref) =>
+                                    context.read<ArtifactPanelStore>().open(
+                                      ref.artifactId,
+                                      versionIndex: ref.versionIndex,
+                                    ),
+                              ),
                             ),
                           ),
                         ),
@@ -546,8 +584,9 @@ class _FindBar extends StatelessWidget {
             ),
             Text(
               controller.text.isEmpty ? '' : '$activeMatch/$matchCount',
-              style: theme.textTheme.labelSmall
-                  ?.copyWith(color: colors.textSecondary),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colors.textSecondary,
+              ),
             ),
             IconButton(
               tooltip: 'Previous',
@@ -614,9 +653,11 @@ class _EmptyStateState extends State<_EmptyState> {
       );
       // After this frame: writing to a store during build is not allowed, and
       // this one is only read by the *next* new chat anyway.
-      WidgetsBinding.instance.addPostFrameCallback((_) =>
-          prefs.setLastGreeting(greetingLineFor(
-              now: now, seed: _seed, avoid: prefs.lastGreeting)));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => prefs.setLastGreeting(
+          greetingLineFor(now: now, seed: _seed, avoid: prefs.lastGreeting),
+        ),
+      );
       return chosen;
     }();
 

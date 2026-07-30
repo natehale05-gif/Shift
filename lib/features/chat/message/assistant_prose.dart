@@ -21,6 +21,7 @@ import 'image_block_view.dart';
 import 'inline_artifact.dart';
 import 'thinking_disclosure.dart';
 import 'tool_chip.dart';
+import '../../../turn/backends/live_backend.dart' show writingToolName;
 
 class AssistantProse extends StatelessWidget {
   final ChatMessage message;
@@ -47,14 +48,27 @@ class AssistantProse extends StatelessWidget {
     final nothingYet = message.blocks.every((b) => b is ThinkingBlock);
     final making = buildingLabel(message.studioType);
 
-    final showTyping = streaming && nothingYet;
+    // A code turn opens with a sentence or two of prose and only *then*
+    // writes the file. The backend reports the fence opening and closing, so
+    // the build animation can cover exactly the window in which the thing is
+    // being made — before that the model is still introducing it, and a hammer
+    // swinging over an unwritten file claims work that has not started.
+    final writingCode = message.blocks.any((b) =>
+        b is ToolUseBlock &&
+        b.tool == writingToolName &&
+        b.status == ToolUseStatus.running);
 
-    // The long part of a build is *after* the prose. A code turn opens with a
-    // sentence or two and then writes the file, which is withheld from the
-    // transcript so the page does not arrive twice — so the screen went
-    // completely still for the whole time the thing was actually being made.
-    // The tool keeps working underneath the prose until the turn ends.
-    final stillMaking = streaming && !nothingYet && making != null;
+    // Studios whose deliverable arrives as a fenced block inside a streamed
+    // reply have that distinct "writing it now" moment. An image, a video or a
+    // voiceover is generated in one call with no prose around it, so for those
+    // the whole turn is the making.
+    final fenced = message.studioType == StudioType.codeStudio;
+    final building =
+        streaming && making != null && (fenced ? writingCode : !nothingYet);
+
+    // Everything before the deliverable starts is thinking — including the
+    // prose that introduces it.
+    final showTyping = streaming && !building && (nothingYet || making != null);
 
     // Render the response the ‹1/2› navigator currently points at (the newest
     // by default; older regenerations when the user steps back).
@@ -68,19 +82,10 @@ class AssistantProse extends StatelessWidget {
       children: [
         // The routing is invisible on purpose — like Claude, you just get the
         // answer, not a "routed to X studio" chip.
-        if (showTyping)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-            // A turn that is *making* something waits differently from one
-            // that is answering: it takes long enough that idle dots read as a
-            // hang. The hammer keeps moving and the label says what is being
-            // made.
-            child: making == null
-                ? const TypingIndicator()
-                : BuildingIndicator(
-                    label: making,
-                    tool: buildingTool(message.studioType),
-                  ),
+        if (showTyping && nothingYet)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            child: TypingIndicator(),
           )
         else if (blocks.isEmpty && text.isNotEmpty)
           // Directly constructed / legacy messages carry text without
@@ -99,13 +104,21 @@ class AssistantProse extends StatelessWidget {
             padding: const EdgeInsets.only(top: AppSpacing.md),
             child: CitationChips(citations: citations),
           ),
-        if (stillMaking)
+        // Under the prose: the thinking dots while the reply is still being
+        // introduced, the build animation once the deliverable itself is
+        // being written.
+        if (building)
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.sm),
             child: BuildingIndicator(
               label: making,
               tool: buildingTool(message.studioType),
             ),
+          )
+        else if (showTyping && !nothingYet)
+          const Padding(
+            padding: EdgeInsets.only(top: AppSpacing.sm),
+            child: TypingIndicator(),
           ),
         if (message.status == MessageStatus.incomplete)
           Padding(
@@ -128,6 +141,12 @@ class AssistantProse extends StatelessWidget {
           text: text,
           streaming: message.status == MessageStatus.streaming,
         ),
+      // "Writing the file" is reported as a tool so it rides the existing
+      // running/done lifecycle, but it is drawn as the build animation below
+      // rather than as a chip — two indicators for one piece of work would be
+      // one too many.
+      ToolUseBlock(:final tool) when tool == writingToolName =>
+        const SizedBox.shrink(),
       ToolUseBlock() => Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
           child: ToolChip(block: block),
@@ -184,5 +203,11 @@ String? buildingLabel(StudioType? studio) => switch (studio) {
 BuildingTool buildingTool(StudioType? studio) => switch (studio) {
       StudioType.imageStudio || StudioType.brandPackStudio =>
         BuildingTool.pencil,
+      // Anything whose deliverable is heard rather than seen.
+      StudioType.musicStudio ||
+      StudioType.voiceStudio ||
+      StudioType.voiceAvatarStudio ||
+      StudioType.avatarStudio =>
+        BuildingTool.violin,
       _ => BuildingTool.hammer,
     };
