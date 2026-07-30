@@ -137,4 +137,58 @@ void main() {
       expect(second.statusFor('anthropic'), KeyStatus.untested);
     });
   });
+
+  group('pasted keys', () {
+    // A key copied off a phone, out of an email, or from a wrapped terminal
+    // arrives with whitespace in it. `trim()` alone only cleans the ends, so
+    // embedded newlines survived into the x-api-key header and every request
+    // came back 401 -- with the app blaming the key rather than the paste.
+    Future<ApiKeysStore> store() async {
+      SharedPreferences.setMockInitialValues({});
+      final s = ApiKeysStore(persistence: PersistenceService());
+      await s.load();
+      return s;
+    }
+
+    test('newlines inside a pasted key are removed', () async {
+      final s = await store();
+      await s.setKey('anthropic', 'sk-ant-api03-\nAAAA1111\nBBBB2222');
+      expect(s.keyFor('anthropic'), 'sk-ant-api03-AAAA1111BBBB2222');
+    });
+
+    test('carriage returns, tabs and inner spaces go too', () async {
+      final s = await store();
+      await s.setKey('anthropic', ' sk-ant\r\n-api03\t- AAAA \n');
+      expect(s.keyFor('anthropic'), 'sk-ant-api03-AAAA');
+    });
+
+    test('a key that is only whitespace clears the slot', () async {
+      final s = await store();
+      await s.setKey('anthropic', 'sk-ant-real');
+      expect(s.hasKey('anthropic'), isTrue);
+
+      await s.setKey('anthropic', '   \n\t ');
+      expect(s.keyFor('anthropic'), isEmpty);
+      expect(s.hasKey('anthropic'), isFalse);
+      expect(s.statusFor('anthropic'), KeyStatus.none);
+    });
+
+    test('a clean key is untouched', () async {
+      final s = await store();
+      await s.setKey('anthropic', 'sk-ant-api03-cleanKey_123-abc');
+      expect(s.keyFor('anthropic'), 'sk-ant-api03-cleanKey_123-abc');
+    });
+
+    test('the sanitised form is what persists', () async {
+      final persistence = PersistenceService();
+      SharedPreferences.setMockInitialValues({});
+      final first = ApiKeysStore(persistence: persistence);
+      await first.load();
+      await first.setKey('anthropic', 'sk-ant-\nwrapped');
+
+      final second = ApiKeysStore(persistence: persistence);
+      await second.load();
+      expect(second.keyFor('anthropic'), 'sk-ant-wrapped');
+    });
+  });
 }

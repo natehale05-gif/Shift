@@ -327,8 +327,15 @@ class AnthropicClient implements KeyValidatable {
       return null;
     } on SseHttpException catch (e) {
       return switch (e.statusCode) {
-        401 => 'That key was rejected (401). Double-check it in '
-            'console.anthropic.com → API keys.',
+        // Names the causes in the order they actually happen. "Double-check
+        // the key" sends people to re-read a key that is usually fine — the
+        // common faults are a partial paste and spending an org's credit
+        // that has run out.
+        401 => 'Anthropic rejected this key (401). Most often the paste was '
+            'incomplete — an Anthropic key is one unbroken string starting '
+            '`sk-ant-`, with no spaces or line breaks. Otherwise the key may '
+            'have been revoked, or belong to a workspace with no credit. '
+            'Check it at console.anthropic.com → API keys.',
         429 => 'Key works but you\'re rate-limited right now (429).',
         529 => 'Anthropic\'s API is overloaded (529) — try again shortly.',
         _ => 'API error ${e.statusCode}: ${e.body}',
