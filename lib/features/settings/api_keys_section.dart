@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -74,7 +75,16 @@ class _ApiKeysSectionState extends State<ApiKeysSection> {
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
-                    _StatusBadge(status: keys.statusFor(descriptor.id)),
+                    _StatusBadge(
+                      // Same reasoning as the row below: a browser that
+                      // cannot reach a provider has learned nothing about the
+                      // key, so the list must not label it a problem either.
+                      status: kIsWeb &&
+                              descriptor.corsBlocked &&
+                              keys.hasKey(descriptor.id)
+                          ? KeyStatus.untested
+                          : keys.statusFor(descriptor.id),
+                    ),
                   ],
                 ),
               ),
@@ -166,6 +176,11 @@ class _ProviderKeyRowState extends State<_ProviderKeyRow> {
     final status = keys.statusFor(descriptor.id);
     final error = keys.errorFor(descriptor.id);
     final hasKey = keys.hasKey(descriptor.id);
+    // A provider that sends no CORS headers cannot be reached from a browser
+    // at all — the request fails before the key is ever looked at. Offering
+    // "Test key" there produced a raw fetch error and marked a perfectly good
+    // key as a problem. The key is not the problem; the browser is.
+    final unreachable = kIsWeb && descriptor.corsBlocked;
     final hint =
         descriptor.hintPrefix.isEmpty ? 'API key' : '${descriptor.hintPrefix}…';
 
@@ -176,7 +191,9 @@ class _ProviderKeyRowState extends State<_ProviderKeyRow> {
           children: [
             Text(descriptor.displayName, style: theme.textTheme.titleSmall),
             const SizedBox(width: AppSpacing.sm),
-            _StatusBadge(status: status),
+            _StatusBadge(
+              status: unreachable && hasKey ? KeyStatus.untested : status,
+            ),
           ],
         ),
         if (descriptor.guidanceText.isNotEmpty) ...[
@@ -204,7 +221,7 @@ class _ProviderKeyRowState extends State<_ProviderKeyRow> {
             ),
             const SizedBox(width: AppSpacing.sm),
             FilledButton.tonal(
-              onPressed: !hasKey || status == KeyStatus.testing
+              onPressed: !hasKey || unreachable || status == KeyStatus.testing
                   ? null
                   : () => keys.testKey(descriptor.id),
               child: status == KeyStatus.testing
@@ -223,12 +240,22 @@ class _ProviderKeyRowState extends State<_ProviderKeyRow> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.info_outline,
-                    size: 14, color: colors.textSecondary),
+                Icon(
+                  // On the website this is settled, not advisory.
+                  unreachable ? Icons.desktop_windows_outlined
+                      : Icons.info_outline,
+                  size: 14,
+                  color: colors.textSecondary,
+                ),
                 const SizedBox(width: AppSpacing.xs),
                 Expanded(
                   child: Text(
-                    descriptor.browserWarning!,
+                    unreachable
+                        ? '${descriptor.displayName} does not accept calls '
+                            'from a web page, so this key cannot be tested or '
+                            'used here. It works in the downloaded app, and '
+                            'chat falls back to another provider meanwhile.'
+                        : descriptor.browserWarning!,
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: colors.textSecondary),
                   ),
@@ -236,7 +263,9 @@ class _ProviderKeyRowState extends State<_ProviderKeyRow> {
               ],
             ),
           ),
-        if (error != null)
+        // A fetch error from a provider the browser was never going to reach
+        // says nothing about the key, so it is not shown as one.
+        if (error != null && !unreachable)
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.xs),
             child: Text(

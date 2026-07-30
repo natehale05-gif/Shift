@@ -43,8 +43,18 @@ class AssistantProse extends StatelessWidget {
     // up until real content arrives means a deck, a brand pack and a plain
     // answer all wait the same way, instead of each studio announcing itself
     // in its own prose.
-    final showTyping = message.status == MessageStatus.streaming &&
-        message.blocks.every((b) => b is ThinkingBlock);
+    final streaming = message.status == MessageStatus.streaming;
+    final nothingYet = message.blocks.every((b) => b is ThinkingBlock);
+    final making = buildingLabel(message.studioType);
+
+    final showTyping = streaming && nothingYet;
+
+    // The long part of a build is *after* the prose. A code turn opens with a
+    // sentence or two and then writes the file, which is withheld from the
+    // transcript so the page does not arrive twice — so the screen went
+    // completely still for the whole time the thing was actually being made.
+    // The tool keeps working underneath the prose until the turn ends.
+    final stillMaking = streaming && !nothingYet && making != null;
 
     // Render the response the ‹1/2› navigator currently points at (the newest
     // by default; older regenerations when the user steps back).
@@ -65,10 +75,10 @@ class AssistantProse extends StatelessWidget {
             // that is answering: it takes long enough that idle dots read as a
             // hang. The hammer keeps moving and the label says what is being
             // made.
-            child: buildingLabel(message.studioType) == null
+            child: making == null
                 ? const TypingIndicator()
                 : BuildingIndicator(
-                    label: buildingLabel(message.studioType)!,
+                    label: making,
                     tool: buildingTool(message.studioType),
                   ),
           )
@@ -88,6 +98,14 @@ class AssistantProse extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.md),
             child: CitationChips(citations: citations),
+          ),
+        if (stillMaking)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sm),
+            child: BuildingIndicator(
+              label: making,
+              tool: buildingTool(message.studioType),
+            ),
           ),
         if (message.status == MessageStatus.incomplete)
           Padding(

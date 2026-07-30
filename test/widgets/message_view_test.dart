@@ -10,6 +10,8 @@ import 'package:shift_ai/data/stores/conversation_store.dart';
 import 'package:shift_ai/core/theme/app_theme.dart';
 import 'package:shift_ai/data/models/message_block.dart';
 import 'package:shift_ai/features/chat/message/message_view.dart';
+import 'package:shift_ai/data/models/studio_type.dart';
+import 'package:shift_ai/features/chat/message/building_indicator.dart';
 import 'package:shift_ai/features/chat/message/typing_indicator.dart';
 
 const _markdownFixture = '''
@@ -135,5 +137,85 @@ void main() {
     await tester.pump();
 
     expect(find.byType(TypingIndicator), findsNothing);
+  });
+
+  testWidgets('the tool keeps working while the code is being written',
+      (tester) async {
+    // The long part of a build is after the prose: a code turn opens with a
+    // sentence and then writes the file, which is withheld from the transcript
+    // so the page does not arrive twice. The screen used to go completely
+    // still for exactly the stretch when the thing was being made.
+    final message = ChatMessage(
+      id: 'm5',
+      conversationId: 'c1',
+      role: MessageRole.assistant,
+      text: "Here's a coffee shop site:",
+      status: MessageStatus.streaming,
+      studioType: StudioType.codeStudio,
+      blocks: const [TextBlock("Here's a coffee shop site:")],
+      timestamp: DateTime(2026, 7, 30, 12, 0),
+    );
+    await tester.pumpWidget(_harness(MessageView(message: message)));
+    await tester.pump();
+
+    expect(find.byType(BuildingIndicator), findsOneWidget);
+    expect(find.text('Building'), findsOneWidget);
+    expect(find.byType(TypingIndicator), findsNothing,
+        reason: 'content has arrived; the dots have had their turn');
+  });
+
+  testWidgets('it stops once the turn is finished', (tester) async {
+    final message = ChatMessage(
+      id: 'm6',
+      conversationId: 'c1',
+      role: MessageRole.assistant,
+      text: 'Done.',
+      status: MessageStatus.complete,
+      studioType: StudioType.codeStudio,
+      blocks: const [TextBlock('Done.')],
+      timestamp: DateTime(2026, 7, 30, 12, 0),
+    );
+    await tester.pumpWidget(_harness(MessageView(message: message)));
+    await tester.pump();
+
+    expect(find.byType(BuildingIndicator), findsNothing);
+  });
+
+  testWidgets('a plain answer streams without a tool under it',
+      (tester) async {
+    // The hammer would be a lie over a turn that is only writing prose.
+    final message = ChatMessage(
+      id: 'm7',
+      conversationId: 'c1',
+      role: MessageRole.assistant,
+      text: 'The capital of France is Paris.',
+      status: MessageStatus.streaming,
+      studioType: StudioType.middleware,
+      blocks: const [TextBlock('The capital of France is Paris.')],
+      timestamp: DateTime(2026, 7, 30, 12, 0),
+    );
+    await tester.pumpWidget(_harness(MessageView(message: message)));
+    await tester.pump();
+
+    expect(find.byType(BuildingIndicator), findsNothing);
+    expect(find.byType(TypingIndicator), findsNothing);
+  });
+
+  testWidgets('an image turn shows one pencil, not two', (tester) async {
+    final message = ChatMessage(
+      id: 'm8',
+      conversationId: 'c1',
+      role: MessageRole.assistant,
+      text: 'Drawing that now:',
+      status: MessageStatus.streaming,
+      studioType: StudioType.imageStudio,
+      blocks: const [TextBlock('Drawing that now:')],
+      timestamp: DateTime(2026, 7, 30, 12, 0),
+    );
+    await tester.pumpWidget(_harness(MessageView(message: message)));
+    await tester.pump();
+
+    expect(find.byType(BuildingIndicator), findsOneWidget);
+    expect(find.text('Drawing'), findsOneWidget);
   });
 }
