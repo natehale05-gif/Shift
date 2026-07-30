@@ -9,6 +9,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../artifacts/iframe_view_io.dart'
     if (dart.library.html) '../../artifacts/iframe_view_web.dart';
+import '../../../core/theme/tap_targets.dart';
 
 /// Renders assistant markdown. This is the only file that touches the
 /// markdown package directly — if gpt_markdown ever needs replacing, the
@@ -75,7 +76,7 @@ class _CodeBlock extends StatelessWidget {
                 IconButton(
                   tooltip: 'Copy code',
                   iconSize: 15,
-                  visualDensity: VisualDensity.compact,
+                  visualDensity: touchSafeDensity,
                   color: const Color(0xFF9DA5B4),
                   icon: const Icon(Icons.copy_rounded),
                   onPressed: () =>

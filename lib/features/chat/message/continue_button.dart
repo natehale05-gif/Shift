@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../data/stores/conversation_store.dart';
+import '../../../core/theme/tap_targets.dart';
 
 /// Claude-style message layout: user turns are compact right-aligned bubbles;
 /// assistant turns are open prose — an ordered sequence of thinking, tool,
@@ -20,7 +21,7 @@ class ContinueButton extends StatelessWidget {
       icon: const Icon(Icons.play_arrow_rounded, size: 16),
       label: const Text('Continue'),
       style: OutlinedButton.styleFrom(
-        visualDensity: VisualDensity.compact,
+        visualDensity: touchSafeDensity,
       ),
     );
   }

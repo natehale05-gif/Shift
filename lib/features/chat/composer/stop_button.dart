@@ -2,6 +2,7 @@
 
 
 import 'package:flutter/material.dart';
+import '../../../core/theme/tap_targets.dart';
 
 
 /// Claude-style composer: a single rounded card holding the text field with
@@ -15,17 +16,25 @@ class StopButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Same 34pt circle in a 44pt button as SendButton — they swap places in
+    // the composer, so a difference in hit area between them would move the
+    // target under the thumb mid-turn.
     return SizedBox(
-      width: 34,
-      height: 34,
-      child: IconButton.filled(
+      width: kMinTouchTarget,
+      height: kMinTouchTarget,
+      child: IconButton(
         tooltip: 'Stop generating',
         padding: EdgeInsets.zero,
-        style: IconButton.styleFrom(
-          backgroundColor: theme.colorScheme.primary,
-          foregroundColor: theme.colorScheme.onPrimary,
+        icon: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primary,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.stop_rounded,
+              size: 18, color: theme.colorScheme.onPrimary),
         ),
-        icon: const Icon(Icons.stop_rounded, size: 18),
         onPressed: onPressed,
       ),
     );

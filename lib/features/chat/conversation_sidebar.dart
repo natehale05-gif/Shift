@@ -10,6 +10,7 @@ import '../../data/stores/project_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
 import '../projects/project_detail_sheet.dart';
+import '../../core/theme/tap_targets.dart';
 
 class ConversationSidebar extends StatefulWidget {
   /// Called after "New chat" is pressed or a conversation is selected —
@@ -261,7 +262,7 @@ class _ProjectsSection extends StatelessWidget {
               IconButton(
                 tooltip: 'New project',
                 iconSize: 16,
-                visualDensity: VisualDensity.compact,
+                visualDensity: touchSafeDensity,
                 icon: const Icon(Icons.add_rounded),
                 onPressed: () => _createProject(context),
               ),
@@ -288,7 +289,7 @@ class _ProjectsSection extends StatelessWidget {
             trailing: IconButton(
               tooltip: 'Project settings',
               iconSize: 15,
-              visualDensity: VisualDensity.compact,
+              visualDensity: touchSafeDensity,
               color: colors.textSecondary,
               icon: const Icon(Icons.tune_rounded),
               onPressed: () => showProjectDetailSheet(context, project.id),
