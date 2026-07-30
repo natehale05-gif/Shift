@@ -7,6 +7,7 @@ import '../../data/models/usage_report.dart';
 import '../../turn/chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'openai_compatible_config.dart';
+import '../history/conversation_history.dart';
 
 /// One raw-HTTP client for every OpenAI-compatible provider (OpenAI, Groq,
 /// OpenRouter, Mistral). They share the chat-completions wire shape and differ
@@ -47,16 +48,15 @@ class OpenAiCompatibleClient {
       if (systemPrompt != null && systemPrompt.isNotEmpty)
         {'role': 'system', 'content': systemPrompt},
     ];
-    for (final message in history) {
-      if (message.text.trim().isEmpty) continue;
-      switch (message.role) {
-        case MessageRole.user:
-          messages.add({'role': 'user', 'content': message.text});
-        case MessageRole.assistant:
-          messages.add({'role': 'assistant', 'content': message.text});
-        case MessageRole.system:
-          break; // folded into the leading system message
-      }
+    // Images are left out of the history here, unlike Claude and Gemini: this
+    // one client serves GPT, Groq, Mistral and OpenRouter, and not all of
+    // those models take images. They get the notes instead — a real capability
+    // difference, rather than the accidental data loss this replaces.
+    for (final turn in buildHistory(history, includeImages: false)) {
+      messages.add({
+        'role': turn.role == MessageRole.user ? 'user' : 'assistant',
+        'content': turn.text,
+      });
     }
     messages.add({'role': 'user', 'content': _userContent(userInput, attachments)});
 
