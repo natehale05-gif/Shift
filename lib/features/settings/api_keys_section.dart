@@ -124,12 +124,16 @@ class _ProviderKeyRowState extends State<_ProviderKeyRow> {
   late final TextEditingController _controller;
   bool _show = false;
 
+  /// The stored value this field last reflected, so a change coming *from*
+  /// the store can be told apart from one this field just caused.
+  String _synced = '';
+
   @override
   void initState() {
     super.initState();
     final keys = context.read<ApiKeysStore>();
-    _controller =
-        TextEditingController(text: keys.keyFor(widget.descriptor.id));
+    _synced = keys.keyFor(widget.descriptor.id);
+    _controller = TextEditingController(text: _synced);
   }
 
   @override
@@ -144,6 +148,20 @@ class _ProviderKeyRowState extends State<_ProviderKeyRow> {
     final keys = context.watch<ApiKeysStore>();
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
+
+    // HomeShell's IndexedStack builds every screen at launch, so this row is
+    // constructed before ApiKeysStore.load() resolves — seeding the
+    // controller in initState alone left it showing a placeholder over a key
+    // that was saved and working, which reads as "it didn't save".
+    //
+    // Only adopt a value that actually changed in the store, and never one
+    // that would overwrite what is already displayed: every keystroke writes
+    // through to the store and comes straight back here as a rebuild.
+    final stored = keys.keyFor(descriptor.id);
+    if (stored != _synced && stored != _controller.text) {
+      _controller.text = stored;
+    }
+    _synced = stored;
 
     final status = keys.statusFor(descriptor.id);
     final error = keys.errorFor(descriptor.id);
