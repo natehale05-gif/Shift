@@ -4,6 +4,7 @@ import '../../data/models/artifact.dart';
 import '../../core/theme/app_spacing.dart';
 import '../chat/message/markdown_message.dart';
 import 'artifact_code_view.dart';
+import 'jsx_preview.dart';
 import 'iframe_view_io.dart'
     if (dart.library.html) 'iframe_view_web.dart';
 
@@ -39,6 +40,31 @@ class ArtifactPreview extends StatelessWidget {
       ArtifactKind.markdown => SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.lg),
           child: MarkdownMessage(text: content),
+        ),
+      // A React component is runnable, so Preview runs it. Everything else
+      // falls back to the source — which is what Preview showed for JSX too,
+      // making the two tabs identical.
+      ArtifactKind.code when JsxPreview.handles(artifact.language, content) =>
+        FutureBuilder<String>(
+          future: JsxPreview.page(
+            content,
+            typescript: JsxPreview.isTypeScript(artifact.language),
+          ),
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              // The libraries are bundled, so this is a broken build rather
+              // than a network problem — say so instead of spinning.
+              return ArtifactCodeView(
+                code: content,
+                language: artifact.language,
+              );
+            }
+            final page = snapshot.data;
+            if (page == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            return buildSandboxedIframe(viewKey: viewKey, htmlContent: page);
+          },
         ),
       ArtifactKind.code => ArtifactCodeView(
           code: content,

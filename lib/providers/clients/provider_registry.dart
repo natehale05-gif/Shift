@@ -290,9 +290,10 @@ final fluxDescriptor = ProviderDescriptor(
   guidanceText:
       'High-quality image generation with FLUX. Stored only in this browser.',
   consoleUrl: 'dashboard.bfl.ai',
+  corsBlocked: true,
   browserWarning:
-      'FLUX may block direct browser calls (CORS). If a key test or generation '
-      'fails with a network/CORS error, it likely needs a proxy.',
+      'FLUX does not allow direct browser calls, so this key only works in '
+      'the downloaded app — not the website.',
 );
 
 /// Heygen — talking-avatar video generation. The app has no in-app video
@@ -322,9 +323,10 @@ final heygenDescriptor = ProviderDescriptor(
   guidanceText: 'Talking-avatar videos from a script. Rendered by Heygen and '
       'opened in a new tab (no in-app player). Stored only in this browser.',
   consoleUrl: 'app.heygen.com',
+  corsBlocked: true,
   browserWarning:
-      'Heygen may block direct browser calls (CORS). If a key test or render '
-      'fails with a network/CORS error, it likely needs a proxy.',
+      'Heygen does not allow direct browser calls, so this key only works in '
+      'the downloaded app — not the website.',
 );
 
 /// Replicate — a marketplace of hosted models. Wired for image generation
@@ -351,9 +353,13 @@ final replicateDescriptor = ProviderDescriptor(
   guidanceText: 'Image generation through Replicate\'s hosted models. Stored '
       'only in this browser; calls go direct to Replicate.',
   consoleUrl: 'replicate.com/account/api-tokens',
+  // Replicate sends no CORS headers at all, so a browser cannot call it —
+  // confirmed by a user's key test failing with "Failed to execute fetch"
+  // before any request was even authorized. It works in the installed app.
+  corsBlocked: true,
   browserWarning:
-      'Replicate may block direct browser calls (CORS). If a key test or '
-      'generation fails with a network/CORS error, it likely needs a proxy.',
+      'Replicate does not allow direct browser calls, so this key only works '
+      'in the downloaded app — not the website.',
 );
 
 /// fal.ai — fast hosted image models. Synchronous, so a picture is one round
@@ -378,9 +384,10 @@ final falDescriptor = ProviderDescriptor(
   guidanceText: 'Fast image generation through fal.ai. Stored only in this '
       'browser; calls go direct to fal.',
   consoleUrl: 'fal.ai/dashboard/keys',
+  corsBlocked: true,
   browserWarning:
-      'fal may block direct browser calls (CORS). If a key test or generation '
-      'fails with a network/CORS error, it likely needs a proxy.',
+      'fal expects calls through its own proxy rather than straight from a '
+      'browser, so this key only works in the downloaded app.',
 );
 
 /// ElevenLabs — text to speech. The first provider to advertise
@@ -406,9 +413,11 @@ final elevenLabsDescriptor = ProviderDescriptor(
   guidanceText: 'Real spoken voiceovers instead of the built-in synthesizer. '
       'Stored only in this browser; calls go direct to ElevenLabs.',
   consoleUrl: 'elevenlabs.io',
+  // ElevenLabs does serve CORS headers, so it is a caution rather than a
+  // certainty — some plans and endpoints differ.
   browserWarning:
-      'ElevenLabs may block direct browser calls (CORS). If a key test or a '
-      'voiceover fails with a network/CORS error, it likely needs a proxy.',
+      'If a key test or a voiceover fails with a network error in the browser, '
+      'the same key will work in the downloaded app.',
 );
 
 /// The set of providers the app knows about, plus lookups over them. Pure

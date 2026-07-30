@@ -1,7 +1,7 @@
+import 'package:flutter/foundation.dart';
 import '../../features/artifacts/interactive/interactive_render.dart';
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:uuid/uuid.dart';
 
@@ -214,7 +214,7 @@ class RealChatService implements ChatService {
       if (structuredRequest != null) {
         if (structuredRequest is ImageRequest) {
           final imageId = chooseProvider(ChatRoute.imageGen,
-              registry: _registry, hasKey: keys.hasKey);
+              registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
           if (imageId != null) {
             await _runImage(controller, imageId, structuredRequest.prompt);
             return;
@@ -336,7 +336,7 @@ class RealChatService implements ChatService {
 
       // Auto: pick the best available provider for the route's capability.
       final providerId =
-          chooseProvider(route, registry: _registry, hasKey: keys.hasKey);
+          chooseProvider(route, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
       final provider = providerId == null ? null : _registry.byId(providerId);
 
       final pageContributors =
@@ -403,7 +403,7 @@ class RealChatService implements ChatService {
 
     // A grounded (web-search-backed) provider for the search step, if any.
     final searchId =
-        chooseProvider(ChatRoute.webSearch, registry: _registry, hasKey: keys.hasKey);
+        chooseProvider(ChatRoute.webSearch, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
 
     final engine = DeepResearchEngine(
       planQueries: (topic) async {
@@ -600,7 +600,7 @@ class RealChatService implements ChatService {
       // No Heygen key (or the render failed): a portrait + synthesized voice.
       // Any keyed image provider draws the portrait, not Gemini alone.
       final portraitId =
-          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey);
+          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
       final images = portraitId != null
           ? await _generatePhotos(
               portraitId, '$userInput, portrait headshot', 1)
@@ -625,7 +625,7 @@ class RealChatService implements ChatService {
   /// available, so callers fall back to their templates.
   Future<String> _completeText(String prompt,
       {int maxTokens = 400, bool strong = false}) async {
-    final id = chooseProvider(ChatRoute.chat, registry: _registry, hasKey: keys.hasKey);
+    final id = chooseProvider(ChatRoute.chat, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
     final provider = id == null ? null : _registry.byId(id);
     switch (provider?.clientKind) {
       case ProviderClientKind.anthropic:
@@ -746,7 +746,7 @@ class RealChatService implements ChatService {
 
     Uint8List? logo;
     final imageId =
-        chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey);
+        chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
     if (imageId != null) {
       try {
         await for (final event in _imageStream(imageId,
@@ -802,7 +802,7 @@ class RealChatService implements ChatService {
     String? heroUri;
     if (kind == InteractiveKind.recipe) {
       final imageId = chooseProvider(ChatRoute.imageGen,
-          registry: _registry, hasKey: keys.hasKey);
+          registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
       final wantsPhoto = _mentionsPhoto(userInput) || imageId != null;
       if (wantsPhoto) {
         Uint8List? bytes;
@@ -1313,7 +1313,7 @@ class RealChatService implements ChatService {
       // Hardcoding Gemini here meant an OpenAI or Flux user got procedural
       // placeholder art inside a page they had paid a real key to build.
       final imageId =
-          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey);
+          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
       final images = imageId != null
           ? await _generatePhotos(imageId, userInput, count)
           : await _generateProceduralPhotos(userInput, count);
@@ -1347,7 +1347,7 @@ class RealChatService implements ChatService {
     final result = mediaPairAudio(kind, userInput, script);
     if (result.kind != AudioKind.voice) return result;
     final voiceId =
-        chooseProvider(ChatRoute.voice, registry: _registry, hasKey: keys.hasKey);
+        chooseProvider(ChatRoute.voice, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
     if (voiceId != 'elevenlabs') return result;
     try {
       final pcm = await _elevenLabs.speak(
