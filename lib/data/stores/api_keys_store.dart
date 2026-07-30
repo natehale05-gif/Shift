@@ -50,8 +50,11 @@ class ApiKeysStore extends ChangeNotifier {
   /// Loads every registered provider's key from persistence.
   Future<void> load() async {
     for (final descriptor in registry.all) {
-      final key =
-          await persistence.loadApiKey(descriptor.persistenceKeyName) ?? '';
+      // Sanitised on the way in as well as the way out: a key saved by an
+      // earlier build kept whatever whitespace was pasted into it, and would
+      // otherwise keep failing after this fix shipped.
+      final key = sanitizeKey(
+          await persistence.loadApiKey(descriptor.persistenceKeyName) ?? '');
       _keys[descriptor.id] = key;
       _status[descriptor.id] =
           key.isEmpty ? KeyStatus.none : KeyStatus.untested;
@@ -59,11 +62,22 @@ class ApiKeysStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Strips every whitespace character from a pasted key.
+  ///
+  /// No provider issues keys containing whitespace, so removing it can only
+  /// help — and pasted keys arrive with it constantly: wrapped in an email,
+  /// copied off a phone, broken across lines by a terminal. `trim()` alone
+  /// cleans the ends and leaves newlines in the middle, which then travel
+  /// into the `x-api-key` header and come back 401. The app then blames the
+  /// key, which is the one explanation that sends people looking in the wrong
+  /// place.
+  static String sanitizeKey(String key) => key.replaceAll(RegExp(r'\s'), '');
+
   /// Sets (or, when empty, clears) the key for [providerId] and persists it.
   Future<void> setKey(String providerId, String key) async {
     final descriptor = registry.byId(providerId);
     if (descriptor == null) return;
-    final value = key.trim();
+    final value = sanitizeKey(key);
     _keys[providerId] = value;
     _status[providerId] = value.isEmpty ? KeyStatus.none : KeyStatus.untested;
     _errors[providerId] = null;
