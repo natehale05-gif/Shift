@@ -98,6 +98,27 @@ class _FakeBackend implements ShiftBackend {
     if (failWith != null) throw failWith!;
   }
 
+  List<String> platformSecrets = [];
+
+  @override
+  Future<void> putPlatformKey({
+    required String provider,
+    required String secret,
+  }) async {
+    if (failWith != null) throw failWith!;
+    platformSecrets.add(secret);
+  }
+
+  @override
+  Future<List<String>> includedProviders() async => included;
+
+  List<String> included = const [];
+
+  bool adminValue = false;
+
+  @override
+  Future<bool> isAdmin() async => adminValue;
+
   @override
   Future<Membership> membership() async {
     membershipCalls++;
@@ -273,6 +294,88 @@ void main() {
       expect(await store.signUp(email: 'new@test', password: 'pw12345678'),
           isTrue);
       expect(store.account?.email, 'new@test');
+      store.dispose();
+      backend.dispose();
+    });
+
+    test('an account awaiting email confirmation is a notice, not an error',
+        () async {
+      // The account was created. Showing this in red under the form reads as
+      // "that did not work" and invites a second attempt, which then fails
+      // with "already registered" — the worst possible sequence for someone
+      // who did everything right.
+      final backend = _FakeBackend()
+        ..failWith = BackendException(
+          BackendProblem.confirmationRequired,
+          defaultMessageFor(BackendProblem.confirmationRequired),
+        );
+      final store = _store(backend);
+      await store.restore();
+
+      expect(await store.signUp(email: 'new@test', password: 'pw12345678'),
+          isFalse);
+      expect(store.problem, isNull);
+      expect(store.notice, contains('Check your email'));
+      store.dispose();
+      backend.dispose();
+    });
+
+    test('a failure that is not a confirmation still shows as one', () async {
+      final backend = _FakeBackend()
+        ..failWith = const BackendException(
+            BackendProblem.credentials, 'That email is already registered.');
+      final store = _store(backend);
+      await store.restore();
+
+      expect(await store.signUp(email: 'taken@test', password: 'pw12345678'),
+          isFalse);
+      expect(store.problem, 'That email is already registered.');
+      expect(store.notice, isNull);
+      store.dispose();
+      backend.dispose();
+    });
+  });
+
+  group('admin', () {
+    test('comes from the server, and is false until it has been asked',
+        () async {
+      final backend = _FakeBackend()..adminValue = true;
+      final store = _store(backend);
+      await store.restore();
+
+      // Before signing in there is nobody to be an admin.
+      expect(store.isAdmin, isFalse);
+
+      await store.signIn(email: 'a@test', password: 'pw');
+      await store.refresh();
+      expect(store.isAdmin, isTrue);
+
+      store.dispose();
+      backend.dispose();
+    });
+
+    test('an ordinary account is not one', () async {
+      final backend = _FakeBackend();
+      final store = _store(backend);
+      await store.restore();
+      await store.signIn(email: 'a@test', password: 'pw');
+      await store.refresh();
+
+      expect(store.isAdmin, isFalse);
+      store.dispose();
+      backend.dispose();
+    });
+
+    test('signing out gives it up', () async {
+      final backend = _FakeBackend()..adminValue = true;
+      final store = _store(backend);
+      await store.restore();
+      await store.signIn(email: 'a@test', password: 'pw');
+      await store.refresh();
+      expect(store.isAdmin, isTrue);
+
+      await store.signOut();
+      expect(store.isAdmin, isFalse);
       store.dispose();
       backend.dispose();
     });

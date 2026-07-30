@@ -95,6 +95,39 @@ begin
 end
 $$;
 
+-- Provisioning a profile is the one insert a client makes, so it gets the same
+-- scrutiny as the writes it must not make. Somebody else's row first…
+do $$
+begin
+  begin
+    insert into profiles (id, email)
+    values ('22222222-2222-2222-2222-222222222222', 'stolen@test');
+    raise exception 'a profile was created for another account';
+  exception
+    when insufficient_privilege then null;  -- WITH CHECK rejected it
+    when unique_violation then
+      raise exception 'the row existed, so the policy was never tested';
+  end;
+end
+$$;
+
+-- …then their own, but as an admin. This is the one that matters: creating
+-- your own profile is allowed, and it is the only moment a client chooses what
+-- goes in the row.
+do $$
+begin
+  begin
+    insert into profiles (id, email, is_admin)
+    values ('11111111-1111-1111-1111-111111111111', 'a@test', true);
+    raise exception 'a client inserted is_admin';
+  exception
+    when insufficient_privilege then null;  -- no INSERT grant on that column
+    when unique_violation then
+      raise exception 'the column grant was never reached';
+  end;
+end
+$$;
+
 -- Granting yourself a membership is not a thing a client can do.
 do $$
 begin
@@ -137,6 +170,28 @@ begin
     'and neither did the first account''s tasks';
   assert not shift.within_ceiling('22222222-2222-2222-2222-222222222222'),
     'no membership means no managed spend';
+end
+$$;
+
+-- ---------------------------------------------------------------- account C
+-- A brand-new account, which is the state every account starts in: signed up,
+-- no profile row, nothing on the server yet. Nothing else creates one — no
+-- trigger, no server job — so if this insert did not work, an account would
+-- exist with no profile and `is_admin` would have nowhere to be read from.
+set local request.jwt.claims =
+  '{"sub":"33333333-3333-3333-3333-333333333333"}';
+
+insert into profiles (id, email) values
+  ('33333333-3333-3333-3333-333333333333', 'c@test');
+
+do $$
+begin
+  assert (select count(*) from profiles) = 1,
+    'a new account can create its own profile';
+  assert (select id from profiles) = '33333333-3333-3333-3333-333333333333',
+    'and it is theirs';
+  assert not (select is_admin from profiles),
+    'and it is not an admin — that column is not theirs to set';
 end
 $$;
 

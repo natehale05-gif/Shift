@@ -165,6 +165,16 @@ enum BackendProblem {
   /// Wrong email or password, or an account that already exists.
   credentials,
 
+  /// The account was created and cannot be used until the emailed link is
+  /// followed.
+  ///
+  /// Its own member rather than a [credentials] failure, because it is not a
+  /// failure at all — the sign-up worked. Reported as an error it reaches the
+  /// user in red under a form that just did what they asked, which reads as
+  /// "that did not work" and invites them to try again with a different
+  /// password.
+  confirmationRequired,
+
   /// The account is over its ceiling, or has no membership to spend under.
   overLimit,
 
@@ -205,6 +215,9 @@ String defaultMessageFor(BackendProblem problem) => switch (problem) {
         'This build has no server behind it. Keys stay on this device.',
       BackendProblem.notSignedIn => 'Sign in to do that.',
       BackendProblem.credentials => 'That email and password did not match.',
+      BackendProblem.confirmationRequired =>
+        'Account created. Check your email for the confirmation link, then '
+            'sign in.',
       BackendProblem.overLimit =>
         'You have used everything your plan covers this month.',
       BackendProblem.unavailable =>
@@ -249,6 +262,34 @@ abstract class ShiftBackend {
   });
 
   Future<void> deleteProviderKey(String id);
+
+  /// Stores one of SHIFT's own keys, which every paying member spends.
+  ///
+  /// Refused unless the caller is an admin, and refused *server-side* — the
+  /// flag is a column only the server can write, not a claim in a token.
+  /// Throws [BackendProblem.notSignedIn] when the caller is not allowed,
+  /// which is deliberately the same answer an unauthenticated caller gets.
+  Future<void> putPlatformKey({
+    required String provider,
+    required String secret,
+  });
+
+  /// Which providers a membership currently covers. Names only — a member has
+  /// no use for the keys and never sees them.
+  Future<List<String>> includedProviders();
+
+  /// Whether the signed-in account may manage SHIFT's own keys.
+  ///
+  /// Asked of the server rather than read from the token: admin is a column
+  /// only the server can write, and a claim baked into a token that lives for
+  /// an hour on a device would keep working for that hour after it was
+  /// revoked. False whenever the answer is not a clear yes — including when
+  /// the request fails, since a network error is not a promotion.
+  ///
+  /// This gates *presentation only*. The endpoint checks the same column
+  /// itself and refuses regardless, so a client that lied here would gain
+  /// nothing but a form that returns 403.
+  Future<bool> isAdmin();
 
   Future<Membership> membership();
 

@@ -21,6 +21,7 @@ import '../fence_filter.dart';
 import '../request_title.dart';
 import '../studio_detection.dart';
 import '../../features/studios/media/audio_synth_service.dart';
+import '../../providers/clients/provider_error.dart';
 import '../chat_service.dart';
 import '../turn_plan.dart';
 import '../turn_input.dart';
@@ -533,7 +534,11 @@ class RealChatService implements ChatService {
       }
       await controller.close();
     } catch (e) {
-      controller.add(MessageError(e.toString()));
+      // Not `e.toString()`: that printed the provider's whole JSON error
+      // envelope into the chat. See `readableProviderError` — the provider's
+      // own sentence is kept, because with bring-your-own-key *which* failure
+      // it was is the entire diagnosis.
+      controller.add(MessageError(readableProviderError(e)));
       await controller.close();
     }
   }

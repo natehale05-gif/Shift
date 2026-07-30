@@ -38,6 +38,13 @@ class _Recorder {
 
   http.Request get last => requests.last;
   Iterable<String> get paths => requests.map((r) => r.url.path);
+
+  /// The first request whose path ends with [suffix]. Named rather than
+  /// positional because sign-in now makes more than one call, and asserting on
+  /// "the last request" would silently start testing a different one every
+  /// time a step is added.
+  http.Request to(String suffix) =>
+      requests.firstWhere((r) => r.url.path.endsWith(suffix));
 }
 
 SupabaseBackend _backend(
@@ -72,7 +79,46 @@ void main() {
       expect(session.account.displayName, 'Nate');
       expect(session.accessToken, 'access-1');
       expect(backend.session, isNotNull);
-      expect(recorder.last.url.queryParameters['grant_type'], 'password');
+      expect(recorder.to('/token').url.queryParameters['grant_type'],
+          'password');
+      backend.dispose();
+    });
+
+    test('provisions the account its profile row, which nothing else creates',
+        () async {
+      // Not a trigger: the schema deliberately never names the auth tables, so
+      // that the identity provider stays replaceable. Without this call an
+      // account signs up successfully and has no profile — and `is_admin` has
+      // no row to live in.
+      final recorder = _Recorder();
+      final backend = _backend(
+          recorder.client((_) async => http.Response(_tokenBody(), 200)));
+
+      await backend.signIn(email: 'a@test', password: 'pw');
+
+      final profile = recorder.to('/profiles');
+      expect(profile.method, 'POST');
+      expect(profile.headers['Prefer'], contains('ignore-duplicates'));
+      expect(profile.body, contains('11111111-1111-1111-1111-111111111111'));
+      // Never sent, because the column grant would refuse it anyway — but a
+      // client that tried would be a client that believed it could.
+      expect(profile.body, isNot(contains('is_admin')));
+      backend.dispose();
+    });
+
+    test('a profile that cannot be written does not fail the sign-in',
+        () async {
+      // Someone who typed the right password is signed in. A bookkeeping row
+      // is not their problem, and the next sign-in tries again.
+      final backend = _backend(MockClient((request) async {
+        if (request.url.path.endsWith('/profiles')) {
+          return http.Response('{"message":"nope"}', 500);
+        }
+        return http.Response(_tokenBody(), 200);
+      }));
+
+      final session = await backend.signIn(email: 'a@test', password: 'pw');
+      expect(session.accessToken, 'access-1');
       backend.dispose();
     });
 
@@ -171,9 +217,55 @@ void main() {
       await expectLater(
         backend.signUp(email: 'a@test', password: 'pw'),
         throwsA(isA<BackendException>()
-            .having((e) => e.message, 'message', contains('confirm'))),
+            .having((e) => e.message, 'message', contains('confirm'))
+            // Its own problem, not `credentials`: the account was created, and
+            // the UI shows it as a notice rather than in red under a form that
+            // just did what it was asked.
+            .having((e) => e.problem, 'problem',
+                BackendProblem.confirmationRequired)),
       );
       backend.dispose();
+    });
+  });
+
+  group('admin', () {
+    test('is read from the server, never from the token', () async {
+      final recorder = _Recorder();
+      final backend = _backend(
+        recorder.client((request) async =>
+            request.url.path.endsWith('/profiles')
+                ? http.Response('[{"is_admin":true}]', 200)
+                : http.Response(_tokenBody(), 200)),
+      );
+      await backend.signIn(email: 'a@test', password: 'pw');
+
+      expect(await backend.isAdmin(), isTrue);
+      expect(
+        recorder.requests.any((r) =>
+            r.method == 'GET' && r.url.query.contains('select=is_admin')),
+        isTrue,
+      );
+      backend.dispose();
+    });
+
+    test('a profile with no row, or a request that fails, is not an admin',
+        () async {
+      final empty = _backend(MockClient((request) async =>
+          request.url.path.endsWith('/profiles')
+              ? http.Response('[]', 200)
+              : http.Response(_tokenBody(), 200)));
+      await empty.signIn(email: 'a@test', password: 'pw');
+      expect(await empty.isAdmin(), isFalse);
+      empty.dispose();
+
+      // The important half: a network failure must not read as a promotion.
+      final broken = _backend(MockClient((request) async =>
+          request.url.path.endsWith('/profiles') && request.method == 'GET'
+              ? throw Exception('offline')
+              : http.Response(_tokenBody(), 200)));
+      await broken.signIn(email: 'a@test', password: 'pw');
+      expect(await broken.isAdmin(), isFalse);
+      broken.dispose();
     });
   });
 

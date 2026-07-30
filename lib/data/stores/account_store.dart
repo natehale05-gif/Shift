@@ -25,7 +25,10 @@ class AccountStore extends ChangeNotifier {
   ShiftAccount? _account;
   Membership _membership = Membership.none;
   List<ProviderKeyInfo> _serverKeys = const [];
+  List<String> _includedProviders = const [];
+  bool _isAdmin = false;
   String? _problem;
+  String? _notice;
 
   StreamSubscription<ShiftSession?>? _sessions;
 
@@ -51,9 +54,27 @@ class AccountStore extends ChangeNotifier {
   Membership get membership => _membership;
   List<ProviderKeyInfo> get serverKeys => List.unmodifiable(_serverKeys);
 
+  /// Providers a membership covers, by name. Empty when signed out or when
+  /// SHIFT has no keys of its own loaded yet.
+  List<String> get includedProviders => List.unmodifiable(_includedProviders);
+
+  /// Whether this account may manage SHIFT's own provider keys.
+  ///
+  /// Comes from the server on every refresh, never from the token. False until
+  /// it has been asked, which is the safe direction: the admin surface stays
+  /// hidden while the answer is unknown, and the endpoint behind it refuses a
+  /// non-admin anyway.
+  bool get isAdmin => _isAdmin;
+
   /// The last failure, in words meant for a person. Cleared by the next
   /// attempt, so a stale error never sits under a form that has since worked.
   String? get problem => _problem;
+
+  /// Something that worked but is not finished — today, only "we sent you a
+  /// confirmation email". Separate from [problem] because showing it in red
+  /// under a form that just succeeded tells the user the opposite of what
+  /// happened.
+  String? get notice => _notice;
 
   bool get isSignedIn => _phase == AccountPhase.signedIn;
   bool get isBusy => _phase == AccountPhase.working;
@@ -96,6 +117,7 @@ class AccountStore extends ChangeNotifier {
     }
     _phase = AccountPhase.working;
     _problem = null;
+    _notice = null;
     notifyListeners();
 
     try {
@@ -106,7 +128,13 @@ class AccountStore extends ChangeNotifier {
       unawaited(refresh());
       return true;
     } on BackendException catch (e) {
-      _problem = e.message;
+      // Sign-up on a project that confirms email addresses ends here, and it
+      // is the one failure that is not one: the account exists.
+      if (e.problem == BackendProblem.confirmationRequired) {
+        _notice = e.message;
+      } else {
+        _problem = e.message;
+      }
       _phase = AccountPhase.signedOut;
       notifyListeners();
       return false;
@@ -131,7 +159,10 @@ class AccountStore extends ChangeNotifier {
     _account = null;
     _membership = Membership.none;
     _serverKeys = const [];
+    _includedProviders = const [];
+    _isAdmin = false;
     _problem = null;
+    _notice = null;
     _phase = AccountPhase.signedOut;
     notifyListeners();
   }
@@ -147,9 +178,13 @@ class AccountStore extends ChangeNotifier {
       final results = await Future.wait([
         backend.membership(),
         backend.listProviderKeys(),
+        backend.includedProviders(),
+        backend.isAdmin(),
       ]);
       _membership = results[0] as Membership;
       _serverKeys = results[1] as List<ProviderKeyInfo>;
+      _includedProviders = results[2] as List<String>;
+      _isAdmin = results[3] as bool;
       notifyListeners();
     } catch (_) {
       // Left as-is on purpose.
@@ -170,6 +205,25 @@ class AccountStore extends ChangeNotifier {
       return e.message;
     } catch (_) {
       return 'Could not reach the server. Try again.';
+    }
+  }
+
+  /// Stores one of SHIFT's own keys. Returns the error to show, or null.
+  ///
+  /// Whether the caller is allowed is decided by the server; this only
+  /// reports what it said.
+  Future<String?> putPlatformKey({
+    required String provider,
+    required String secret,
+  }) async {
+    try {
+      await backend.putPlatformKey(provider: provider, secret: secret);
+      await refresh();
+      return null;
+    } on BackendException catch (e) {
+      return e.message;
+    } catch (_) {
+      return defaultMessageFor(BackendProblem.unavailable);
     }
   }
 

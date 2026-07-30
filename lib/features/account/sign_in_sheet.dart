@@ -139,20 +139,21 @@ class _SignInSheetState extends State<_SignInSheet> {
             ),
             if (store.problem != null) ...[
               const SizedBox(height: AppSpacing.md),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.error_outline_rounded,
-                      size: 18, color: theme.colorScheme.error),
-                  const SizedBox(width: AppSpacing.sm),
-                  Expanded(
-                    child: Text(
-                      store.problem!,
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: theme.colorScheme.error),
-                    ),
-                  ),
-                ],
+              _Message(
+                text: store.problem!,
+                icon: Icons.error_outline_rounded,
+                color: theme.colorScheme.error,
+              ),
+            ],
+            // A sign-up that needs an emailed confirmation succeeded, so it is
+            // said in the ordinary voice rather than in red under a form that
+            // did what it was asked.
+            if (store.notice != null) ...[
+              const SizedBox(height: AppSpacing.md),
+              _Message(
+                text: store.notice!,
+                icon: Icons.mark_email_read_outlined,
+                color: colors.textSecondary,
               ),
             ],
             const SizedBox(height: AppSpacing.lg),
@@ -185,6 +186,33 @@ class _SignInSheetState extends State<_SignInSheet> {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// One line of feedback under the form — a failure or a notice, which differ
+/// only in icon and colour.
+class _Message extends StatelessWidget {
+  final String text;
+  final IconData icon;
+  final Color color;
+
+  const _Message({required this.text, required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+          ),
+        ),
+      ],
     );
   }
 }

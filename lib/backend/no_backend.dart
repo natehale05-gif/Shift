@@ -62,6 +62,19 @@ class NoBackend implements ShiftBackend {
   Future<void> deleteProviderKey(String id) async => throw _unconfigured;
 
   @override
+  Future<void> putPlatformKey({
+    required String provider,
+    required String secret,
+  }) async =>
+      throw _unconfigured;
+
+  @override
+  Future<List<String>> includedProviders() async => const [];
+
+  @override
+  Future<bool> isAdmin() async => false;
+
+  @override
   Future<Membership> membership() async => Membership.none;
 
   @override

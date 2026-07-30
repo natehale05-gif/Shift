@@ -15,6 +15,7 @@ import '../styles/style_editor.dart';
 import '../../core/theme/app_spacing.dart';
 import 'account_card.dart';
 import 'api_keys_section.dart';
+import 'platform_keys_card.dart';
 import 'update_card.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/glass_app_bar.dart';
@@ -54,6 +55,10 @@ class SettingsScreen extends StatelessWidget {
           // decision — on this device, or on the server behind an account.
           const AccountCard(),
           const SizedBox(height: AppSpacing.lg),
+          // Renders nothing unless the signed-in account is an admin, which is
+          // a column the server owns — so for everyone else this line costs a
+          // zero-size widget.
+          const PlatformKeysCard(),
           const _SectionCard(
             title: 'API keys (live AI)',
             child: ApiKeysSection(),

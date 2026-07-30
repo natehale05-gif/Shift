@@ -80,11 +80,14 @@ class SupabaseBackend implements ShiftBackend {
   Future<ShiftSession> signIn({
     required String email,
     required String password,
-  }) async =>
-      _adopt(await _token(
-        {'email': email, 'password': password},
-        'password',
-      ));
+  }) async {
+    final session = _adopt(await _token(
+      {'email': email, 'password': password},
+      'password',
+    ));
+    await _ensureProfile(session);
+    return session;
+  }
 
   @override
   Future<ShiftSession> signUp({
@@ -101,10 +104,47 @@ class SupabaseBackend implements ShiftBackend {
       // Projects with email confirmation on return a user and no token. That
       // is a success, not a failure, and the caller has to be told which it
       // was — so it is an exception carrying the reason rather than a null.
-      throw const BackendException(BackendProblem.credentials,
-          'Check your email to confirm the account, then sign in.');
+      throw BackendException(
+        BackendProblem.confirmationRequired,
+        defaultMessageFor(BackendProblem.confirmationRequired),
+      );
     }
-    return _adopt(parsed);
+    final session = _adopt(parsed);
+    await _ensureProfile(session);
+    return session;
+  }
+
+  /// Creates the account's own `profiles` row if it has none.
+  ///
+  /// Nothing else does. The schema deliberately does not reference the auth
+  /// tables — that is what lets the identity provider be swapped — so there is
+  /// no trigger to hang this on, and without it an account signs up
+  /// successfully and then has no profile: no display name, and no row for
+  /// `is_admin` to be read from.
+  ///
+  /// `ignore-duplicates` rather than an upsert on purpose: an upsert would
+  /// need UPDATE on `email`, which a member does not have and should not,
+  /// since it is the address the account was confirmed at. Existing row, do
+  /// nothing, and the migration's column grant means this insert cannot carry
+  /// `is_admin` even if this code tried to.
+  ///
+  /// Failure is swallowed: someone who just typed the right password should be
+  /// signed in whether or not a bookkeeping row was written. The next sign-in
+  /// tries again.
+  Future<void> _ensureProfile(ShiftSession session) async {
+    try {
+      await _http.post(
+        Uri.parse('${config.url}/rest/v1/profiles'),
+        headers: _headers(
+          token: session.accessToken,
+          prefer: 'resolution=ignore-duplicates,return=minimal',
+        ),
+        body: jsonEncode({
+          'id': session.account.id,
+          'email': session.account.email,
+        }),
+      );
+    } catch (_) {}
   }
 
   @override
@@ -242,6 +282,47 @@ class SupabaseBackend implements ShiftBackend {
   Future<void> deleteProviderKey(String id) => _delete(
         Uri.parse('${config.url}/rest/v1/provider_keys?id=eq.$id'),
       );
+
+  @override
+  Future<void> putPlatformKey({
+    required String provider,
+    required String secret,
+  }) async {
+    // Same endpoint as a personal key, with a scope. One encrypting front door
+    // rather than two — a second one is a second place to get the crypto or
+    // the authorization wrong.
+    await _post(
+      Uri.parse('${config.url}/functions/v1/provider-key'),
+      {'provider': provider, 'secret': secret, 'scope': 'platform'},
+    );
+  }
+
+  @override
+  Future<List<String>> includedProviders() async {
+    final rows = await _get(
+      Uri.parse('${config.url}/rest/v1/included_providers?select=provider'),
+      allowFailure: true,
+    );
+    return [
+      for (final row in rows)
+        if (row is Map<String, dynamic> && row['provider'] is String)
+          row['provider'] as String,
+    ];
+  }
+
+  @override
+  Future<bool> isAdmin() async {
+    // No `id` filter needed: row security already narrows `profiles` to the
+    // caller's own row, so this asks "am I an admin" in the only way the
+    // database can answer it.
+    final rows = await _get(
+      Uri.parse('${config.url}/rest/v1/profiles?select=is_admin'),
+      allowFailure: true,
+    );
+    return rows.isNotEmpty &&
+        rows.first is Map<String, dynamic> &&
+        (rows.first as Map<String, dynamic>)['is_admin'] == true;
+  }
 
   // ----------------------------------------------------------- membership
 

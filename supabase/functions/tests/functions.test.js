@@ -357,3 +357,140 @@ test('a GET is refused — this endpoint only ever takes a secret in',
     assert.equal(response.status, 405);
     assert.equal(calls.length, 0);
   });
+
+// ------------------------------------------------- platform (SHIFT's) keys
+
+/** A fetch that answers the admin lookup and records the write. */
+function adminFetch({ admin }) {
+  const calls = [];
+  const fetch = async (url, init) => {
+    calls.push({ url, init, body: init?.body ? JSON.parse(init.body) : null });
+    if (url.includes('/profiles?')) {
+      return new Response(JSON.stringify([{ is_admin: admin }]), { status: 200 });
+    }
+    return new Response(
+      JSON.stringify([{ id: 'p1', last_four: 'wxyz' }]),
+      { status: 200 },
+    );
+  };
+  return { calls, fetch };
+}
+
+function platformRequest(secret = 'sk-ant-abcdwxyz') {
+  return new Request('https://x.test/provider-key', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token(USER)}` },
+    body: JSON.stringify({ provider: 'anthropic', secret, scope: 'platform' }),
+  });
+}
+
+test('an admin can store a platform key, encrypted', async () => {
+  const { calls, fetch } = adminFetch({ admin: true });
+
+  const response = await providerKey(platformRequest(), { env: ENV, fetch });
+  const body = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(body.scope, 'platform');
+
+  const write = calls.find((c) => c.url.includes('/platform_keys'));
+  assert.ok(write, 'it wrote to platform_keys, not provider_keys');
+  assert.ok(!('owner_id' in write.body),
+    'a platform key belongs to no account — that was the schema bug');
+  assert.ok(!JSON.stringify(write.body).includes('sk-ant-abcdwxyz'));
+  assert.equal(
+    await open(hexToBytes(write.body.ciphertext), masterKeyBytes(ENV)),
+    'sk-ant-abcdwxyz',
+  );
+});
+
+test('a non-admin is refused and nothing is written', async () => {
+  const { calls, fetch } = adminFetch({ admin: false });
+
+  const response = await providerKey(platformRequest(), { env: ENV, fetch });
+
+  assert.equal(response.status, 403);
+  assert.ok(!calls.some((c) => c.url.includes('/platform_keys')),
+    'the refusal happens before any write');
+});
+
+test('the refusal says nothing about why', async () => {
+  // Telling someone who guessed at this that they merely lack a flag confirms
+  // the scope exists and is worth attacking.
+  const { fetch } = adminFetch({ admin: false });
+  const body = await (await providerKey(platformRequest(), { env: ENV, fetch })).json();
+  assert.ok(!/admin/i.test(JSON.stringify(body)));
+});
+
+test('admin is read from the database, not believed from the token', async () => {
+  // A JWT claim is whatever the issuer put in it, and admin should not ride in
+  // a token that lives for an hour on a device. Revoking it must take effect
+  // on the next request.
+  const { calls, fetch } = adminFetch({ admin: true });
+  await providerKey(platformRequest(), { env: ENV, fetch });
+
+  const lookup = calls.find((c) => c.url.includes('/profiles?'));
+  assert.ok(lookup, 'it checked the profiles row');
+  assert.ok(lookup.url.includes(`id=eq.${USER}`), 'for the caller');
+  assert.ok(lookup.url.includes('select=is_admin'));
+});
+
+test('storing a platform key upserts on provider, so there is one per '
+  + 'provider and re-posting rotates it', async () => {
+  const { calls, fetch } = adminFetch({ admin: true });
+  await providerKey(platformRequest(), { env: ENV, fetch });
+
+  const write = calls.find((c) => c.url.includes('/platform_keys'));
+  assert.ok(write.url.includes('on_conflict=provider'));
+  assert.ok(write.init.headers.Prefer.includes('merge-duplicates'));
+  assert.equal(write.body.enabled, true,
+    're-pasting a key re-enables a provider that was switched off');
+});
+
+test('an unknown provider is refused even for an admin, before the admin '
+  + 'lookup', async () => {
+  const { calls, fetch } = adminFetch({ admin: true });
+
+  const response = await providerKey(
+    new Request('https://x.test/provider-key', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token(USER)}` },
+      body: JSON.stringify({
+        provider: 'not-a-provider',
+        secret: 'sk-abcdwxyz',
+        scope: 'platform',
+      }),
+    }),
+    { env: ENV, fetch },
+  );
+
+  assert.equal(response.status, 400);
+  assert.equal(calls.length, 0);
+});
+
+test('scope defaults to the caller own key, never the platform', async () => {
+  // A missing or unrecognised scope must not accidentally reach the shared
+  // keys.
+  const { calls, fetch } = adminFetch({ admin: true });
+
+  for (const scope of [undefined, 'PLATFORM', 'shared', '', null]) {
+    calls.length = 0;
+    await providerKey(
+      new Request('https://x.test/provider-key', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token(USER)}` },
+        body: JSON.stringify({
+          provider: 'anthropic',
+          secret: 'sk-ant-abcdwxyz',
+          scope,
+        }),
+      }),
+      { env: ENV, fetch },
+    );
+    assert.ok(
+      calls.some((c) => c.url.includes('/provider_keys')),
+      `scope ${JSON.stringify(scope)} should be treated as a user key`,
+    );
+    assert.ok(!calls.some((c) => c.url.includes('/platform_keys')));
+  }
+});

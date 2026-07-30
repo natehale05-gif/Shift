@@ -109,7 +109,9 @@ unexpected=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
     and grantee in ('anon', 'authenticated')
     and (grantee, table_name, privilege_type) not in (
       ('authenticated', 'profiles', 'SELECT'),
+      ('authenticated', 'profiles', 'INSERT'),
       ('authenticated', 'profiles', 'UPDATE'),
+      ('authenticated', 'included_providers', 'SELECT'),
       ('authenticated', 'provider_keys', 'SELECT'),
       ('authenticated', 'provider_keys', 'DELETE'),
       ('authenticated', 'provider_key_metadata', 'SELECT'),
@@ -168,3 +170,80 @@ if [ -n "$unpinned" ]; then
   exit 1
 fi
 echo "every function pins its search_path"
+
+# The platform keys are the ones a leak would bill *every* member for, so the
+# rule is the tightest in the schema: a client may learn which providers are
+# included and nothing else — not the last four, not which key encrypted it,
+# and obviously not the ciphertext.
+exposed=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(format('%s:%s', grantee, column_name), ', ')
+  from information_schema.column_privileges
+  where table_schema = 'public' and table_name = 'platform_keys'
+    and grantee in ('anon', 'authenticated')
+    and column_name <> 'provider'")
+
+if [ -n "$exposed" ]; then
+  echo "FAIL: a client can read platform key columns it should not: $exposed" >&2
+  exit 1
+fi
+
+# And no write of any kind: adding or rotating one of SHIFT's keys goes
+# through the edge function, which checks admin server-side.
+writable=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(distinct privilege_type, ', ')
+  from information_schema.role_table_grants
+  where table_schema = 'public' and table_name = 'platform_keys'
+    and grantee in ('anon', 'authenticated')
+    and privilege_type <> 'SELECT'")
+
+if [ -n "$writable" ]; then
+  echo "FAIL: a client can write platform_keys: $writable" >&2
+  exit 1
+fi
+echo "platform_keys exposes provider names only, and is read-only to clients"
+
+# No SECURITY DEFINER views. One added to see through row security is a
+# standing invitation for the next column to leak with the creator rights.
+definer=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(c.relname, ', ')
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'v'
+    and not coalesce((
+      select option_value = 'true' from pg_options_to_table(c.reloptions)
+      where option_name = 'security_invoker'), false)")
+
+if [ -n "$definer" ]; then
+  echo "FAIL: views that run as their definer: $definer" >&2
+  exit 1
+fi
+echo "no security-definer views"
+
+# A member may rename themselves and must not be able to promote themselves.
+promotable=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(column_name, ', ')
+  from information_schema.column_privileges
+  where table_schema = 'public' and table_name = 'profiles'
+    and grantee = 'authenticated' and privilege_type = 'UPDATE'
+    and column_name <> 'display_name'")
+
+if [ -n "$promotable" ]; then
+  echo "FAIL: a member can update profiles columns they should not: $promotable" >&2
+  exit 1
+fi
+
+# The same question for the insert that provisions the account. `0010` lets a
+# client create its own profile row, which is the only way one gets created —
+# so the row it creates must not be able to be an admin's, and must not be able
+# to be somebody else's.
+promotable_insert=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(column_name, ', ')
+  from information_schema.column_privileges
+  where table_schema = 'public' and table_name = 'profiles'
+    and grantee = 'authenticated' and privilege_type = 'INSERT'
+    and column_name not in ('id', 'email', 'display_name')")
+
+if [ -n "$promotable_insert" ]; then
+  echo "FAIL: a member can insert profiles columns they should not: $promotable_insert" >&2
+  exit 1
+fi
+echo "a member cannot promote themselves"

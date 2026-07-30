@@ -44,6 +44,11 @@ look for it.
 | `0003_provider_keys.sql` | the key vault — ciphertext, and the privilege that stops a client reading it |
 | `0004_subscriptions_and_usage.sql` | membership, the usage meter, and the spend ceiling |
 | `0005_connections_tasks_workspaces.sql` | the tables G4–G6 need, with their policies already on |
+| `0006_lock_down_grants.sql` | revokes the host's default grants and re-states exactly what each role may do |
+| `0007_pin_function_search_path.sql` | every function pinned to `search_path = ''` |
+| `0008_platform_keys.sql` | SHIFT's own keys — no owner, no policy, plus `profiles.is_admin` |
+| `0009_included_providers_without_definer.sql` | which providers a plan covers, as an invoker view |
+| `0010_profiles_self_provision.sql` | the insert that creates an account's own profile row |
 
 Apply in filename order. They are idempotent, so a partial failure can be
 re-run.
@@ -63,6 +68,49 @@ its own subscription could grant itself a membership, and one that could write
 its own usage could make the meter measure nothing. Both are written by the
 server. `scheduled_tasks` is the one table a member owns outright, and its
 policy carries `with check` so a row cannot be written under someone else's id.
+
+## SHIFT's own keys, and who may add one
+
+`platform_keys` holds the keys a membership buys — one row per provider, owned
+by nobody. It has **row security on and no policy at all**, which denies every
+client role outright: the only way in or out is an edge function holding the
+service role. A leak in `provider_keys` is one member's bill; a leak here is
+every member's.
+
+A signed-in member may know one thing about them: which providers their plan
+covers, through the `included_providers` view (a row policy for the enabled
+rows, a column grant for the provider name, and an ordinary invoker view on
+top — the same two-layer pattern as everywhere else).
+
+Adding or rotating one goes through `provider-key` with `scope: "platform"`,
+which checks `profiles.is_admin` **server-side with the service role** rather
+than trusting a token claim. That column is not in the set `authenticated` may
+insert or update, so an account cannot promote itself and then post a key. The
+Settings card that offers the form is hidden from everyone else, but that is
+presentation: the endpoint returns a bare `403` regardless of who found it.
+
+There is no way to grant admin from inside the app, deliberately. The first one
+is set directly against the database:
+
+```sql
+update profiles set is_admin = true where email = 'you@example.com';
+```
+
+## Profiles are created by the client
+
+`0010` grants `authenticated` an insert on `profiles (id, email, display_name)`
+behind a policy checking `id = shift.current_user_id()`, and the client posts
+that row after every sign-in.
+
+The obvious alternative is a trigger on `auth.users` — and it is exactly what
+the portability contract above forbids, since it would name the vendor's auth
+schema and could not be run by `tool/test_migrations.sh` at all. A migration
+the portability test cannot run is one that stops being portable without anyone
+noticing.
+
+The insert cannot create somebody else's row (the policy reads the id from the
+token, not from the request) and cannot create an admin (`is_admin` is not in
+the column grant). Both are asserted in `tests/rls_test.sql`.
 
 ## Secrets
 
@@ -90,7 +138,7 @@ node --test supabase/functions/tests/*.test.js
 
 | Function | What it does |
 |---|---|
-| `provider-key` | the encrypting front door to the vault — the only way a secret gets in |
+| `provider-key` | the encrypting front door to the vault — the only way a secret gets in, for a member's own key or, with `scope: "platform"` and an admin, for SHIFT's |
 | `stripe-webhook` | the only writer of `subscriptions` — entitlement comes from Stripe or from nowhere |
 
 `stripe-webhook` is deliberately **unauthenticated**: Stripe has no JWT, so the
