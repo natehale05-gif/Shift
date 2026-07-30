@@ -14,6 +14,7 @@ import '../streaming/http_client_stub.dart'
 import '../streaming/sse_client.dart';
 import 'gemini_api_config.dart';
 import 'provider_registry.dart';
+import '../history/conversation_history.dart';
 
 /// Raw-HTTP Gemini client: streaming chat (optionally grounded with Google
 /// Search) and image generation. Pure request builder and chunk mapper are
@@ -52,26 +53,22 @@ class GeminiClient implements KeyValidatable {
     }
 
     final contents = <Map<String, dynamic>>[];
-    for (final message in history) {
-      if (message.text.trim().isEmpty) continue;
-      switch (message.role) {
-        case MessageRole.user:
-          contents.add({
-            'role': 'user',
-            'parts': [
-              {'text': message.text},
-            ],
-          });
-        case MessageRole.assistant:
-          contents.add({
-            'role': 'model',
-            'parts': [
-              {'text': message.text},
-            ],
-          });
-        case MessageRole.system:
-          break;
-      }
+    for (final turn in buildHistory(history)) {
+      contents.add({
+        'role': turn.role == MessageRole.user ? 'user' : 'model',
+        'parts': [
+          for (final part in turn.parts)
+            if (part is HistoryImage)
+              {
+                'inline_data': {
+                  'mime_type': 'image/png',
+                  'data': base64Encode(part.pngBytes),
+                },
+              }
+            else if (part is HistoryText)
+              {'text': part.text},
+        ],
+      });
     }
     contents.add({
       'role': 'user',

@@ -6,6 +6,7 @@ import '../../data/models/citation.dart';
 import '../../data/models/conversation.dart';
 import '../../data/models/usage_report.dart';
 import '../../turn/chat_service.dart';
+import '../history/conversation_history.dart';
 import '../streaming/sse_client.dart';
 import 'anthropic_api_config.dart';
 import 'anthropic_stream_accumulator.dart';
@@ -49,20 +50,30 @@ class AnthropicClient implements KeyValidatable {
       }
     }
 
+    // One shared view of the chat (see `conversation_history.dart`). This used
+    // to flatten each assistant turn to its text and skip any turn whose text
+    // was empty — which is what an image-only or voiceover-only turn looks
+    // like, so those turns vanished and a later "put it in a website" referred
+    // to nothing.
     final messages = <Map<String, dynamic>>[];
-    for (final message in history) {
-      if (message.text.trim().isEmpty) continue;
-      switch (message.role) {
-        case MessageRole.user:
-          messages.add({
-            'role': 'user',
-            'content': _contentBlocks(message.text, message.attachments),
-          });
-        case MessageRole.assistant:
-          messages.add({'role': 'assistant', 'content': message.text});
-        case MessageRole.system:
-          break; // folded into the system param, never a message row
-      }
+    for (final turn in buildHistory(history)) {
+      messages.add({
+        'role': turn.role == MessageRole.user ? 'user' : 'assistant',
+        'content': [
+          for (final part in turn.parts)
+            if (part is HistoryImage)
+              {
+                'type': 'image',
+                'source': {
+                  'type': 'base64',
+                  'media_type': 'image/png',
+                  'data': base64Encode(part.pngBytes),
+                },
+              }
+            else if (part is HistoryText)
+              {'type': 'text', 'text': part.text},
+        ],
+      });
     }
     messages.add({
       'role': 'user',
