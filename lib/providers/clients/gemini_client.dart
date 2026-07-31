@@ -13,6 +13,7 @@ import '../streaming/http_client_stub.dart'
     if (dart.library.html) '../streaming/http_client_web.dart';
 import '../streaming/sse_client.dart';
 import 'gemini_api_config.dart';
+import 'provider_access.dart';
 import 'provider_registry.dart';
 import '../history/conversation_history.dart';
 
@@ -180,7 +181,7 @@ class GeminiClient implements KeyValidatable {
 
   /// Streams a chat turn (optionally grounded via Google Search).
   Stream<ChatEvent> streamChat({
-    required String apiKey,
+    required ProviderAccess access,
     required Conversation conversation,
     required String userInput,
     String model = GeminiApiConfig.flashModel,
@@ -199,9 +200,27 @@ class GeminiClient implements KeyValidatable {
     final allCitations = <String, Citation>{};
     UsageReport? usage;
 
+    // Direct, the key rides in the query string because that is the only
+    // form Gemini's REST API takes from a browser. Managed, it does not exist
+    // here at all — the proxy sets `x-goog-api-key`, which also keeps it out
+    // of every access log between here and Google.
+    final (uri, headers) = switch (access) {
+      DirectKey(:final key) => (
+          GeminiApiConfig.streamEndpoint(model, key),
+          const {'content-type': 'application/json'},
+        ),
+      ManagedAccess(:final base, headers: final auth) => (
+          ManagedAccess(base: base, headers: const {}).resolve(
+            '/v1beta/models/$model:streamGenerateContent',
+            query: const {'alt': 'sse'},
+          ),
+          {'content-type': 'application/json', ...auth},
+        ),
+    };
+
     final events = _sse.postJson(
-      uri: GeminiApiConfig.streamEndpoint(model, apiKey),
-      headers: const {'content-type': 'application/json'},
+      uri: uri,
+      headers: headers,
       body: jsonEncode(body),
     );
 

@@ -8,6 +8,7 @@ import '../../data/models/usage_report.dart';
 import '../../turn/chat_service.dart';
 import '../history/conversation_history.dart';
 import '../streaming/sse_client.dart';
+import 'provider_access.dart';
 import 'anthropic_api_config.dart';
 import 'anthropic_stream_accumulator.dart';
 import 'anthropic_tools.dart';
@@ -220,7 +221,7 @@ class AnthropicClient implements KeyValidatable {
   /// trailing tool block and picks up where it left off), capped at
   /// [maxContinuations] rounds.
   Stream<ChatEvent> streamChat({
-    required String apiKey,
+    required ProviderAccess access,
     required Conversation conversation,
     required String userInput,
     required String model,
@@ -242,7 +243,21 @@ class AnthropicClient implements KeyValidatable {
     );
     if (tools.isNotEmpty) baseBody['tools'] = tools;
 
-    final headers = AnthropicApiConfig.headers(apiKey);
+    // Direct: our headers plus the member's key. Managed: our headers with
+    // no key at all, plus what identifies the member to SHIFT — the proxy
+    // attaches the credential where the device cannot reach it.
+    final headers = switch (access) {
+      DirectKey(:final key) => AnthropicApiConfig.headers(key),
+      ManagedAccess(:final headers) => {
+          ...AnthropicApiConfig.headers(null),
+          ...headers,
+        },
+    };
+    final endpoint = switch (access) {
+      DirectKey() => AnthropicApiConfig.messagesEndpoint,
+      ManagedAccess(:final base) =>
+        ManagedAccess(base: base, headers: const {}).resolve('/v1/messages'),
+    };
     if (tools.any((t) => (t['type'] as String? ?? '').startsWith('code_execution'))) {
       headers['anthropic-beta'] = AnthropicTools.codeExecutionBeta;
     }
@@ -258,7 +273,7 @@ class AnthropicClient implements KeyValidatable {
       final accumulator = AnthropicStreamAccumulator();
       final body = {...baseBody, 'messages': messages};
       final sseEvents = _sse.postJson(
-        uri: AnthropicApiConfig.messagesEndpoint,
+        uri: endpoint,
         headers: headers,
         body: jsonEncode(body),
       );

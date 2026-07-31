@@ -75,6 +75,12 @@ class NoBackend implements ShiftBackend {
   Future<bool> isAdmin() async => false;
 
   @override
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  ) async =>
+      null;
+
+  @override
   Future<Membership> membership() async => Membership.none;
 
   @override

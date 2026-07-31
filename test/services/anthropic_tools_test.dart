@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/turn/chat_service.dart';
 import 'package:shift_ai/providers/clients/anthropic_client.dart';
@@ -156,7 +157,7 @@ void main() {
     final client = AnthropicClient(sseClient: sse);
 
     final events = await client.streamChat(
-      apiKey: 'sk-test',
+      access: const DirectKey('sk-test'),
       conversation: _conversation(),
       userInput: 'latest ai chip news',
       model: 'claude-opus-4-8',

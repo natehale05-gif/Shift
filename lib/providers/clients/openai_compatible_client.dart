@@ -7,6 +7,7 @@ import '../../data/models/usage_report.dart';
 import '../../turn/chat_service.dart';
 import '../streaming/sse_client.dart';
 import 'openai_compatible_config.dart';
+import 'provider_access.dart';
 import '../history/conversation_history.dart';
 
 /// One raw-HTTP client for every OpenAI-compatible provider (OpenAI, Groq,
@@ -152,7 +153,7 @@ class OpenAiCompatibleClient {
 
   /// Streams one chat turn against a provider's chat-completions endpoint.
   Stream<ChatEvent> streamChat({
-    required String apiKey,
+    required ProviderAccess access,
     required String baseUrl,
     required String model,
     required Conversation conversation,
@@ -169,9 +170,25 @@ class OpenAiCompatibleClient {
       attachments: attachments,
       systemPrompt: systemPrompt,
     );
+    // `baseUrl` still identifies the provider when the call is direct. Through
+    // the proxy the base is SHIFT's, and the provider is named by the path the
+    // server was given — so the client is not the thing deciding which
+    // company's key gets spent.
+    final (uri, headers) = switch (access) {
+      DirectKey(:final key) => (
+          OpenAiCompatibleConfig.chatCompletionsEndpoint(baseUrl),
+          OpenAiCompatibleConfig.headers(key, extraHeaders: extraHeaders),
+        ),
+      ManagedAccess(:final base, headers: final auth) => (
+          ManagedAccess(base: base, headers: const {})
+              .resolve(OpenAiCompatibleConfig.chatCompletionsPath),
+          {'content-type': 'application/json', ...extraHeaders, ...auth},
+        ),
+    };
+
     final events = _sse.postJson(
-      uri: OpenAiCompatibleConfig.chatCompletionsEndpoint(baseUrl),
-      headers: OpenAiCompatibleConfig.headers(apiKey, extraHeaders: extraHeaders),
+      uri: uri,
+      headers: headers,
       body: jsonEncode(body),
     );
     return mapSseEvents(events,

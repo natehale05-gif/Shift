@@ -117,6 +117,14 @@ class _FakeBackend implements ShiftBackend {
   bool adminValue = false;
 
   @override
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  ) async =>
+      managedCall;
+
+  ({Uri base, Map<String, String> headers})? managedCall;
+
+  @override
   Future<bool> isAdmin() async => adminValue;
 
   @override

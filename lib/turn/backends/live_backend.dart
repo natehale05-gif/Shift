@@ -14,6 +14,7 @@ import '../../data/models/studio_request.dart';
 import '../../data/models/studio_result.dart';
 import '../../data/models/studio_type.dart';
 import '../../data/stores/api_keys_store.dart';
+import '../../providers/clients/provider_access.dart';
 import '../../features/artifacts/artifact_composition.dart';
 import '../conversation_media.dart';
 import '../choice_parsing.dart';
@@ -153,6 +154,21 @@ String elevenLabsProblem(int statusCode, String body) => switch (statusCode) {
 /// simulated result.
 class RealChatService implements ChatService {
   final ApiKeysStore keys;
+
+  /// Providers a membership currently covers, answered synchronously because
+  /// [chooseProvider] has to decide before anything is awaited. Cached by
+  /// `AccountStore` and refreshed on sign-in; empty when signed out.
+  ///
+  /// This is the line that makes the whole arrangement work. Without it a
+  /// member with a plan and no keys of their own has `hasKey` false
+  /// everywhere, so routing picks nobody and the turn falls back to the mock
+  /// before any of the managed path is reached.
+  final Set<String> Function() _managedProviders;
+
+  /// Where a managed call for a provider goes, with a freshly refreshed token.
+  /// Null when this account cannot spend one.
+  final Future<ProviderAccess?> Function(String provider)? _managedAccess;
+
   final AnthropicClient _anthropic;
   final GeminiClient _gemini;
   final OpenAiCompatibleClient _openAi;
@@ -188,7 +204,11 @@ class RealChatService implements ChatService {
     ProviderRegistry? registry,
     ModelRouter? router,
     MockChatService? mockFallback,
+    Set<String> Function()? managedProviders,
+    Future<ProviderAccess?> Function(String provider)? managedAccess,
   })  : _loadAsset = loadAsset,
+        _managedProviders = managedProviders ?? _noManagedProviders,
+        _managedAccess = managedAccess,
         _anthropic = anthropicClient ?? AnthropicClient(),
         _gemini = geminiClient ?? GeminiClient(),
         _openAi = openAiClient ?? OpenAiCompatibleClient(),
@@ -209,6 +229,33 @@ class RealChatService implements ChatService {
               keys: keys,
             ),
         _mockFallback = mockFallback ?? MockChatService();
+
+  static Set<String> _noManagedProviders() => const {};
+
+  /// Whether this turn can reach [providerId] at all — with the member's own
+  /// key, or on their membership.
+  ///
+  /// Passed to [chooseProvider] everywhere `keys.hasKey` used to be, so "Auto"
+  /// sees a covered provider exactly as it sees a keyed one.
+  bool _canUse(String providerId) =>
+      keys.hasKey(providerId) || _managedProviders().contains(providerId);
+
+  /// Who pays for this call.
+  ///
+  /// **Membership first**, then the member's own key. They pay monthly for the
+  /// plan, so it should be the thing that gets spent — and because
+  /// `AccountStore` only offers managed access while the subscription is
+  /// active and under its ceiling, running out falls back to their own key
+  /// rather than stopping them.
+  ///
+  /// Null means neither is available, and the caller falls back to the mock
+  /// exactly as it did before any of this existed.
+  Future<ProviderAccess?> _accessFor(String providerId) async {
+    final managed = await _managedAccess?.call(providerId);
+    if (managed != null) return managed;
+    final key = keys.keyFor(providerId);
+    return key.isEmpty ? null : DirectKey(key);
+  }
 
   @override
   Stream<ChatEvent> sendMessage({
@@ -289,7 +336,7 @@ class RealChatService implements ChatService {
       if (structuredRequest != null) {
         if (structuredRequest is ImageRequest) {
           final imageId = chooseProvider(ChatRoute.imageGen,
-              registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+              registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
           if (imageId != null) {
             await _runImage(controller, imageId, structuredRequest.prompt);
             return;
@@ -440,7 +487,7 @@ class RealChatService implements ChatService {
       // and no indication that their key had never been touched.
       if (_wantsSpokenAudio(route, userInput)) {
         final voiceId = chooseProvider(ChatRoute.voice,
-            registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+            registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
         if (voiceId != null) {
           await _runVoice(controller, userInput);
           await controller.close();
@@ -465,7 +512,7 @@ class RealChatService implements ChatService {
       // which keys were present.
       if (route == ChatRoute.video) {
         final videoId = chooseProvider(ChatRoute.video,
-            registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+            registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
         if (videoId != null) {
           await _runVideo(controller, userInput);
           await controller.close();
@@ -485,7 +532,7 @@ class RealChatService implements ChatService {
 
       // Auto: pick the best available provider for the route's capability.
       final providerId =
-          chooseProvider(route, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+          chooseProvider(route, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
       final provider = providerId == null ? null : _registry.byId(providerId);
 
       final pageContributors =
@@ -559,7 +606,7 @@ class RealChatService implements ChatService {
 
     // A grounded (web-search-backed) provider for the search step, if any.
     final searchId =
-        chooseProvider(ChatRoute.webSearch, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+        chooseProvider(ChatRoute.webSearch, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
 
     final engine = DeepResearchEngine(
       planQueries: (topic) async {
@@ -591,9 +638,11 @@ class RealChatService implements ChatService {
         }
         final buffer = StringBuffer();
         final citations = <Citation>[];
+        final anthropicAccess = await _accessFor('anthropic');
+        final geminiAccess = await _accessFor('gemini');
         final events = searchId == 'anthropic'
             ? _anthropic.streamChat(
-                apiKey: keys.anthropicKey,
+                access: anthropicAccess ?? DirectKey(keys.anthropicKey),
                 conversation: _emptyConversation(),
                 userInput: '$ask$query',
                 model: AnthropicApiConfig.sonnetModel,
@@ -601,7 +650,7 @@ class RealChatService implements ChatService {
                 maxContinuations: 3,
               )
             : _gemini.streamChat(
-                apiKey: keys.geminiKey,
+                access: geminiAccess ?? DirectKey(keys.geminiKey),
                 conversation: _emptyConversation(),
                 userInput: '$ask$query',
                 grounding: true,
@@ -756,7 +805,7 @@ class RealChatService implements ChatService {
       // No Heygen key (or the render failed): a portrait + synthesized voice.
       // Any keyed image provider draws the portrait, not Gemini alone.
       final portraitId =
-          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
       final images = portraitId != null
           ? await _generatePhotos(
               portraitId, '$userInput, portrait headshot', 1)
@@ -781,7 +830,7 @@ class RealChatService implements ChatService {
   /// available, so callers fall back to their templates.
   Future<String> _completeText(String prompt,
       {int maxTokens = 400, bool strong = false}) async {
-    final id = chooseProvider(ChatRoute.chat, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+    final id = chooseProvider(ChatRoute.chat, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
     final provider = id == null ? null : _registry.byId(id);
     switch (provider?.clientKind) {
       case ProviderClientKind.anthropic:
@@ -902,7 +951,7 @@ class RealChatService implements ChatService {
 
     Uint8List? logo;
     final imageId =
-        chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+        chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
     if (imageId != null) {
       try {
         await for (final event in _imageStream(imageId,
@@ -958,7 +1007,7 @@ class RealChatService implements ChatService {
     String? heroUri;
     if (kind == InteractiveKind.recipe) {
       final imageId = chooseProvider(ChatRoute.imageGen,
-          registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+          registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
       final wantsPhoto = _mentionsPhoto(userInput) || imageId != null;
       if (wantsPhoto) {
         Uint8List? bytes;
@@ -1080,7 +1129,7 @@ class RealChatService implements ChatService {
   }) async {
     controller.add(RoutingDetected(route.studioType));
     final events = _gemini.streamChat(
-      apiKey: keys.geminiKey,
+      access: await _accessFor('gemini') ?? DirectKey(keys.geminiKey),
       conversation: conversation,
       userInput: userInput,
       model: model ?? GeminiApiConfig.flashModel,
@@ -1124,7 +1173,7 @@ class RealChatService implements ChatService {
   }) async {
     controller.add(RoutingDetected(route.studioType));
     final events = _openAi.streamChat(
-      apiKey: keys.keyFor(provider.id),
+      access: await _accessFor(provider.id) ?? DirectKey(keys.keyFor(provider.id)),
       baseUrl: provider.baseUrl!,
       model: model,
       displayName: _registry.displayNameForModel(model),
@@ -1309,7 +1358,7 @@ class RealChatService implements ChatService {
     ];
 
     final events = _anthropic.streamChat(
-      apiKey: keys.anthropicKey,
+      access: await _accessFor('anthropic') ?? DirectKey(keys.anthropicKey),
       conversation: conversation,
       userInput: userInput,
       model: model,
@@ -1548,7 +1597,7 @@ class RealChatService implements ChatService {
       // Hardcoding Gemini here meant an OpenAI or Flux user got procedural
       // placeholder art inside a page they had paid a real key to build.
       final imageId =
-          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
       final images = imageId != null
           ? await _generatePhotos(imageId, userInput, count)
           : await _generateProceduralPhotos(userInput, count);
@@ -1725,7 +1774,7 @@ class RealChatService implements ChatService {
     String script,
   ) async {
     final voiceId = chooseProvider(ChatRoute.voice,
-        registry: _registry, hasKey: keys.hasKey, onWeb: kIsWeb);
+        registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
     if (voiceId != 'elevenlabs') return (audio: base, problem: null);
     try {
       final pcm = await _elevenLabs.speak(

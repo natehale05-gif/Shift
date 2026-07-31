@@ -293,6 +293,23 @@ abstract class ShiftBackend {
 
   Future<Membership> membership();
 
+  /// Where to send a provider call that the membership pays for, and what
+  /// authorises it — or null when this account cannot spend one.
+  ///
+  /// Returns the *target and headers* rather than a token, for two reasons.
+  /// The session may need refreshing first, and only this layer knows how; and
+  /// a method that handed back a raw token would invite callers to build their
+  /// own requests with it, which is how a token ends up somewhere it should not
+  /// be. The caller gets something it can only use for this.
+  ///
+  /// Null is an ordinary answer — signed out, no membership, or a provider
+  /// SHIFT does not cover — and means "use your own key, or the mock". The
+  /// server checks entitlement again regardless; this is so the app can decide
+  /// without a round trip, not so the app can be trusted.
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  );
+
   /// A URL to open to start or manage a subscription. The app never handles
   /// card details; it hands off to the payment provider's own page.
   Future<Uri> billingPortal({String? plan});

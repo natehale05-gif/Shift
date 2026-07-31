@@ -32,13 +32,16 @@ class AnthropicApiConfig {
   /// it and stops the deliverable arriving half-written on the ones that do.
   static const codeMaxTokens = 48000;
 
-  static Map<String, String> headers(String apiKey) => {
+  /// [apiKey] is null for a call going through SHIFT's proxy, which attaches
+  /// the credential itself. The browser-direct opt-out goes with it: that
+  /// header exists to say "this device is knowingly holding a key", and a
+  /// managed call is precisely the arrangement where it is not.
+  static Map<String, String> headers(String? apiKey) => {
         'content-type': 'application/json',
-        'x-api-key': apiKey,
+        if (apiKey != null) 'x-api-key': apiKey,
         'anthropic-version': apiVersion,
-        // Required for browser-direct calls (CORS): the user supplied their
-        // own key and accepts that it lives client-side.
-        'anthropic-dangerous-direct-browser-access': 'true',
+        if (apiKey != null)
+          'anthropic-dangerous-direct-browser-access': 'true',
       };
 
   static String displayName(String model) => switch (model) {

@@ -60,7 +60,19 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
       // earlier session: the in-memory bytes are gone by then, and only the
       // asset id survives in the transcript.
       real: RealChatService(
-          keys: _apiKeysStore, loadAsset: _persistence.loadAsset),
+        keys: _apiKeysStore,
+        loadAsset: _persistence.loadAsset,
+        // Closures rather than the store itself, so the turn layer depends on
+        // two questions instead of on an account object. They are read when a
+        // turn runs, which is always after `initState` has finished, so the
+        // late field below is assigned by then.
+        //
+        // The first steers routing: a member whose plan covers Anthropic is
+        // offered Anthropic even with no key of their own, which is the whole
+        // point. The second pays for the call.
+        managedProviders: () => _accountStore.spendableProviders,
+        managedAccess: (provider) => _accountStore.managedAccess(provider),
+      ),
       mock: MockChatService(loadAsset: _persistence.loadAsset),
     );
     _artifactPanelStore = ArtifactPanelStore();

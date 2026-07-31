@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../backend/shift_backend.dart';
+import '../../providers/clients/provider_access.dart';
 import '../persistence/persistence_service.dart';
 
 /// What the sign-in form is doing right now.
@@ -226,6 +227,31 @@ class AccountStore extends ChangeNotifier {
       return defaultMessageFor(BackendProblem.unavailable);
     }
   }
+
+  /// Where a call for [provider] goes when the membership pays for it, or
+  /// null when it does not.
+  ///
+  /// Three conditions, checked here so a turn does not make a request it
+  /// already knows will be refused: signed in, a subscription that is active
+  /// and under its ceiling, and a provider the plan actually covers. The
+  /// server checks all three again — this is a shortcut, not the gate.
+  Future<ProviderAccess?> managedAccess(String provider) async {
+    if (!isSignedIn || !_membership.canSpendManaged) return null;
+    if (!_includedProviders.contains(provider)) return null;
+
+    final call = await backend.managedProviderCall(provider);
+    if (call == null) return null;
+    return ManagedAccess(base: call.base, headers: call.headers);
+  }
+
+  /// The covered providers, as the set routing needs synchronously.
+  ///
+  /// Empty unless the plan can actually pay right now, so a lapsed or spent
+  /// membership stops steering the router the moment the meter says so.
+  Set<String> get spendableProviders =>
+      isSignedIn && _membership.canSpendManaged
+          ? _includedProviders.toSet()
+          : const {};
 
   Future<String?> deleteProviderKey(String id) async {
     try {

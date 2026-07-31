@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/turn/chat_service.dart';
@@ -19,7 +20,7 @@ class _RecordingOpenAi extends OpenAiCompatibleClient {
 
   @override
   Stream<ChatEvent> streamChat({
-    required String apiKey,
+    required ProviderAccess access,
     required String baseUrl,
     required String model,
     required Conversation conversation,
@@ -29,7 +30,9 @@ class _RecordingOpenAi extends OpenAiCompatibleClient {
     String? systemPrompt,
     Map<String, String> extraHeaders = const {},
   }) async* {
-    seenApiKey = apiKey;
+    // The pin test cares that the *member's own* key was used, which is now
+    // what a DirectKey carries.
+    seenApiKey = access is DirectKey ? access.key : null;
     seenBaseUrl = baseUrl;
     seenModel = model;
     seenHeaders = extraHeaders;

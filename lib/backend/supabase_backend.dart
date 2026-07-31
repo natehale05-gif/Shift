@@ -324,6 +324,30 @@ class SupabaseBackend implements ShiftBackend {
         (rows.first as Map<String, dynamic>)['is_admin'] == true;
   }
 
+  @override
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  ) async {
+    if (_session == null) return null;
+    try {
+      // Refreshed here rather than at the call site: a chat turn can start
+      // minutes after the screen was opened, and a token that dies in flight
+      // reads as the provider failing.
+      final token = await _freshToken();
+      return (
+        base: Uri.parse('${config.url}/functions/v1/provider-proxy/$provider'),
+        headers: {
+          'apikey': config.anonKey,
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } on BackendException {
+      // Signed out, or a refresh that failed. Falling back to the member's own
+      // key is better than failing the turn.
+      return null;
+    }
+  }
+
   // ----------------------------------------------------------- membership
 
   @override

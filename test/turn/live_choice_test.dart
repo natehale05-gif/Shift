@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/data/models/attachment.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/data/models/conversation.dart';
@@ -29,7 +30,7 @@ class _FakeAnthropicClient extends AnthropicClient {
 
   @override
   Stream<ChatEvent> streamChat({
-    required String apiKey,
+    required ProviderAccess access,
     required Conversation conversation,
     required String userInput,
     required String model,

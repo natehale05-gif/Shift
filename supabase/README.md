@@ -148,7 +148,45 @@ node --test supabase/functions/tests/*.test.js
 | Function | What it does |
 |---|---|
 | `provider-key` | the encrypting front door to the vault — the only way a secret gets in, for a member's own key or, with `scope: "platform"` and an admin, for SHIFT's |
+| `provider-proxy` | spends SHIFT's keys for a member — the only reader of the vault |
 | `stripe-webhook` | the only writer of `subscriptions` — entitlement comes from Stripe or from nowhere |
+
+### The proxy
+
+`provider-proxy` is what makes a membership worth anything. A member's device
+sends the request body it would have sent to the provider, to us instead, with
+its own session token; the credential is attached where the device cannot reach
+it, the reply is streamed straight back, and the cost is written down.
+
+```
+POST /functions/v1/provider-proxy/<provider>/<the provider's own path>
+```
+
+Transparent passthrough on purpose. The clients' wire-format code — the part the
+rebuild deliberately ported rather than rewrote — keeps working untouched, and
+the server never becomes a second implementation of three protocols it would
+then have to track as they drift.
+
+Four things must hold at once, and each is a way to lose money or leak a key:
+
+| | Where |
+|---|---|
+| the caller is signed in | the gateway, plus `subjectOf` |
+| the caller is entitled and under budget | `shift.within_ceiling`, the same function `rls_test.sql` asserts |
+| the destination is one **we** chose | `_shared/upstream.js` — fixed hosts, path allowlist |
+| the call is metered even when the provider reports nothing | `_shared/usage_meter.js` + `UNREPORTED_CALL_MICROS` |
+
+Three of those are ordinary care. The fourth is the one that is easy to get
+backwards: a response shape the meter does not recognise must still cost
+something, or "return something unparseable" becomes a way to spend SHIFT's
+keys for free. For the same reason an unknown model is priced at the *most
+expensive* rate in the table rather than at zero.
+
+**The ceiling is a stop-line, not a hard cap.** Nobody knows what a call costs
+until the reply ends, so entitlement is checked before dispatch and cost
+recorded after. One call can overshoot by its own size. That is inherent, it is
+bounded by a single request, and it beats buffering an entire reply so the cost
+can be known first — which would turn a live conversation into a long wait.
 
 `stripe-webhook` is deliberately **unauthenticated**: Stripe has no JWT, so the
 signature *is* the authentication. That is why verification is the first thing
