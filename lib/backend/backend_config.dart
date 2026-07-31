@@ -50,6 +50,14 @@ class BackendConfig {
   static const _anonKey = String.fromEnvironment('SHIFT_SUPABASE_ANON_KEY',
       defaultValue: _defaultAnonKey);
 
+  /// Where the deployed app lives — the value the host's Site URL has to be
+  /// set to, so a confirmation email lands somewhere real rather than on
+  /// localhost.
+  static const siteUrl = 'https://natehale05-gif.github.io/Shift/';
+
+  /// The repository whose CI deploys the edge functions.
+  static const repoUrl = 'https://github.com/natehale05-gif/Shift';
+
   /// The configuration this build was compiled with, or null when it has none.
   ///
   /// Requires *both* values. A URL without a key would produce a client that

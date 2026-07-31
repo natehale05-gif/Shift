@@ -117,6 +117,31 @@ class _FakeBackend implements ShiftBackend {
   bool adminValue = false;
 
   @override
+  Future<void> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  }) async {
+    if (refuseGrant != null) throw refuseGrant!;
+    grants.add((email: email, status: status, ceilingMicros: ceilingMicros));
+  }
+
+  BackendException? refuseGrant;
+  final grants = <({String? email, String status, int ceilingMicros})>[];
+
+  @override
+  List<SetupLink> setupLinks() => setupLinkList;
+
+  List<SetupLink> setupLinkList = const [];
+
+  @override
+  Future<({int status, String body})?> probeProxy(String provider) async =>
+      probeAnswer;
+
+  ({int status, String body})? probeAnswer;
+
+  @override
   Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
     String provider,
   ) async =>

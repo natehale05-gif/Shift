@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../backend/shift_backend.dart';
+import '../../backend/setup_probe.dart';
 import '../../providers/clients/provider_access.dart';
 import '../persistence/persistence_service.dart';
 
@@ -252,6 +253,56 @@ class AccountStore extends ChangeNotifier {
       isSignedIn && _membership.canSpendManaged
           ? _includedProviders.toSet()
           : const {};
+
+  /// Grants a membership. Returns the error to show, or null on success.
+  ///
+  /// Whether the caller may is decided by the server; this reports what it
+  /// said. The refresh afterwards is what makes the change visible in the same
+  /// screen that made it — granting yourself a plan and still seeing "no
+  /// membership" would read as a failure.
+  Future<String?> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  }) async {
+    try {
+      await backend.grantMembership(
+        email: email,
+        status: status,
+        plan: plan,
+        ceilingMicros: ceilingMicros,
+      );
+      await refresh();
+      return null;
+    } on BackendException catch (e) {
+      return e.message;
+    } catch (_) {
+      return defaultMessageFor(BackendProblem.unavailable);
+    }
+  }
+
+  /// Host settings that have to be changed somewhere this app cannot reach.
+  /// The list, and every URL in it, comes from the backend — naming a vendor
+  /// is its job, not the UI's.
+  List<SetupLink> get setupLinks => backend.setupLinks();
+
+  /// Sends one call through the proxy and says what happened.
+  ///
+  /// The point of this existing at all: from inside a chat, "not deployed",
+  /// "not entitled" and "the key is wrong" all look the same — a reply that
+  /// did not arrive. Here they are three different sentences.
+  Future<ProxyProbeResult> testProxy({String provider = 'anthropic'}) async {
+    if (!isConfigured || !isSignedIn) return proxyNotSignedIn;
+
+    final answer = await backend.probeProxy(provider);
+    if (answer == null) return proxyUnreachable;
+
+    final result = readProxyResponse(answer.status, answer.body);
+    // A working call spends a token or two, so the meter moved.
+    if (result.isWorking) await refresh();
+    return result;
+  }
 
   Future<String?> deleteProviderKey(String id) async {
     try {

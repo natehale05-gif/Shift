@@ -348,6 +348,94 @@ class SupabaseBackend implements ShiftBackend {
     }
   }
 
+  @override
+  Future<void> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  }) async {
+    await _post(
+      Uri.parse('${config.url}/functions/v1/admin-membership'),
+      {
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        'status': status,
+        'plan': plan,
+        'ceilingMicros': ceilingMicros,
+      },
+    );
+  }
+
+  @override
+  Future<({int status, String body})?> probeProxy(String provider) async {
+    if (_session == null) return null;
+
+    // The smallest real request the provider will accept. It has to be real —
+    // a malformed body would come back 400 from the provider and look like a
+    // broken key, which is the opposite of what the probe is for.
+    const body = {
+      'model': 'claude-haiku-4-5',
+      'max_tokens': 1,
+      'messages': [
+        {'role': 'user', 'content': 'Hi'}
+      ],
+    };
+
+    try {
+      final token = await _freshToken();
+      final response = await _http.post(
+        Uri.parse('${config.url}/functions/v1/provider-proxy/$provider'
+            '/v1/messages'),
+        headers: _headers(token: token),
+        body: jsonEncode(body),
+      );
+      return (status: response.statusCode, body: response.body);
+    } on BackendException {
+      return null;
+    } catch (_) {
+      // Deliberately not rethrown: the caller renders "could not reach the
+      // server", which is the finding, not a failure of the probe.
+      return null;
+    }
+  }
+
+  /// The project ref, which is the first path segment of the project URL.
+  ///
+  /// Derived rather than stored so there is one place the project is named.
+  String get _projectRef {
+    final host = Uri.parse(config.url).host;
+    final dot = host.indexOf('.');
+    return dot > 0 ? host.substring(0, dot) : host;
+  }
+
+  @override
+  List<SetupLink> setupLinks() => [
+        SetupLink(
+          title: 'Confirmation emails redirect to localhost',
+          action: 'Fix Site URL',
+          url: Uri.parse('https://supabase.com/dashboard/project/$_projectRef'
+              '/auth/url-configuration'),
+          copyLabel: 'Site URL',
+          copyValue: BackendConfig.siteUrl,
+        ),
+        SetupLink(
+          title: 'Deploying functions needs an access token',
+          action: 'Add secret',
+          url: Uri.parse(
+              '${BackendConfig.repoUrl}/settings/secrets/actions/new'),
+          copyLabel: 'Secret name',
+          copyValue: 'SUPABASE_ACCESS_TOKEN',
+        ),
+        SetupLink(
+          title: 'Deploying functions needs the project ref',
+          action: 'Add variable',
+          url: Uri.parse(
+              '${BackendConfig.repoUrl}/settings/variables/actions/new'),
+          copyLabel: 'Project ref',
+          copyValue: _projectRef,
+        ),
+      ];
+
   // ----------------------------------------------------------- membership
 
   @override

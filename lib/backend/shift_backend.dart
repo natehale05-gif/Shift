@@ -148,6 +148,39 @@ class ScheduledTask {
   });
 }
 
+/// A place the operator has to go that this app cannot change for them.
+///
+/// These exist because two things are settings on the *host*, not rows in its
+/// database: where confirmation emails redirect to, and the credentials CI
+/// needs to deploy. No amount of UI reaches them.
+///
+/// They live behind the backend interface for the same reason everything else
+/// does — the URLs name a vendor, and `tool/scan_backend_boundary.py` caught
+/// the first attempt at putting them in the widget. That was the scan working:
+/// a Settings card that hardcodes `supabase.com` is a Settings card that has
+/// to be rewritten when the host changes.
+class SetupLink {
+  /// What is wrong or missing, in the user's terms.
+  final String title;
+
+  /// The button. A verb.
+  final String action;
+
+  final Uri url;
+
+  /// What to put on the clipboard, so nothing has to be typed on a phone.
+  final String copyLabel;
+  final String copyValue;
+
+  const SetupLink({
+    required this.title,
+    required this.action,
+    required this.url,
+    required this.copyLabel,
+    required this.copyValue,
+  });
+}
+
 /// Why a backend call did not work, in terms the UI can say out loud.
 ///
 /// Deliberately few. "The network is down", "you are not signed in", "that
@@ -309,6 +342,30 @@ abstract class ShiftBackend {
   Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
     String provider,
   );
+
+  /// Grants or adjusts a membership. Admin only, checked on the server.
+  ///
+  /// Exists because until payments do, nothing else can make an account paid —
+  /// and the alternative was typing SQL into a phone. [email] names another
+  /// account; omitted, it is the caller's own.
+  Future<void> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  });
+
+  /// Sends one small call through the proxy and reports what came back.
+  ///
+  /// The status matters more than the body: a 404 means the function was never
+  /// deployed, a 402 means it is running and refusing, and from inside a chat
+  /// those look identical. Returns null when there is nothing to ask — no
+  /// backend, or signed out.
+  Future<({int status, String body})?> probeProxy(String provider);
+
+  /// The host settings that cannot be changed from here. Empty when there is
+  /// no host, or nothing left to do.
+  List<SetupLink> setupLinks();
 
   /// A URL to open to start or manage a subscription. The app never handles
   /// card details; it hands off to the payment provider's own page.

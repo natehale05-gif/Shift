@@ -75,6 +75,21 @@ class NoBackend implements ShiftBackend {
   Future<bool> isAdmin() async => false;
 
   @override
+  Future<void> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  }) async =>
+      throw _unconfigured;
+
+  @override
+  Future<({int status, String body})?> probeProxy(String provider) async => null;
+
+  @override
+  List<SetupLink> setupLinks() => const [];
+
+  @override
   Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
     String provider,
   ) async =>

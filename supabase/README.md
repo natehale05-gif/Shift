@@ -112,6 +112,29 @@ The insert cannot create somebody else's row (the policy reads the id from the
 token, not from the request) and cannot create an admin (`is_admin` is not in
 the column grant). Both are asserted in `tests/rls_test.sql`.
 
+## Setting it up from a phone
+
+Settings → **Server setup** (admin only) is where this happens. It shows live
+state rather than a checklist to tick — a checklist that records what you told
+it is one that lies — and it has a button for each thing the server can do:
+
+- **Run test** sends one small request through the proxy and says what came
+  back. This is the one that matters. A 404 (never deployed), a 402 (deployed
+  and refusing), and a rejected key are three different faults with three
+  different fixes, and from inside a chat all three look identical: a reply
+  that never arrived.
+- **Grant** gives an account a plan, which used to be an `insert into
+  subscriptions` typed into a SQL editor.
+
+The two settings no app can change — the Supabase Site URL, and the GitHub
+credentials the deploy job needs — are one tap to the exact form, with the
+value to paste already on the clipboard.
+
+`tool/bundle_function.py <name>` inlines a function's `_shared` imports into a
+single file under `build/functions/`, for the case where CI cannot deploy and
+the dashboard editor is the only way in. The workflow below is still the path
+that survives the next edit.
+
 ## Deploying the functions
 
 `.github/workflows/backend.yml` deploys every function in `functions/` on a
@@ -169,6 +192,7 @@ node --test supabase/functions/tests/*.test.js
 |---|---|
 | `provider-key` | the encrypting front door to the vault — the only way a secret gets in, for a member's own key or, with `scope: "platform"` and an admin, for SHIFT's |
 | `provider-proxy` | spends SHIFT's keys for a member — the only reader of the vault |
+| `admin-membership` | grants a plan, until payments can sell one |
 | `stripe-webhook` | the only writer of `subscriptions` — entitlement comes from Stripe or from nowhere |
 
 ### The proxy
