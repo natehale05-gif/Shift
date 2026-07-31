@@ -112,6 +112,26 @@ The insert cannot create somebody else's row (the policy reads the id from the
 token, not from the request) and cannot create an admin (`is_admin` is not in
 the column grant). Both are asserted in `tests/rls_test.sql`.
 
+## Deploying the functions
+
+`.github/workflows/backend.yml` deploys every function in `functions/` on a
+push, after the migration assertions pass. Shipping one is a push, not a person
+— which it had to become: deploying by hand meant a deploy could only happen
+when whoever had the tooling was available, and `provider-proxy` is five files.
+
+Two settings turn it on, and until they exist the step skips with a message
+rather than failing (a missing credential means "this checkout cannot deploy",
+not "this change is broken"):
+
+| | Where | What |
+|---|---|---|
+| `SUPABASE_ACCESS_TOKEN` | repository **secret** | a personal access token from the Supabase dashboard |
+| `SUPABASE_PROJECT_REF` | repository **variable** | the project ref from its URL |
+
+`stripe-webhook` deploys with `--no-verify-jwt`, alone among them: Stripe has
+no session to present, so its signature *is* its authentication and the handler
+checks that first. Everything else keeps the gateway's JWT check in front of it.
+
 ## Secrets
 
 Nothing secret belongs in this repository or in a chat message. `.env.example`

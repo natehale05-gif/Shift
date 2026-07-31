@@ -61,3 +61,69 @@ jobs:
       # property that would let them move off Deno.
       - name: Test the edge function handlers
         run: node --test supabase/functions/tests/*.test.js
+
+  # Deploying the functions, so that shipping one is a push rather than a
+  # person.
+  #
+  # This exists because the alternative kept failing in the same way: the
+  # functions were deployed by hand, through whichever tool happened to be
+  # connected at the time, which meant a deploy could only happen when someone
+  # with that tool was in the room. `provider-proxy` is five files; pasting
+  # them into a dashboard from a phone is not a process, it is a hostage
+  # situation.
+  #
+  # Gated on `migrations` so a function is never deployed against a schema that
+  # failed its own assertions, and on the branch so a pull request from a fork
+  # cannot deploy anything.
+  deploy-functions:
+    needs: migrations
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' ||
+       github.ref == 'refs/heads/claude/shiftai-flutter-chat-app-rjtgyj')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Skipped rather than failed when the credentials are absent, so a fork
+      # or a first-time clone still gets a green build. A missing secret means
+      # "this checkout cannot deploy", which is not the same as "this change is
+      # broken".
+      - name: Deploy edge functions
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$PROJECT_REF" ]; then
+            echo "No deploy credentials configured — skipping."
+            echo "Set the SUPABASE_ACCESS_TOKEN secret and the"
+            echo "SUPABASE_PROJECT_REF variable to enable this."
+            exit 0
+          fi
+
+          # `stripe-webhook` is deliberately excluded from JWT verification:
+          # Stripe has no session, so its signature *is* its authentication and
+          # the handler checks that before touching anything. Every other
+          # function keeps the gateway's check in front of it.
+          for fn in supabase/functions/*/; do
+            name="$(basename "$fn")"
+            case "$name" in
+              _shared|tests) continue ;;
+            esac
+
+            if [ "$name" = "stripe-webhook" ]; then
+              flags="--no-verify-jwt"
+            else
+              flags=""
+            fi
+
+            echo "::group::deploy $name"
+            supabase functions deploy "$name" \
+              --project-ref "$PROJECT_REF" $flags
+            echo "::endgroup::"
+          done
