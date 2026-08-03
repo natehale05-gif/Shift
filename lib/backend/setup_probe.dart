@@ -17,8 +17,14 @@ enum ProxyOutcome {
   /// Deployed, and refusing this account: no membership, or over the ceiling.
   notEntitled,
 
-  /// Deployed and entitled, but SHIFT holds no key for that provider.
-  noPlatformKey,
+  /// Deployed and reachable, but the server is not finished being set up.
+  ///
+  /// Three states share this, and they share it honestly — SHIFT holds no key
+  /// for that provider, a required server setting is missing, or the
+  /// entitlement check could not run. All three are the server's own to fix,
+  /// none of them is the member's plan, and the server names which in its own
+  /// words. It was called `noPlatformKey` while it described only the first.
+  serverNotReady,
 
   /// It reached the provider and the provider said no — a bad key, usually.
   providerRejected,
@@ -82,13 +88,13 @@ ProxyProbeResult readProxyResponse(int status, String body) {
                 'covers this month.',
         detail: detail,
       ),
-    // The server's own words first, as 402 already does. 503 covers two
-    // things — no key for this provider, and a server missing one of its own
-    // settings — and only the server knows which. Overwriting its sentence
-    // with the commoner of the two would send someone to paste a key they
-    // have already pasted.
+    // The server's own words first, as 402 already does. 503 covers three
+    // states — no key for this provider, a missing server setting, and an
+    // entitlement check that could not run — and only the server knows which.
+    // Overwriting its sentence with the commonest of the three would send
+    // someone to paste a key they have already pasted.
     503 => ProxyProbeResult(
-        ProxyOutcome.noPlatformKey,
+        ProxyOutcome.serverNotReady,
         detail ??
             'The server is running but holds no key for that provider. Add '
                 'one under "Included with membership".',

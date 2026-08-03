@@ -290,15 +290,42 @@ test('an account that is not entitled is refused before any provider call',
       'the key was decrypted before entitlement was established');
 });
 
-test('an entitlement check that fails answers no', async () => {
+test('an entitlement check that fails still refuses', async () => {
   // A check that fails open is not a check.
+  const calls = [];
   const fetch = async (url) => {
+    calls.push(String(url));
     if (String(url).includes('/rpc/within_ceiling')) throw new Error('down');
     return new Response('[]', { status: 200 });
   };
   const response = await proxy(proxyRequest('/anthropic/v1/messages'),
       { env: ENV, fetch });
-  assert.equal(response.status, 402);
+
+  assert.equal(response.status, 503);
+  assert.ok(!calls.some((u) => u.includes('api.anthropic.com')),
+      'a call went to the provider on an entitlement check that never ran');
+});
+
+test('...and says so, rather than blaming the plan', async () => {
+  // The bug that motivated splitting these: `within_ceiling` lived in a schema
+  // PostgREST does not expose, so the check 404'd, failed closed, and answered
+  // 402 — announcing that a member's plan did not cover them while their plan
+  // covered them perfectly. Both refuse; only one sends someone to look at the
+  // right thing.
+  const failing = async (url) => {
+    if (String(url).includes('/rpc/within_ceiling')) throw new Error('down');
+    return new Response('[]', { status: 200 });
+  };
+  const broken = await proxy(proxyRequest('/anthropic/v1/messages'),
+      { env: ENV, fetch: failing });
+
+  const world = await fakeWorld({ entitled: false });
+  const refused = await proxy(proxyRequest('/anthropic/v1/messages'),
+      { env: ENV, fetch: world.fetch });
+
+  assert.notEqual(broken.status, refused.status);
+  assert.notEqual((await broken.json()).message,
+      (await refused.json()).message);
 });
 
 test('a signed-out caller never reaches the ceiling check', async () => {

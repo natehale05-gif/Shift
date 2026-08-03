@@ -451,6 +451,18 @@ class SupabaseBackend implements ShiftBackend {
           copyLabel: 'Project ref',
           copyValue: _projectRef,
         ),
+        // The third, added after a migration sat in the repository — correct
+        // and tested — while the live schema went without it and the feature
+        // it unblocked looked broken. CI proves the migrations; this is what
+        // lets CI apply them.
+        SetupLink(
+          title: 'So schema changes apply themselves: the database password',
+          action: 'Add secret',
+          url: Uri.parse(
+              '${BackendConfig.repoUrl}/settings/secrets/actions/new'),
+          copyLabel: 'Secret name',
+          copyValue: 'SUPABASE_DB_PASSWORD',
+        ),
       ];
 
   // ----------------------------------------------------------- membership

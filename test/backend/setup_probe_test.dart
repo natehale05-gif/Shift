@@ -34,7 +34,7 @@ void main() {
     test('a 503 points at the missing key rather than at the server', () {
       final result = readProxyResponse(503, '');
 
-      expect(result.outcome, ProxyOutcome.noPlatformKey);
+      expect(result.outcome, ProxyOutcome.serverNotReady);
       expect(result.message, contains('Included with membership'));
     });
 
@@ -83,18 +83,26 @@ void main() {
     });
 
     test('every outcome produces a distinct sentence', () {
-      // Four different causes needing four different actions. Two of them
-      // sharing a sentence would be the diagnostic failing at its only job.
+      // Different causes needing different actions. Two of them sharing a
+      // sentence would be the diagnostic failing at its only job.
+      //
+      // The three 503s are here because a status is not a diagnosis: one
+      // status now covers three server-side states, and they are only
+      // distinguishable by the words the server sent with them. A 402 whose
+      // real cause was an entitlement check that could not run is exactly how
+      // this went wrong once already.
       final messages = [
         readProxyResponse(404, ''),
         readProxyResponse(402, ''),
         readProxyResponse(503, ''),
+        readProxyResponse(503, '{"message":"The server is missing SHIFT_KMS_KEY."}'),
+        readProxyResponse(503, '{"message":"Could not check your plan right now."}'),
         readProxyResponse(200, ''),
         proxyUnreachable,
         proxyNotSignedIn,
       ].map((r) => r.message).toSet();
 
-      expect(messages, hasLength(6));
+      expect(messages, hasLength(8));
     });
 
     test('a body that is not JSON does not become the message', () {

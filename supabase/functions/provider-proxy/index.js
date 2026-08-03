@@ -52,7 +52,16 @@ export const handle = withAdapter(async (req, ctx) => {
     return problem(403, 'That endpoint is not available through SHIFT.');
   }
 
-  if (!(await withinCeiling(ctx))) {
+  // Three answers, not two. "The plan says no" and "the check could not run"
+  // are both reasons to refuse, and collapsing them is how a 402 came to
+  // announce that a member's plan did not cover them while their plan covered
+  // them perfectly — the check was 404ing and failing closed, correctly and
+  // silently. Refusing either way is right; saying the same sentence is not.
+  const entitled = await withinCeiling(ctx);
+  if (entitled === 'unknown') {
+    return problem(503, 'Could not check your plan right now.');
+  }
+  if (!entitled) {
     return problem(
       402,
       'Your plan does not cover this right now — either it is inactive or ' +
@@ -120,11 +129,18 @@ function readEnv() {
 /**
  * Whether this account may spend a managed call right now.
  *
- * Asked of the database rather than worked out here: `shift.within_ceiling`
- * is the same function the schema's own tests assert, so there is one
- * definition of "entitled" and not a second one that can drift from it.
+ * Asked of the database rather than worked out here: `shift.within_ceiling` is
+ * the same function the schema's own tests assert, so there is one definition
+ * of "entitled" and not a second one that can drift from it. `0011` is what
+ * makes it reachable — the definition lives in `shift`, and PostgREST only
+ * serves `public`.
  *
- * Any failure answers no. An entitlement check that fails open is not a check.
+ * Returns `true`, `false`, or `'unknown'`. A failure still refuses — an
+ * entitlement check that fails open is not a check — but the caller reports it
+ * as our problem rather than as the member's plan, because for four weeks it
+ * was ours and the message said theirs.
+ *
+ * @returns {Promise<boolean | 'unknown'>}
  */
 async function withinCeiling(ctx) {
   try {
@@ -135,7 +151,7 @@ async function withinCeiling(ctx) {
     return (await response.json()) === true;
   } catch (error) {
     console.error('ceiling check failed', error);
-    return false;
+    return 'unknown';
   }
 }
 

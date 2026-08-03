@@ -29,11 +29,25 @@ than at the point somebody tries to move.
 PGHOST=127.0.0.1 PGPORT=5433 PGUSER=postgres tool/test_migrations.sh
 ```
 
-It checks four things: the migrations apply, applying them twice is a no-op, the
-policies do what `tests/rls_test.sql` says, and **every** table forces row
-security — that last one so a table added later without a policy fails loudly
-instead of being world-readable and passing every test that does not know to
-look for it.
+It checks that the migrations apply, that applying them twice is a no-op, that
+the policies do what `tests/rls_test.sql` says, that **every** table forces row
+security — so a table added later without a policy fails loudly instead of
+being world-readable and passing every test that does not know to look for it —
+and that **every `/rpc/` name the code calls exists in `public`**.
+
+That last one is the newest and it was bought at full price. `within_ceiling`
+and `managed_spend_micros` live in the `shift` schema; PostgREST serves
+`public` and nothing else. Every SQL assertion passed, every HTTP call 404'd,
+and `provider-proxy` did the right thing with the wrong information: it failed
+closed and told members their plan did not cover them. The names are read out
+of `lib/` and `supabase/functions/` rather than listed, so a function added
+later is covered without anyone remembering.
+
+**The pattern worth naming**, because this is the third time: the harness keeps
+turning out to be *simpler or safer* than production. Supabase's default grants
+(`0006`), the caller-controlled `search_path` (`0007`), and now PostgREST's
+schema exposure. Each time, everything local was green. A test environment that
+cannot reproduce the production surface is testing something else.
 
 ## Migrations
 
@@ -49,6 +63,7 @@ look for it.
 | `0008_platform_keys.sql` | SHIFT's own keys — no owner, no policy, plus `profiles.is_admin` |
 | `0009_included_providers_without_definer.sql` | which providers a plan covers, as an invoker view |
 | `0010_profiles_self_provision.sql` | the insert that creates an account's own profile row |
+| `0011_expose_entitlement_over_postgrest.sql` | `public` wrappers, because PostgREST serves no other schema |
 
 Apply in filename order. They are idempotent, so a partial failure can be
 re-run.
@@ -166,14 +181,21 @@ no longer matches the one here. Nothing behaves differently — the drift is in
 comments — but that is luck, not a property. The workflow overwrites all of it
 from source, which is the actual fix.
 
-Two settings turn the workflow on, and until they exist the step skips with a
-message rather than failing (a missing credential means "this checkout cannot
+Three settings turn the workflow on, and until they exist each step skips with
+a message rather than failing (a missing credential means "this checkout cannot
 deploy", not "this change is broken"):
 
 | | Where | What |
 |---|---|---|
 | `SUPABASE_ACCESS_TOKEN` | repository **secret** | a personal access token from the Supabase dashboard |
 | `SUPABASE_PROJECT_REF` | repository **variable** | the project ref from its URL |
+| `SUPABASE_DB_PASSWORD` | repository **secret** | so `push-schema` can apply migrations |
+
+`push-schema` is the newest job and exists for the same reason as the last two
+incidents: a migration sat in this repository, correct and tested, while the
+live schema went without it and the feature it unblocked looked broken to the
+person using it. The `migrations` job proves a migration is right; this one is
+what makes it true anywhere.
 
 `stripe-webhook` deploys with `--no-verify-jwt`, alone among them: Stripe has
 no session to present, so its signature *is* its authentication and the handler

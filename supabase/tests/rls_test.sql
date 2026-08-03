@@ -213,6 +213,19 @@ begin
   exception
     when insufficient_privilege then null;  -- expected
   end;
+
+  -- `0011` put a wrapper for this in `public` so PostgREST can reach it, and
+  -- the wrapper takes the account to ask about — which is the whole reason the
+  -- grant is `service_role` alone. Reachable by a client, it would answer
+  -- questions about other people's accounts. Supabase grants EXECUTE on new
+  -- public functions to both client roles by default, so this asserts the
+  -- revoke rather than assuming it.
+  begin
+    perform public.within_ceiling('11111111-1111-1111-1111-111111111111');
+    raise exception 'anon could ask whether another account may spend';
+  exception
+    when insufficient_privilege then null;  -- expected
+  end;
 end
 $$;
 
