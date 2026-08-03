@@ -38,6 +38,20 @@ void main() {
       expect(result.message, contains('Included with membership'));
     });
 
+    test('a 503 the server explained says the server\'s reason, not ours', () {
+      // 503 covers two things and only the server knows which: no key for this
+      // provider, and a server missing one of its own settings. Overwriting
+      // its sentence with the commoner of the two sends someone to paste a key
+      // they have already pasted.
+      final result = readProxyResponse(
+        503,
+        '{"message":"The server is missing SHIFT_KMS_KEY."}',
+      );
+
+      expect(result.message, contains('SHIFT_KMS_KEY'));
+      expect(result.message, isNot(contains('Included with membership')));
+    });
+
     test('a provider rejection is named as the provider\'s', () {
       // The proxy forwards the provider's status, so a 401 here is Anthropic
       // refusing the stored key — not our auth.

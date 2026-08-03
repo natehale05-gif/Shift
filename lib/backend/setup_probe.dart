@@ -65,8 +65,9 @@ ProxyProbeResult readProxyResponse(int status, String body) {
     // useful thing this whole card does.
     404 => ProxyProbeResult(
         ProxyOutcome.notDeployed,
-        'The server function is not deployed yet. Push any commit once the '
-        'GitHub settings below are in place and it deploys itself.',
+        'The proxy is not deployed on the server. Add the two GitHub '
+        'settings below and push any commit — from then on it deploys '
+        'itself.',
         detail: detail,
       ),
     401 => ProxyProbeResult(
@@ -81,10 +82,16 @@ ProxyProbeResult readProxyResponse(int status, String body) {
                 'covers this month.',
         detail: detail,
       ),
+    // The server's own words first, as 402 already does. 503 covers two
+    // things — no key for this provider, and a server missing one of its own
+    // settings — and only the server knows which. Overwriting its sentence
+    // with the commoner of the two would send someone to paste a key they
+    // have already pasted.
     503 => ProxyProbeResult(
         ProxyOutcome.noPlatformKey,
-        'The server is running but holds no key for that provider. Add one '
-        'under "Included with membership".',
+        detail ??
+            'The server is running but holds no key for that provider. Add '
+                'one under "Included with membership".',
         detail: detail,
       ),
     // The proxy forwards the provider's own status, so anything else in the

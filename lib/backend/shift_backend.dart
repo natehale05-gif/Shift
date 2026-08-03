@@ -211,6 +211,18 @@ enum BackendProblem {
   /// The account is over its ceiling, or has no membership to spend under.
   overLimit,
 
+  /// The server is up, but the endpoint being asked for is not on it.
+  ///
+  /// Its own member because from a browser it is indistinguishable from being
+  /// offline, and answering "check your connection" is how tapping **Grant**
+  /// against a function that had never been deployed sent someone to look at
+  /// their wifi. The functions host does answer 404 for a slug it does not
+  /// hold — but that 404 carries no `Access-Control-Allow-Origin`, so the
+  /// browser refuses to hand it over and all the app sees is a failed request.
+  /// Recovering the distinction takes one extra call; see
+  /// `SupabaseBackend._hostIsReachable`.
+  notDeployed,
+
   /// Anything else: offline, a 500, a timeout.
   unavailable,
 }
@@ -253,6 +265,8 @@ String defaultMessageFor(BackendProblem problem) => switch (problem) {
             'sign in.',
       BackendProblem.overLimit =>
         'You have used everything your plan covers this month.',
+      BackendProblem.notDeployed =>
+        'That part of the server is not deployed yet.',
       BackendProblem.unavailable =>
         'Could not reach the server. Check your connection and try again.',
     };

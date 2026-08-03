@@ -390,6 +390,25 @@ test('a provider SHIFT holds no key for says so, rather than failing oddly',
   assert.equal(response.status, 503);
 });
 
+test('a server missing its own key says so instead of blaming the provider',
+    async () => {
+  // Without this check `masterKeyBytes` throws, the adapter returns a bare 500,
+  // and the Setup card reads that as "the provider is having trouble right
+  // now" — sending someone to check an Anthropic key over a variable on our
+  // own server. The variable's *name* is safe to say; its value is what must
+  // never leave.
+  const world = await fakeWorld();
+  const { SHIFT_KMS_KEY: _omitted, ...withoutKey } = ENV;
+
+  const response = await proxy(proxyRequest('/anthropic/v1/messages'),
+      { env: withoutKey, fetch: world.fetch });
+
+  assert.equal(response.status, 503);
+  assert.match((await response.json()).message, /SHIFT_KMS_KEY/);
+  assert.ok(!world.calls.some((c) => c.url.includes('/platform_keys')),
+      'the vault was read by a server that could not have decrypted it');
+});
+
 test('a path outside the allowlist never reaches the provider', async () => {
   const world = await fakeWorld();
   const response = await proxy(proxyRequest('/openai/v1/organization/invites'),

@@ -130,21 +130,45 @@ The two settings no app can change — the Supabase Site URL, and the GitHub
 credentials the deploy job needs — are one tap to the exact form, with the
 value to paste already on the clipboard.
 
-`tool/bundle_function.py <name>` inlines a function's `_shared` imports into a
-single file under `build/functions/`, for the case where CI cannot deploy and
-the dashboard editor is the only way in. The workflow below is still the path
-that survives the next edit.
-
 ## Deploying the functions
 
-`.github/workflows/backend.yml` deploys every function in `functions/` on a
-push, after the migration assertions pass. Shipping one is a push, not a person
-— which it had to become: deploying by hand meant a deploy could only happen
-when whoever had the tooling was available, and `provider-proxy` is five files.
+Three are deployed and ACTIVE: `provider-key`, `provider-proxy`,
+`admin-membership`.
 
-Two settings turn it on, and until they exist the step skips with a message
-rather than failing (a missing credential means "this checkout cannot deploy",
-not "this change is broken"):
+**The two ways in, and which one to trust.**
+
+`.github/workflows/backend.yml` deploys every function in `functions/` on a
+push, after the migration assertions pass. That is the path that survives the
+next edit: it ships the sources as they are, in the layout they are written in,
+and nobody has to be available for it to happen.
+
+The other way is the management API, one file at a time. It exists because the
+workflow needs a credential a repository may not have yet, and being unable to
+deploy at all is worse than deploying awkwardly — that gap is exactly how
+`admin-membership` came to be missing while a button in Settings pointed at it.
+`tool/bundle_function.py` is what makes it possible:
+
+```sh
+python3 tool/bundle_function.py provider-proxy --deno --lean
+```
+
+`--deno` appends the `Deno.serve` entrypoint; `--lean` drops whole-line
+comments, halving `provider-proxy` from 32 KB to 16 KB, which matters when the
+file has to travel as one literal string. `tests/bundle.test.js` imports every
+bundle and drives a request through it — the bundler is on the deploy path now,
+and a name collision between two inlined modules would otherwise surface as a
+production 500 that no other test can see.
+
+**It is the second-best path and this says so.** A file that reaches the server
+by being copied can drift from its source, and one already has: `provider-key`'s
+deployed copy was flattened by hand in an earlier session and its `handler.js`
+no longer matches the one here. Nothing behaves differently — the drift is in
+comments — but that is luck, not a property. The workflow overwrites all of it
+from source, which is the actual fix.
+
+Two settings turn the workflow on, and until they exist the step skips with a
+message rather than failing (a missing credential means "this checkout cannot
+deploy", not "this change is broken"):
 
 | | Where | What |
 |---|---|---|
@@ -247,6 +271,9 @@ implied by the column name.
 
 ## What is not here yet
 
-The billing portal (creating a Checkout session), the scheduled-task runner,
-the metered proxy that spends managed keys, and the client wiring. Each needs a live project or real Stripe keys to verify against,
-which is the next thing to set up.
+The billing portal (creating a Checkout session) and the scheduled-task runner.
+Both need real Stripe keys or a scheduler to verify against.
+
+Until the billing portal exists, **nothing can make an account paid except an
+admin pressing Grant** — a decision someone makes rather than a purchase
+someone completes. That is the honest description of where membership stands.

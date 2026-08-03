@@ -61,6 +61,23 @@ export const handle = withAdapter(async (req, ctx) => {
     );
   }
 
+  // Checked before the vault is touched, and reported rather than swallowed.
+  //
+  // Without this, a missing `SHIFT_KMS_KEY` throws inside `masterKeyBytes`,
+  // the adapter turns it into a bare 500, and the Setup card reads that as
+  // "the provider is having trouble right now" — pointing at Anthropic for a
+  // variable on our own server. Naming the variable is not echoing a secret:
+  // the no-echo rule in `handler.js` is about values, and this is a pre-check
+  // rather than a caught exception being quoted back.
+  //
+  // 503 rather than a status of its own, because it means what 503 already
+  // means here — the server is running but not finished being set up — and the
+  // person who fixes it is the same person.
+  const missing = requiredEnv.filter((name) => !ctx.env[name]);
+  if (missing.length > 0) {
+    return problem(503, `The server is missing ${missing.join(', ')}.`);
+  }
+
   const secret = await platformKey(ctx, provider);
   if (!secret) {
     return problem(
@@ -214,7 +231,10 @@ function responseHeaders(from) {
   return headers;
 }
 
-// Only referenced so a bundler cannot decide it is unused; the env var is what
-// makes the whole thing work and its absence should fail loudly at boot.
+/**
+ * Everything this function cannot work without. Read by the handler above so a
+ * missing one is a sentence rather than a 500, and exported so a test can
+ * assert against the list rather than restate it.
+ */
 export const requiredEnv = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'SHIFT_KMS_KEY'];
 export { requireEnv };

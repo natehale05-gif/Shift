@@ -432,6 +432,87 @@ void main() {
     });
   });
 
+  group('a function that is not there', () {
+    // The bug this group exists for: tapping Grant against a function that had
+    // never been deployed answered "check your connection", because a browser
+    // cannot see the functions host's 404 — that 404 carries no CORS header,
+    // so the request just fails. The fix is one extra question, and these
+    // tests pin both of its answers.
+
+    /// A world where the functions host refuses and everything else answers.
+    MockClient client({required bool hostUp}) => MockClient((request) async {
+          if (request.url.path.contains('/auth/')) {
+            return http.Response(_tokenBody(), 200);
+          }
+          if (request.url.path.contains('/functions/')) {
+            throw const SocketExceptionStub();
+          }
+          if (!hostUp) throw const SocketExceptionStub();
+          return http.Response(jsonEncode([]), 200);
+        });
+
+    test('is named, when the host itself is answering', () async {
+      final backend = await _signedIn(client(hostUp: true));
+
+      await expectLater(
+        backend.grantMembership(ceilingMicros: 25000000),
+        throwsA(isA<BackendException>()
+            .having((e) => e.problem, 'problem', BackendProblem.notDeployed)
+            .having((e) => e.message, 'message', contains('admin-membership'))),
+      );
+      backend.dispose();
+    });
+
+    test('is still just "offline" when nothing answers at all', () async {
+      // The regression guard, and the more important half. A diagnostic that
+      // upgrades every outage into "not deployed" would send someone to
+      // redeploy a server that was never broken.
+      final backend = await _signedIn(client(hostUp: false));
+
+      await expectLater(
+        backend.grantMembership(ceilingMicros: 25000000),
+        throwsA(isA<BackendException>()
+            .having((e) => e.problem, 'problem', BackendProblem.unavailable)),
+      );
+      backend.dispose();
+    });
+
+    test('a 4xx from a deployed function is reported as itself', () async {
+      // The other regression: the extra question must only be asked when there
+      // was no answer. A function that replied 403 has plainly been deployed.
+      final backend = await _signedIn(MockClient((request) async {
+        if (request.url.path.contains('/auth/')) {
+          return http.Response(_tokenBody(), 200);
+        }
+        return http.Response('{"message":"Not allowed."}', 403);
+      }));
+
+      await expectLater(
+        backend.grantMembership(ceilingMicros: 25000000),
+        throwsA(isA<BackendException>()
+            .having((e) => e.problem, 'problem', BackendProblem.notSignedIn)
+            .having((e) => e.message, 'message', 'Not allowed.')),
+      );
+      backend.dispose();
+    });
+
+    test('the proxy probe reports the 404 the browser withheld', () async {
+      // Synthesised rather than given a seventh outcome, so there stays
+      // exactly one place that turns a proxy status into a sentence.
+      final backend = await _signedIn(client(hostUp: true));
+
+      expect(await backend.probeProxy('anthropic'), (status: 404, body: ''));
+      backend.dispose();
+    });
+
+    test('the proxy probe reports nothing when nothing answers', () async {
+      final backend = await _signedIn(client(hostUp: false));
+
+      expect(await backend.probeProxy('anthropic'), isNull);
+      backend.dispose();
+    });
+  });
+
   group('membership', () {
     test('no row is "no membership", which is a real state, not a failure',
         () async {

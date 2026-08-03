@@ -265,9 +265,10 @@ class SupabaseBackend implements ShiftBackend {
     // Through an edge function, never straight into the table: the row holds
     // ciphertext, and the key that encrypts it is not something a client is
     // allowed to hold.
-    final json = await _post(
+    final json = await _postFunction(
       Uri.parse('${config.url}/functions/v1/provider-key'),
       {'provider': provider, 'secret': secret},
+      slug: 'provider-key',
     );
     return ProviderKeyInfo(
       id: json['id'] as String? ?? '',
@@ -291,9 +292,10 @@ class SupabaseBackend implements ShiftBackend {
     // Same endpoint as a personal key, with a scope. One encrypting front door
     // rather than two — a second one is a second place to get the crypto or
     // the authorization wrong.
-    await _post(
+    await _postFunction(
       Uri.parse('${config.url}/functions/v1/provider-key'),
       {'provider': provider, 'secret': secret, 'scope': 'platform'},
+      slug: 'provider-key',
     );
   }
 
@@ -355,7 +357,7 @@ class SupabaseBackend implements ShiftBackend {
     String plan = 'granted',
     required int ceilingMicros,
   }) async {
-    await _post(
+    await _postFunction(
       Uri.parse('${config.url}/functions/v1/admin-membership'),
       {
         if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
@@ -363,6 +365,7 @@ class SupabaseBackend implements ShiftBackend {
         'plan': plan,
         'ceilingMicros': ceilingMicros,
       },
+      slug: 'admin-membership',
     );
   }
 
@@ -393,8 +396,17 @@ class SupabaseBackend implements ShiftBackend {
     } on BackendException {
       return null;
     } catch (_) {
-      // Deliberately not rethrown: the caller renders "could not reach the
-      // server", which is the finding, not a failure of the probe.
+      // A browser cannot see the functions host's 404 for a slug it does not
+      // hold, because that 404 carries no CORS header. So the 404 is recovered
+      // rather than reported as silence — but only after confirming the host
+      // is answering, which is what makes it an inference and not a guess.
+      //
+      // Synthesised here rather than as a seventh `ProxyOutcome` so there
+      // stays exactly one place that turns a proxy status into a sentence.
+      if (await _hostIsReachable()) return (status: 404, body: '');
+
+      // Genuinely nothing answered. The caller renders "could not reach the
+      // server", which is now the finding rather than a shrug.
       return null;
     }
   }
@@ -418,8 +430,13 @@ class SupabaseBackend implements ShiftBackend {
           copyLabel: 'Site URL',
           copyValue: BackendConfig.siteUrl,
         ),
+        // The functions are deployed. These two are what keeps them that way
+        // without anyone in the loop — so the titles say what they buy rather
+        // than implying nothing works until they exist, which is what the
+        // previous wording implied and what left Grant pointing at a function
+        // nobody had deployed.
         SetupLink(
-          title: 'Deploying functions needs an access token',
+          title: 'So future changes deploy themselves: an access token',
           action: 'Add secret',
           url: Uri.parse(
               '${BackendConfig.repoUrl}/settings/secrets/actions/new'),
@@ -427,7 +444,7 @@ class SupabaseBackend implements ShiftBackend {
           copyValue: 'SUPABASE_ACCESS_TOKEN',
         ),
         SetupLink(
-          title: 'Deploying functions needs the project ref',
+          title: 'So future changes deploy themselves: the project ref',
           action: 'Add variable',
           url: Uri.parse(
               '${BackendConfig.repoUrl}/settings/variables/actions/new'),
@@ -475,9 +492,10 @@ class SupabaseBackend implements ShiftBackend {
 
   @override
   Future<Uri> billingPortal({String? plan}) async {
-    final json = await _post(
+    final json = await _postFunction(
       Uri.parse('${config.url}/functions/v1/billing-portal'),
       {if (plan != null) 'plan': plan},
+      slug: 'billing-portal',
     );
     final url = json['url'] as String?;
     if (url == null) {
@@ -631,6 +649,63 @@ class SupabaseBackend implements ShiftBackend {
       rethrow;
     } catch (e) {
       throw _offline(e);
+    }
+  }
+
+  /// Like [_post], but for an edge function rather than a table.
+  ///
+  /// The two fail differently and it matters. A function that was never
+  /// deployed is answered 404 by the functions host — but that 404 carries no
+  /// CORS header, so a browser withholds it and the app sees only "the request
+  /// failed", which is the same thing it sees when the network is down. Saying
+  /// "check your connection" to someone whose connection is fine is how the
+  /// Setup card's own Grant button sent its author looking at their wifi.
+  ///
+  /// So on a transport failure this asks one more question — is the host
+  /// answering at all? — and reports whichever of the two is true.
+  Future<Map<String, dynamic>> _postFunction(
+    Uri uri,
+    Map<String, dynamic> body, {
+    required String slug,
+  }) async {
+    try {
+      return await _post(uri, body);
+    } on BackendException catch (e) {
+      if (e.problem != BackendProblem.unavailable) rethrow;
+      throw await _functionFailure(e, slug);
+    }
+  }
+
+  /// Which of "not deployed" and "not reachable" the failure actually was.
+  ///
+  /// The inference is stated rather than implied: the gateway *did* answer,
+  /// the browser withheld it, and confirming the host is up is what licenses
+  /// reading the silence as a 404. If the host is also silent, nothing has
+  /// been learned and the original offline sentence stands — a diagnostic that
+  /// guesses is worse than one that says it does not know.
+  Future<BackendException> _functionFailure(
+      BackendException original, String slug) async {
+    if (!await _hostIsReachable()) return original;
+    return BackendException(
+      BackendProblem.notDeployed,
+      'The $slug function is not deployed on the server yet.',
+      detail: original.detail,
+    );
+  }
+
+  /// Whether the project answers at all, asked of an endpoint that always
+  /// exists and always sends CORS headers.
+  ///
+  /// The status is deliberately ignored: 200, 401 and 404 all prove the same
+  /// thing, which is that something is there to answer.
+  Future<bool> _hostIsReachable() async {
+    try {
+      await _http
+          .get(Uri.parse('${config.url}/rest/v1/'), headers: _headers())
+          .timeout(const Duration(seconds: 5));
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
