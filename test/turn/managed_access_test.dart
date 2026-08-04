@@ -6,6 +6,7 @@ import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/persistence/persistence_service.dart';
 import 'package:shift_ai/data/stores/api_keys_store.dart';
 import 'package:shift_ai/providers/clients/anthropic_client.dart';
+import 'package:shift_ai/providers/clients/openai_image_client.dart';
 import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/turn/backends/live_backend.dart';
 import 'package:shift_ai/turn/chat_service.dart';
@@ -32,6 +33,23 @@ class _RecordingAnthropic extends AnthropicClient {
     seen = access;
     callCount++;
     yield const MessageDelta('Answered.');
+    yield const MessageComplete();
+  }
+}
+
+/// Records every key an image generation was attempted with.
+class _RecordingImages extends OpenAiImageClient {
+  final List<String> keys = [];
+
+  @override
+  Stream<ChatEvent> generateImage({
+    required String apiKey,
+    required String prompt,
+    String baseUrl = 'https://api.openai.com/v1',
+    String model = OpenAiImageClient.defaultModel,
+    String size = '1024x1024',
+  }) async* {
+    keys.add(apiKey);
     yield const MessageComplete();
   }
 }
@@ -167,6 +185,39 @@ void main() {
     await _run(service);
 
     expect(client.callCount, 0);
+  });
+
+  test('a membership never routes an image at a key it cannot attach',
+      () async {
+    // The other half of the same mistake, and a regression I introduced when
+    // memberships first reached routing. `chooseProvider` was told a covered
+    // provider was usable for *every* route — but only the text paths pass
+    // `ManagedAccess`, and image generation reads the member's own key. So a
+    // member with no key asked for an image, Auto picked the provider their
+    // plan covered, and the image client sent an empty string: a 401 from
+    // OpenAI, reported as a bad key, for a key they never had.
+    //
+    // Before memberships existed the same turn produced the simulation. It
+    // must go back to doing that, because the proxy's allowlist is the chat
+    // endpoints and `/images/generations` is not one of them.
+    final images = _RecordingImages();
+    final service = RealChatService(
+      keys: await _keys(),
+      openAiImageClient: images,
+      managedProviders: () => const {'openai'},
+      managedAccess: (provider) async => _managed,
+    );
+
+    await service
+        .sendMessage(
+          conversation: _conversation(),
+          userInput: 'draw me a picture of a fox',
+        )
+        .toList();
+
+    expect(images.keys, isEmpty,
+        reason: 'the image client was called with a key the member does not '
+            'have — an empty string reads to the provider as a bad key');
   });
 
   test('a managed call names the proxy, not the provider', () async {

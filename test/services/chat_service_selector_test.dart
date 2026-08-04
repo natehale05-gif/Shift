@@ -63,6 +63,44 @@ void main() {
     expect(await firstChunk(), 'mock');
   });
 
+  test('a membership sends a turn live with no key on the device', () async {
+    // The regression this exists for, and it was the whole feature: the gate
+    // in front of every turn asked "has this device stored a key", so a member
+    // whose plan covered everything never reached the live service at all.
+    // The proxy was deployed, the plan was active, the vault held a key, and
+    // the Setup card's own test call went through — and every actual turn was
+    // still the simulation, because nothing above it ever tried.
+    SharedPreferences.setMockInitialValues({});
+    final keys = ApiKeysStore(persistence: PersistenceService());
+    await keys.load();
+
+    var covered = <String>{};
+    final selector = ChatServiceSelector(
+      keys: keys,
+      real: _MarkerService('real'),
+      mock: _MarkerService('mock'),
+      managedProviders: () => covered,
+    );
+
+    Future<String> firstChunk() async {
+      final events = await selector
+          .sendMessage(conversation: _conversation(), userInput: 'hi')
+          .toList();
+      return events.whereType<MessageDelta>().first.chunk;
+    }
+
+    expect(await firstChunk(), 'mock', reason: 'no key and no plan');
+
+    covered = {'anthropic'};
+    expect(await firstChunk(), 'real',
+        reason: 'a plan is the other way to pay for a turn');
+
+    // Read per message, not captured once: a plan can lapse or be spent while
+    // the app is open, and the next turn has to notice.
+    covered = {};
+    expect(await firstChunk(), 'mock');
+  });
+
   test('keys persist across store instances (same persistence)', () async {
     SharedPreferences.setMockInitialValues({});
     final persistence = PersistenceService();

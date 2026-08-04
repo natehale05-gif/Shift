@@ -74,6 +74,12 @@ class _ShiftAiAppState extends State<ShiftAiApp> {
         managedAccess: (provider) => _accountStore.managedAccess(provider),
       ),
       mock: MockChatService(loadAsset: _persistence.loadAsset),
+      // The same question the live backend asks, asked one layer earlier.
+      // Without it the selector went by stored keys alone, so a member whose
+      // plan covered everything never reached the live service at all — every
+      // turn was the simulation, under a Settings card reporting the proxy
+      // working, because the proxy *was* working and nothing called it.
+      managedProviders: () => _accountStore.spendableProviders,
     );
     _artifactPanelStore = ArtifactPanelStore();
     _memoryStore = MemoryStore(persistence: _persistence)..load();

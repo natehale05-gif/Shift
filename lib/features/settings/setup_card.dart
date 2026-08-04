@@ -133,7 +133,11 @@ class _SetupCardState extends State<SetupCard> {
             _StatusRow(
               done: covered.isNotEmpty,
               label: 'Providers covered',
-              detail: covered.isEmpty ? 'None added yet' : covered.join(', '),
+              // `covered` is the spendable set, not the vault. This row said
+              // "anthropic, openai, heygen, elevenlabs" while the proxy could
+              // forward only the first two — a green tick over two providers
+              // that would have failed. The rest are named as what they are.
+              detail: coverageDetail(covered, store.storedPlatformProviders),
             ),
             _StatusRow(
               done: _probe?.isWorking ?? false,
@@ -372,4 +376,25 @@ class _LinkRow extends StatelessWidget {
       ),
     );
   }
+}
+
+/// What the "Providers covered" row says, given what can be spent and what is
+/// merely stored.
+///
+/// Pure and separate so the wording is testable, which matters because this
+/// row is a claim about the product: a green tick beside a provider the server
+/// will not forward is the app promising something it cannot do. A stored key
+/// that is not yet spendable is not a failure — it is a fact worth stating in
+/// its own words.
+String coverageDetail(List<String> spendable, List<String> stored) {
+  final extra = stored.where((p) => !spendable.contains(p)).toList();
+  if (spendable.isEmpty) {
+    return extra.isEmpty
+        ? 'None added yet'
+        : 'None yet — ${extra.join(', ')} stored, but the server only '
+            'forwards chat providers';
+  }
+  if (extra.isEmpty) return spendable.join(', ');
+  return '${spendable.join(', ')} · ${extra.join(', ')} stored but not '
+      'spendable through the server yet';
 }

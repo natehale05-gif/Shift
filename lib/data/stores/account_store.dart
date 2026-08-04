@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../backend/shift_backend.dart';
 import '../../backend/setup_probe.dart';
 import '../../providers/clients/provider_access.dart';
+import '../../providers/clients/proxyable_providers.dart';
 import '../persistence/persistence_service.dart';
 
 /// What the sign-in form is doing right now.
@@ -58,7 +59,24 @@ class AccountStore extends ChangeNotifier {
 
   /// Providers a membership covers, by name. Empty when signed out or when
   /// SHIFT has no keys of its own loaded yet.
-  List<String> get includedProviders => List.unmodifiable(_includedProviders);
+  ///
+  /// **Filtered to what the proxy will actually forward**, which is narrower
+  /// than what the vault will hold. A HeyGen or ElevenLabs key stores and
+  /// encrypts perfectly well and can never be spent through the server, whose
+  /// allowlist is the chat endpoints — so listing it here made the Settings
+  /// card claim coverage the product did not have, and made routing offer a
+  /// provider whose credential could not be attached.
+  ///
+  /// The raw list is still what the admin card shows under "Included with
+  /// membership", because a stored key is worth seeing even before anything
+  /// can spend it.
+  List<String> get includedProviders => List.unmodifiable(
+      _includedProviders.where(proxyableProviders.contains).toList());
+
+  /// Every provider SHIFT holds a key for, spendable or not — the admin's
+  /// view of the vault rather than the member's view of their plan.
+  List<String> get storedPlatformProviders =>
+      List.unmodifiable(_includedProviders);
 
   /// Whether this account may manage SHIFT's own provider keys.
   ///
@@ -251,7 +269,7 @@ class AccountStore extends ChangeNotifier {
   /// membership stops steering the router the moment the meter says so.
   Set<String> get spendableProviders =>
       isSignedIn && _membership.canSpendManaged
-          ? _includedProviders.toSet()
+          ? includedProviders.toSet()
           : const {};
 
   /// Grants a membership. Returns the error to show, or null on success.

@@ -44,6 +44,7 @@ jobs:
         run: |
           python3 tool/scan_conditional_imports.py
           python3 tool/scan_backend_boundary.py
+          python3 tool/scan_proxy_providers.py
 
       # --no-web-resources-cdn bundles CanvasKit locally instead of loading it
       # from gstatic, so the app boots even where that CDN is blocked or slow —

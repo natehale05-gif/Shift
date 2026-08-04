@@ -54,6 +54,7 @@ import '../../providers/streaming/sse_client.dart';
 import '../../providers/clients/provider_capability.dart';
 import '../../providers/clients/provider_descriptor.dart';
 import '../../providers/clients/provider_registry.dart';
+import '../../providers/clients/proxyable_providers.dart';
 import '../../providers/router/model_router.dart';
 import '../../providers/router/provider_selection.dart';
 import '../../features/studios/studio_response_bank.dart';
@@ -238,7 +239,33 @@ class RealChatService implements ChatService {
   /// Passed to [chooseProvider] everywhere `keys.hasKey` used to be, so "Auto"
   /// sees a covered provider exactly as it sees a keyed one.
   bool _canUse(String providerId) =>
-      keys.hasKey(providerId) || _managedProviders().contains(providerId);
+      keys.hasKey(providerId) || _spendable().contains(providerId);
+
+  /// The providers a membership can actually pay for, which is narrower than
+  /// the providers a key is stored for.
+  ///
+  /// The vault will hold a HeyGen or ElevenLabs key quite happily; the proxy
+  /// will not forward to either, because its allowlist is the chat endpoints.
+  /// Filtering here rather than trusting the stored list is what stops routing
+  /// choosing a provider whose credential cannot be attached.
+  Set<String> _spendable() =>
+      _managedProviders().intersection(proxyableProviders);
+
+  /// The "can this turn reach that provider" test for a particular [route].
+  ///
+  /// Routing has to ask a per-provider question, but the honest answer depends
+  /// on the route: a membership pays for text and not for pixels. So the route
+  /// picks the predicate, at the call site that already knows it, which makes
+  /// the eleven `chooseProvider` calls correct by construction rather than by
+  /// being classified one at a time.
+  ///
+  /// Without this, a member with no key of their own asked for an image, Auto
+  /// picked the provider their *membership* covered, and the image client sent
+  /// an empty key — a 401 from OpenAI reported as a bad key, for a key they
+  /// never had. Before memberships existed that turn fell back to the
+  /// simulation, so it was a regression as well as a wrong sentence.
+  bool Function(String) _usableFor(ChatRoute route) =>
+      membershipCovers(route) ? _canUse : keys.hasKey;
 
   /// Who pays for this call.
   ///
@@ -336,7 +363,9 @@ class RealChatService implements ChatService {
       if (structuredRequest != null) {
         if (structuredRequest is ImageRequest) {
           final imageId = chooseProvider(ChatRoute.imageGen,
-              registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.imageGen),
+          onWeb: kIsWeb);
           if (imageId != null) {
             await _runImage(controller, imageId, structuredRequest.prompt);
             return;
@@ -487,7 +516,9 @@ class RealChatService implements ChatService {
       // and no indication that their key had never been touched.
       if (_wantsSpokenAudio(route, userInput)) {
         final voiceId = chooseProvider(ChatRoute.voice,
-            registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.voice),
+          onWeb: kIsWeb);
         if (voiceId != null) {
           await _runVoice(controller, userInput);
           await controller.close();
@@ -512,7 +543,9 @@ class RealChatService implements ChatService {
       // which keys were present.
       if (route == ChatRoute.video) {
         final videoId = chooseProvider(ChatRoute.video,
-            registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.video),
+          onWeb: kIsWeb);
         if (videoId != null) {
           await _runVideo(controller, userInput);
           await controller.close();
@@ -532,7 +565,10 @@ class RealChatService implements ChatService {
 
       // Auto: pick the best available provider for the route's capability.
       final providerId =
-          chooseProvider(route, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+          chooseProvider(route,
+          registry: _registry,
+          hasKey: _usableFor(route),
+          onWeb: kIsWeb);
       final provider = providerId == null ? null : _registry.byId(providerId);
 
       final pageContributors =
@@ -606,7 +642,10 @@ class RealChatService implements ChatService {
 
     // A grounded (web-search-backed) provider for the search step, if any.
     final searchId =
-        chooseProvider(ChatRoute.webSearch, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+        chooseProvider(ChatRoute.webSearch,
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.webSearch),
+          onWeb: kIsWeb);
 
     final engine = DeepResearchEngine(
       planQueries: (topic) async {
@@ -805,7 +844,10 @@ class RealChatService implements ChatService {
       // No Heygen key (or the render failed): a portrait + synthesized voice.
       // Any keyed image provider draws the portrait, not Gemini alone.
       final portraitId =
-          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+          chooseProvider(ChatRoute.imageGen,
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.imageGen),
+          onWeb: kIsWeb);
       final images = portraitId != null
           ? await _generatePhotos(
               portraitId, '$userInput, portrait headshot', 1)
@@ -830,7 +872,10 @@ class RealChatService implements ChatService {
   /// available, so callers fall back to their templates.
   Future<String> _completeText(String prompt,
       {int maxTokens = 400, bool strong = false}) async {
-    final id = chooseProvider(ChatRoute.chat, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+    final id = chooseProvider(ChatRoute.chat,
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.chat),
+          onWeb: kIsWeb);
     final provider = id == null ? null : _registry.byId(id);
     switch (provider?.clientKind) {
       case ProviderClientKind.anthropic:
@@ -951,7 +996,10 @@ class RealChatService implements ChatService {
 
     Uint8List? logo;
     final imageId =
-        chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+        chooseProvider(ChatRoute.imageGen,
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.imageGen),
+          onWeb: kIsWeb);
     if (imageId != null) {
       try {
         await for (final event in _imageStream(imageId,
@@ -1007,7 +1055,9 @@ class RealChatService implements ChatService {
     String? heroUri;
     if (kind == InteractiveKind.recipe) {
       final imageId = chooseProvider(ChatRoute.imageGen,
-          registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.imageGen),
+          onWeb: kIsWeb);
       final wantsPhoto = _mentionsPhoto(userInput) || imageId != null;
       if (wantsPhoto) {
         Uint8List? bytes;
@@ -1597,7 +1647,10 @@ class RealChatService implements ChatService {
       // Hardcoding Gemini here meant an OpenAI or Flux user got procedural
       // placeholder art inside a page they had paid a real key to build.
       final imageId =
-          chooseProvider(ChatRoute.imageGen, registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+          chooseProvider(ChatRoute.imageGen,
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.imageGen),
+          onWeb: kIsWeb);
       final images = imageId != null
           ? await _generatePhotos(imageId, userInput, count)
           : await _generateProceduralPhotos(userInput, count);
@@ -1774,7 +1827,9 @@ class RealChatService implements ChatService {
     String script,
   ) async {
     final voiceId = chooseProvider(ChatRoute.voice,
-        registry: _registry, hasKey: _canUse, onWeb: kIsWeb);
+          registry: _registry,
+          hasKey: _usableFor(ChatRoute.voice),
+          onWeb: kIsWeb);
     if (voiceId != 'elevenlabs') return (audio: base, problem: null);
     try {
       final pcm = await _elevenLabs.speak(
@@ -1899,19 +1954,42 @@ class RealChatService implements ChatService {
   }
 }
 
-/// The single seam the UI talks to: picks the live service when the user
-/// has added a key, the mock otherwise — per message, so adding or removing
-/// a key in Settings takes effect immediately with zero UI branching.
+/// The single seam the UI talks to: picks the live service when there is any
+/// way to pay for a turn, the mock otherwise — per message, so adding a key or
+/// being granted a plan takes effect immediately with zero UI branching.
+///
+/// **Two ways to pay, and for a while this only knew about one.** It asked
+/// `keys.isLive` — "has this device stored a provider key" — so a member with
+/// an active membership and no key of their own never reached the live service
+/// at all. Everything below it worked: the proxy was deployed, the plan was
+/// active, the vault held a key, and the Setup card's own test call went
+/// through and came back. Every actual turn still got the simulation, because
+/// the decision about whether to *try* was made one layer above all of it.
+///
+/// That is the whole bug in one sentence: the thing a membership buys is the
+/// right to send a turn without a key, and the gate in front of every turn
+/// asked for a key.
 class ChatServiceSelector implements ChatService {
   final ApiKeysStore keys;
   final ChatService real;
   final ChatService mock;
 
+  /// The providers a membership currently pays for. A function rather than a
+  /// value because a plan can be granted, spent, or lapse while the app is
+  /// open, and this is read per message.
+  final Set<String> Function() managedProviders;
+
   ChatServiceSelector({
     required this.keys,
     required this.real,
     required this.mock,
-  });
+    Set<String> Function()? managedProviders,
+  }) : managedProviders = managedProviders ?? _none;
+
+  static Set<String> _none() => const {};
+
+  /// Whether this turn has any way of being paid for.
+  bool get canGoLive => keys.isLive || managedProviders().isNotEmpty;
 
   @override
   Stream<ChatEvent> sendMessage({
@@ -1921,7 +1999,7 @@ class ChatServiceSelector implements ChatService {
     List<Attachment> attachments = const [],
     ChatOptions options = ChatOptions.none,
   }) {
-    final service = keys.isLive ? real : mock;
+    final service = canGoLive ? real : mock;
     return service.sendMessage(
       conversation: conversation,
       userInput: userInput,

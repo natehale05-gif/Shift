@@ -75,7 +75,10 @@ class _PlatformKeysCardState extends State<PlatformKeysCard> {
 
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
-    final included = store.includedProviders;
+    // The whole vault, not just the spendable part: this is the card that
+    // manages SHIFT's keys, and a key that is stored but not yet forwardable
+    // is exactly the thing an admin needs to see rather than have hidden.
+    final included = store.storedPlatformProviders;
 
     return Card(
       // The gap belongs to the card rather than to the screen: the screen puts
