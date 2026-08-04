@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../backend/shift_backend.dart';
 import '../../backend/setup_probe.dart';
+import '../../providers/clients/anthropic_api_config.dart';
 import '../../providers/clients/provider_access.dart';
 import '../../providers/clients/proxyable_providers.dart';
 import '../persistence/persistence_service.dart';
@@ -313,7 +314,15 @@ class AccountStore extends ChangeNotifier {
   Future<ProxyProbeResult> testProxy({String provider = 'anthropic'}) async {
     if (!isConfigured || !isSignedIn) return proxyNotSignedIn;
 
-    final answer = await backend.probeProxy(provider);
+    // The headers a real Anthropic turn sends, so the browser runs the same
+    // preflight. Without them the probe asked an easier question than the
+    // product does and answered "working" for a proxy no turn could reach.
+    final answer = await backend.probeProxy(
+      provider,
+      extraHeaders: provider == 'anthropic'
+          ? AnthropicApiConfig.headers(null)
+          : const {},
+    );
     if (answer == null) return proxyUnreachable;
 
     final result = readProxyResponse(answer.status, answer.body);

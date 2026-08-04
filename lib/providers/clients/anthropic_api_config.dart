@@ -36,12 +36,28 @@ class AnthropicApiConfig {
   /// the credential itself. The browser-direct opt-out goes with it: that
   /// header exists to say "this device is knowingly holding a key", and a
   /// managed call is precisely the arrangement where it is not.
+  /// The headers for a call to Anthropic, or — when [apiKey] is null — for a
+  /// call to SHIFT's proxy on a membership.
+  ///
+  /// **A managed call sends neither the key nor the version**, and the second
+  /// half of that is not tidiness. Every header beyond the CORS-simple set
+  /// makes the browser preflight, and the preflight has to be allowed by the
+  /// server being called. `anthropic-version` was not on that list, so the
+  /// browser blocked the request before it left the device and the app
+  /// reported "could not reach the provider" — about a provider it had never
+  /// been allowed to ask.
+  ///
+  /// Omitting it is safe rather than lucky: the proxy sets
+  /// `anthropic-version` itself when the incoming request has none, precisely
+  /// so a member's device does not have to know a provider's wire format to
+  /// spend a membership. The provider's requirements are the proxy's business.
   static Map<String, String> headers(String? apiKey) => {
         'content-type': 'application/json',
-        if (apiKey != null) 'x-api-key': apiKey,
-        'anthropic-version': apiVersion,
-        if (apiKey != null)
+        if (apiKey != null) ...{
+          'x-api-key': apiKey,
+          'anthropic-version': apiVersion,
           'anthropic-dangerous-direct-browser-access': 'true',
+        },
       };
 
   static String displayName(String model) => switch (model) {

@@ -496,6 +496,29 @@ void main() {
       backend.dispose();
     });
 
+    test('the probe sends what a real turn sends', () async {
+      // The probe reported the proxy working while every turn failed, because
+      // it sent fewer headers than the client does: no `anthropic-version`, so
+      // a different — and easier — CORS preflight. A test call that asks a
+      // smaller question than the product is not a test, it is a reassurance.
+      final recorder = _Recorder();
+      final backend = await _signedIn(recorder.client((request) async {
+        if (request.url.path.contains('/auth/')) {
+          return http.Response(_tokenBody(), 200);
+        }
+        return http.Response('{}', 200);
+      }));
+
+      await backend.probeProxy('anthropic',
+          extraHeaders: const {'anthropic-version': '2023-06-01'});
+
+      final probe = recorder.to('/v1/messages');
+      expect(probe.headers['anthropic-version'], '2023-06-01');
+      expect(probe.headers['Authorization'], isNotNull,
+          reason: 'our own headers must survive the merge');
+      backend.dispose();
+    });
+
     test('the proxy probe reports the 404 the browser withheld', () async {
       // Synthesised rather than given a seventh outcome, so there stays
       // exactly one place that turns a proxy status into a sentence.

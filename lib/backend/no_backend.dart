@@ -84,7 +84,11 @@ class NoBackend implements ShiftBackend {
       throw _unconfigured;
 
   @override
-  Future<({int status, String body})?> probeProxy(String provider) async => null;
+  Future<({int status, String body})?> probeProxy(
+    String provider, {
+    Map<String, String> extraHeaders = const {},
+  }) async =>
+      null;
 
   @override
   List<SetupLink> setupLinks() => const [];

@@ -199,6 +199,50 @@ test('a preflight is answered without auth', async () => {
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), '*');
 });
 
+test('a preflight allows the headers the provider actually needs', async () => {
+  // The bug this pins, and it was invisible from the server side: the allow
+  // list was `authorization, apikey, content-type`, which is exactly the set
+  // the Setup card's test call sends. So "Run test" passed while every real
+  // turn failed — Anthropic's client sends `anthropic-version` on every
+  // request, the preflight refused it, and the browser reports a blocked
+  // preflight as no answer at all. The app said "could not reach the
+  // provider", about a provider it was never allowed to ask.
+  const guarded = withAdapter(async () => new Response('ok'));
+  const response = await guarded(
+    new Request('https://x.test/', {
+      method: 'OPTIONS',
+      headers: {
+        'Access-Control-Request-Headers':
+          'authorization, apikey, content-type, anthropic-version',
+      },
+    }),
+    { env: ENV },
+  );
+
+  assert.equal(response.status, 204);
+  assert.match(
+    response.headers.get('Access-Control-Allow-Headers'),
+    /anthropic-version/,
+  );
+});
+
+test('a preflight that asks for nothing still gets the defaults', async () => {
+  const guarded = withAdapter(async () => new Response('ok'));
+  const response = await guarded(
+    new Request('https://x.test/', { method: 'OPTIONS' }), { env: ENV });
+
+  assert.match(response.headers.get('Access-Control-Allow-Headers'),
+    /authorization/);
+});
+
+test('a preflight is cached, so a turn is not two round trips', async () => {
+  const guarded = withAdapter(async () => new Response('ok'));
+  const response = await guarded(
+    new Request('https://x.test/', { method: 'OPTIONS' }), { env: ENV });
+
+  assert.ok(Number(response.headers.get('Access-Control-Max-Age')) > 0);
+});
+
 test('problem() shapes the body the client already knows how to read', async () => {
   const body = await problem(429, 'ceiling reached').json();
   assert.equal(body.message, 'ceiling reached');

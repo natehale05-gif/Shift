@@ -24,7 +24,10 @@ export function withAdapter(handler, options = {}) {
     const doFetch = ctx.fetch ?? globalThis.fetch;
 
     if (req.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: corsHeaders() });
+      return new Response(null, {
+        status: 204,
+        headers: corsHeaders(req.headers.get('Access-Control-Request-Headers')),
+      });
     }
 
     let userId = null;
@@ -86,11 +89,41 @@ export function json(body, status = 200) {
   });
 }
 
-export function corsHeaders() {
+/**
+ * CORS, with the preflight's own header list echoed back.
+ *
+ * **Why reflected rather than listed.** `provider-proxy` is a transparent
+ * passthrough, so the browser sends whatever the provider's API asks for —
+ * Anthropic needs `anthropic-version` on every call, and each provider has its
+ * own. A fixed list was the bug: it named `authorization, apikey,
+ * content-type`, which is exactly what the Setup card's test call sends, so the
+ * test passed while every real turn failed its preflight. The browser then
+ * reports a blocked preflight as no answer at all, so the app said "could not
+ * reach the provider" — the third time in this project that a CORS-shaped
+ * failure has been reported as a network one.
+ *
+ * A fixed list would also have to grow every time a provider adds a header,
+ * which is a maintenance edge nobody would notice until a turn broke.
+ *
+ * **This is not an authorization decision.** `Access-Control-Allow-Headers`
+ * answers "may the browser send these", not "may the caller do this" — the
+ * gateway's JWT check and the entitlement check answer that, and they run
+ * either way. With `Allow-Origin: *` browsers refuse to send cookies at all,
+ * so there is no ambient credential for a reflected header to unlock.
+ *
+ * @param {string | null} [requested] the preflight's Access-Control-Request-Headers
+ */
+export function corsHeaders(requested) {
   return {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
+    'Access-Control-Allow-Headers':
+      requested && requested.trim().length > 0
+        ? requested
+        : 'authorization, apikey, content-type',
     'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
+    // Without this the browser preflights every single turn, which is a round
+    // trip before a word of the reply can start streaming.
+    'Access-Control-Max-Age': '86400',
   };
 }
 

@@ -328,4 +328,36 @@ void main() {
       expect(events.whereType<MessageComplete>(), isEmpty);
     });
   });
+
+  group('headers', () {
+    test('a direct call carries the key, the version and the browser opt-in',
+        () {
+      final headers = AnthropicApiConfig.headers('sk-ant-test');
+
+      expect(headers['x-api-key'], 'sk-ant-test');
+      expect(headers['anthropic-version'], AnthropicApiConfig.apiVersion);
+      expect(headers['anthropic-dangerous-direct-browser-access'], 'true');
+    });
+
+    test('a managed call carries none of them', () {
+      // The bug this pins is a browser one, not a protocol one. Every header
+      // beyond the CORS-simple set makes the browser preflight, and the
+      // preflight has to be allowed by the server being called.
+      // `anthropic-version` was not on the proxy's allow list, so the request
+      // was blocked before it left the device — and a blocked preflight looks
+      // exactly like an unreachable server, which is what the app said.
+      //
+      // Safe rather than lucky: the proxy sets the version itself when the
+      // incoming request has none, so a member's device never has to know a
+      // provider's wire format to spend a membership.
+      final headers = AnthropicApiConfig.headers(null);
+
+      expect(headers.containsKey('x-api-key'), isFalse);
+      expect(headers.containsKey('anthropic-version'), isFalse,
+          reason: 'this one header cost every managed turn');
+      expect(headers.containsKey('anthropic-dangerous-direct-browser-access'),
+          isFalse);
+      expect(headers['content-type'], 'application/json');
+    });
+  });
 }

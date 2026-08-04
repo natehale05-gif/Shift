@@ -136,7 +136,10 @@ class _FakeBackend implements ShiftBackend {
   List<SetupLink> setupLinkList = const [];
 
   @override
-  Future<({int status, String body})?> probeProxy(String provider) async =>
+  Future<({int status, String body})?> probeProxy(
+    String provider, {
+    Map<String, String> extraHeaders = const {},
+  }) async =>
       probeAnswer;
 
   ({int status, String body})? probeAnswer;

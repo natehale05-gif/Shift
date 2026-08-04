@@ -375,7 +375,21 @@ abstract class ShiftBackend {
   /// deployed, a 402 means it is running and refusing, and from inside a chat
   /// those look identical. Returns null when there is nothing to ask — no
   /// backend, or signed out.
-  Future<({int status, String body})?> probeProxy(String provider);
+  ///
+  /// [extraHeaders] is what makes this a test rather than a reassurance. A
+  /// probe that sends fewer headers than a real turn triggers a *different*
+  /// CORS preflight, and that is not hypothetical: this reported the proxy
+  /// working while every turn failed, because Anthropic's client sends
+  /// `anthropic-version` and the probe did not. The caller passes the headers
+  /// the real client would, so the browser asks the same question.
+  ///
+  /// It arrives as a parameter rather than being built here because naming a
+  /// provider's wire format is the provider layer's job, and `lib/backend/`
+  /// does not import the app.
+  Future<({int status, String body})?> probeProxy(
+    String provider, {
+    Map<String, String> extraHeaders,
+  });
 
   /// The host settings that cannot be changed from here. Empty when there is
   /// no host, or nothing left to do.

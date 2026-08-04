@@ -370,7 +370,10 @@ class SupabaseBackend implements ShiftBackend {
   }
 
   @override
-  Future<({int status, String body})?> probeProxy(String provider) async {
+  Future<({int status, String body})?> probeProxy(
+    String provider, {
+    Map<String, String> extraHeaders = const {},
+  }) async {
     if (_session == null) return null;
 
     // The smallest real request the provider will accept. It has to be real —
@@ -389,7 +392,10 @@ class SupabaseBackend implements ShiftBackend {
       final response = await _http.post(
         Uri.parse('${config.url}/functions/v1/provider-proxy/$provider'
             '/v1/messages'),
-        headers: _headers(token: token),
+        // The real client's headers too, not just ours. A probe that sends
+        // fewer headers triggers a different CORS preflight, and that is how
+        // this card reported the proxy working while every turn failed.
+        headers: {..._headers(token: token), ...extraHeaders},
         body: jsonEncode(body),
       );
       return (status: response.statusCode, body: response.body);
