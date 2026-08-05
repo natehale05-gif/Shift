@@ -108,6 +108,27 @@ const String codeArtifactInstruction =
     'snippets, no splitting a file across several blocks. Keep any '
     'explanation outside the block, and keep it short.';
 
+/// Why a generated page must not link out for its pictures.
+///
+/// Models reach for `https://images.example/hero.jpg` when a page wants a
+/// photograph, and the URL is invented — so the layout reserves the space, the
+/// request 404s, and the result is a page that appears to be showing a
+/// photograph which has failed to arrive. The user's words for it were that it
+/// "acts like" there is an image. That is worse than no image, because it
+/// reads as broken rather than as designed.
+///
+/// The preview labels an image that does not load, but that is a net after the
+/// fall. This stops the reach.
+///
+/// Deliberately *not* a ban on images as such: the placeholder mechanism in
+/// [existingImageInstruction] still works, and is how a real generated picture
+/// gets onto a page.
+const String noRemoteImagesInstruction =
+    'Do not reference images by URL — external image addresses do not resolve '
+    'here, and a broken <img> looks like a fault rather than a design. Use '
+    'inline SVG, CSS gradients, or coloured blocks with a caption for any '
+    'imagery the page needs. They render immediately and are part of the file.';
+
 /// The audio counterpart. Without it the model reaches for the browser's
 /// speech-synthesis API and writes a page that reads the script aloud in a
 /// robot voice — instead of the recording the user just generated.
@@ -150,6 +171,11 @@ String? systemPromptForCodeTurn(
     if (systemPrompt != null && systemPrompt.trim().isNotEmpty)
       systemPrompt.trim(),
     codeArtifactInstruction,
+    // Not when the page is being given a real generated image: that arrives
+    // through a placeholder the app substitutes, and telling the model to
+    // avoid image references in the same breath is a contradiction it will
+    // resolve by leaving the picture out.
+    if (!hasGeneratedImage) noRemoteImagesInstruction,
     if (hasGeneratedImage) existingImageInstruction,
     if (hasGeneratedAudio) existingAudioInstruction,
   ];

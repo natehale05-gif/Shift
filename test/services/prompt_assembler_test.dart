@@ -106,8 +106,31 @@ void main() {
     test('still instructs when there is no personalization', () {
       // A turn with no nickname/project/style has an empty prompt, and the
       // instruction matters most there.
-      expect(systemPromptForCodeTurn(null, isCode: true), codeArtifactInstruction);
-      expect(systemPromptForCodeTurn('   ', isCode: true), codeArtifactInstruction);
+      for (final empty in [null, '   ']) {
+        final out = systemPromptForCodeTurn(empty, isCode: true)!;
+        expect(out, contains(codeArtifactInstruction));
+        expect(out, startsWith(codeArtifactInstruction),
+            reason: 'nothing should precede it when there is no prompt');
+      }
+    });
+
+    test('tells the model not to link out for its pictures', () {
+      // A page whose `<img>` points at an invented URL reserves the space and
+      // shows nothing, which reads as broken rather than as designed. The
+      // preview labels one that fails; this stops it being written.
+      expect(systemPromptForCodeTurn(null, isCode: true),
+          contains(noRemoteImagesInstruction));
+    });
+
+    test('...unless the page is being given a real one', () {
+      // The generated image arrives through a placeholder the app
+      // substitutes. Saying "do not reference images" in the same breath is a
+      // contradiction, and the model resolves it by leaving the picture out.
+      final out = systemPromptForCodeTurn(null,
+          isCode: true, hasGeneratedImage: true)!;
+
+      expect(out, contains(existingImageInstruction));
+      expect(out, isNot(contains(noRemoteImagesInstruction)));
     });
   });
 }
