@@ -37,19 +37,19 @@ class _RecordingAnthropic extends AnthropicClient {
   }
 }
 
-/// Records every key an image generation was attempted with.
+/// Records how each image generation was authorised.
 class _RecordingImages extends OpenAiImageClient {
-  final List<String> keys = [];
+  final List<ProviderAccess> seen = [];
 
   @override
   Stream<ChatEvent> generateImage({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
     String baseUrl = 'https://api.openai.com/v1',
     String model = OpenAiImageClient.defaultModel,
     String size = '1024x1024',
   }) async* {
-    keys.add(apiKey);
+    seen.add(access);
     yield const MessageComplete();
   }
 }
@@ -187,19 +187,14 @@ void main() {
     expect(client.callCount, 0);
   });
 
-  test('a membership never routes an image at a key it cannot attach',
-      () async {
-    // The other half of the same mistake, and a regression I introduced when
-    // memberships first reached routing. `chooseProvider` was told a covered
-    // provider was usable for *every* route — but only the text paths pass
-    // `ManagedAccess`, and image generation reads the member's own key. So a
-    // member with no key asked for an image, Auto picked the provider their
-    // plan covered, and the image client sent an empty string: a 401 from
-    // OpenAI, reported as a bad key, for a key they never had.
+  test('a membership pays for pictures too', () async {
+    // For a while it did not, and the gap read as the product being broken
+    // rather than as a boundary: a member watched a real page get written and
+    // then a procedural gradient appear where a photograph should be.
     //
-    // Before memberships existed the same turn produced the simulation. It
-    // must go back to doing that, because the proxy's allowlist is the chat
-    // endpoints and `/images/generations` is not one of them.
+    // The route now resolves access exactly as a text turn does, so the image
+    // client is handed the proxy rather than an empty string — which is what
+    // it used to get, and what OpenAI answered 401 to.
     final images = _RecordingImages();
     final service = RealChatService(
       keys: await _keys(),
@@ -215,9 +210,25 @@ void main() {
         )
         .toList();
 
-    expect(images.keys, isEmpty,
-        reason: 'the image client was called with a key the member does not '
-            'have — an empty string reads to the provider as a bad key');
+    expect(images.seen, hasLength(1), reason: 'the turn fell back to the mock');
+    expect(images.seen.single, isA<ManagedAccess>());
+  });
+
+  test('an image with no plan and no key is still simulated', () async {
+    // The fallback that has always been there, and must stay: nothing to spend
+    // means the procedural placeholder, not a call with an empty credential.
+    final images = _RecordingImages();
+    final service = RealChatService(keys: await _keys(), openAiImageClient: images);
+
+    final events = await service
+        .sendMessage(
+          conversation: _conversation(),
+          userInput: 'draw me a picture of a fox',
+        )
+        .toList();
+
+    expect(images.seen, isEmpty);
+    expect(events.whereType<MessageComplete>(), isNotEmpty);
   });
 
   test('a managed call names the proxy, not the provider', () async {

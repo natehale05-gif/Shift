@@ -237,7 +237,7 @@ node --test supabase/functions/tests/*.test.js
 | Function | What it does |
 |---|---|
 | `provider-key` | the encrypting front door to the vault — the only way a secret gets in, for a member's own key or, with `scope: "platform"` and an admin, for SHIFT's |
-| `provider-proxy` | spends SHIFT's keys for a member — the only reader of the vault |
+| `provider-proxy` | spends SHIFT's keys for a member — the only reader of the vault. Text **and images**; video, music and voice need hosts it does not know |
 | `admin-membership` | grants a plan, until payments can sell one |
 | `stripe-webhook` | the only writer of `subscriptions` — entitlement comes from Stripe or from nowhere |
 
@@ -265,12 +265,26 @@ Four things must hold at once, and each is a way to lose money or leak a key:
 | the caller is entitled and under budget | `shift.within_ceiling`, the same function `rls_test.sql` asserts |
 | the destination is one **we** chose | `_shared/upstream.js` — fixed hosts, path allowlist |
 | the call is metered even when the provider reports nothing | `_shared/usage_meter.js` + `UNREPORTED_CALL_MICROS` |
+| an image is priced as an image | `isImageCall` + `IMAGE_CALL_MICROS` |
 
 Three of those are ordinary care. The fourth is the one that is easy to get
 backwards: a response shape the meter does not recognise must still cost
 something, or "return something unparseable" becomes a way to spend SHIFT's
 keys for free. For the same reason an unknown model is priced at the *most
 expensive* rate in the table rather than at zero.
+
+**Images are priced per picture, and that is not a rounding decision.** An
+image reply carries no token counts at all, so the meter sees nothing and the
+flat unreported-call charge applies — about a tenth of what a picture costs. A
+ceiling that under-counts by 10x does not bound anything. `IMAGE_CALL_MICROS`
+is set above the top of the provider's range rather than in the middle, for the
+same reason an unknown model is charged the most expensive rate:
+over-charging surfaces as spend against a ceiling somebody can raise, and
+under-charging surfaces on the provider's invoice.
+
+Gemini is the awkward case and is matched on the *model*, not the path — it
+generates pictures through the same `generateContent` a chat turn uses, and
+reports tokens for them, so the image check runs before the token check.
 
 **The ceiling is a stop-line, not a hard cap.** Nobody knows what a call costs
 until the reply ends, so entitlement is checked before dispatch and cost

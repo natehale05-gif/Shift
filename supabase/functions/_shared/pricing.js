@@ -69,3 +69,19 @@ export function rateFor(model) {
  * medium reply on the fallback rate.
  */
 export const UNREPORTED_CALL_MICROS = 20_000;
+
+/**
+ * What one generated image costs, in millionths of a dollar.
+ *
+ * $0.20, which is above the top of OpenAI's current per-image range rather
+ * than in the middle of it — the same principle as pricing an unknown model at
+ * the most expensive rate. An image reports no tokens at all, so there is
+ * nothing to measure after the fact; the choice is between a number set high
+ * enough that the ceiling still means something and one that lets a member
+ * spend ten times their plan on pictures.
+ *
+ * Over-charging is visible and correctable — it shows up as spend against a
+ * ceiling somebody can raise. Under-charging is invisible until the provider
+ * bill arrives.
+ */
+export const IMAGE_CALL_MICROS = 200_000;

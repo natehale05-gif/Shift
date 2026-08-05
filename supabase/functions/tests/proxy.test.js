@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { costMicros, rateFor, UNREPORTED_CALL_MICROS } from '../_shared/pricing.js';
 import {
+  costMicros,
+  IMAGE_CALL_MICROS,
+  rateFor,
+  UNREPORTED_CALL_MICROS,
+} from '../_shared/pricing.js';
+import {
+  isImageCall,
   parseProxyPath,
   proxyableProviders,
   upstreamHeaders,
@@ -122,6 +128,41 @@ test('a body with no code execution asks for no beta', async () => {
 
   const call = world.calls.find((c) => c.url.includes('api.anthropic.com'));
   assert.equal(call.headers.get('anthropic-beta'), null);
+});
+
+test('a membership reaches the image endpoint', () => {
+  // The newest allowlist entry, and the reason it is one: without it a
+  // membership bought words and not pictures, and a member watched a real page
+  // get written and then a procedural gradient appear where a photograph
+  // should be.
+  assert.ok(upstreamUrl('openai', '/v1/images/generations'));
+  // Our own account administration lives on the same host and stays shut.
+  assert.equal(upstreamUrl('openai', '/v1/organization/invites'), null);
+});
+
+test('an image is recognised as one, so it can be priced as one', () => {
+  assert.equal(isImageCall('openai', '/v1/images/generations'), true);
+  assert.equal(isImageCall('openai', '/v1/chat/completions'), false);
+  // Gemini generates pictures through the same endpoint as a chat turn, so
+  // the model is the only thing that distinguishes them.
+  assert.equal(
+    isImageCall('gemini', '/v1beta/models/gemini-2.5-flash-image:generateContent'),
+    true,
+  );
+  assert.equal(
+    isImageCall('gemini', '/v1beta/models/gemini-2.5-flash:streamGenerateContent'),
+    false,
+  );
+  assert.equal(isImageCall('anthropic', '/v1/messages'), false);
+});
+
+test('an image costs more than a call that simply reported nothing', () => {
+  // The whole reason images are priced separately. An image reply carries no
+  // token counts, so left to the unreported-call charge it would bill about a
+  // tenth of what one costs — and a ceiling that under-counts by 10x does not
+  // bound anything. Over-charging shows up as spend somebody can see; under-
+  // charging shows up on the provider's invoice.
+  assert.ok(IMAGE_CALL_MICROS > UNREPORTED_CALL_MICROS * 5);
 });
 
 test('an unknown model is charged the most expensive rate, not nothing', () => {
@@ -446,6 +487,45 @@ test('a streamed OpenAI call is asked to report its usage', async () => {
   const upstream = world.calls.find((c) => c.url.includes('api.openai.com'));
   assert.deepEqual(JSON.parse(upstream.init.body).stream_options,
       { include_usage: true });
+});
+
+test('an image is billed per picture, not as an unreported call', async () => {
+  // The metering half of covering images, and the half that protects the
+  // ceiling. The reply carries no tokens, so without this it books the flat
+  // unreported charge — roughly a tenth of what a picture costs.
+  const world = await fakeWorld({ providerBody: '{"data":[{"b64_json":"x"}]}' });
+  const response = await proxy(
+    proxyRequest('/openai/v1/images/generations', '{"prompt":"a fox"}'),
+    { env: ENV, fetch: world.fetch },
+  );
+
+  // The meter fires when the body finishes, and the insert is deliberately not
+  // awaited by the handler, so drain the reply and give the floating promise a
+  // turn.
+  await response.text();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const usage = world.calls.find((c) => c.url.includes('/usage_events'));
+  assert.ok(usage, 'the call was never metered');
+  assert.equal(JSON.parse(usage.init.body).cost_micros, IMAGE_CALL_MICROS);
+});
+
+test('a chat call is still metered on its tokens', async () => {
+  // The regression guard: pricing images per picture must not price
+  // conversations that way.
+  const world = await fakeWorld({
+    providerBody: 'data: {"model":"claude-haiku-4-5","usage":' +
+        '{"input_tokens":1000,"output_tokens":2000}}\n',
+  });
+  const response = await proxy(proxyRequest('/anthropic/v1/messages'),
+      { env: ENV, fetch: world.fetch });
+  await response.text();
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  const usage = world.calls.find((c) => c.url.includes('/usage_events'));
+  const cost = JSON.parse(usage.init.body).cost_micros;
+  assert.notEqual(cost, IMAGE_CALL_MICROS);
+  assert.equal(cost, 11_000);
 });
 
 test('a provider SHIFT holds no key for says so, rather than failing oddly',

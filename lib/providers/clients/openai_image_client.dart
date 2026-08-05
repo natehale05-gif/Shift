@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../../turn/chat_service.dart';
+import 'provider_access.dart';
 import '../streaming/http_client_stub.dart'
     if (dart.library.html) '../streaming/http_client_web.dart';
 import '../streaming/sse_client.dart';
@@ -60,20 +61,36 @@ class OpenAiImageClient {
   /// Generates one image and maps it onto the same
   /// [ImageGenerated] → ImageBlock path Gemini and Flux use.
   Stream<ChatEvent> generateImage({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
     String baseUrl = 'https://api.openai.com/v1',
     String model = defaultModel,
     String size = '1024x1024',
   }) async* {
+    // The same two shapes every other client takes: the member's own key
+    // straight to OpenAI, or SHIFT's key attached at the proxy. Images were
+    // the last path still assuming the first, which is why a membership
+    // covered words and not pictures.
+    final (uri, headers) = switch (access) {
+      DirectKey(:final key) => (
+          endpoint(baseUrl),
+          {
+            'content-type': 'application/json',
+            'Authorization': 'Bearer $key',
+          },
+        ),
+      ManagedAccess(:final base, headers: final auth) => (
+          ManagedAccess(base: base, headers: const {})
+              .resolve('/v1/images/generations'),
+          {'content-type': 'application/json', ...auth},
+        ),
+    };
+
     final client = _clientFactory();
     try {
       final response = await client.post(
-        endpoint(baseUrl),
-        headers: {
-          'content-type': 'application/json',
-          'authorization': 'Bearer $apiKey',
-        },
+        uri,
+        headers: headers,
         body: jsonEncode(
             buildRequestBody(prompt: prompt, model: model, size: size)),
       );

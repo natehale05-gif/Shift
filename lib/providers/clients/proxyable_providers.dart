@@ -30,18 +30,24 @@ const Set<String> proxyableProviders = {
 
 /// Whether a membership can pay for this kind of turn.
 ///
-/// **Text only, and that is not an oversight.** The proxy's allowlist is
-/// `/v1/messages`, `/v1/chat/completions`, `/v1/responses` and Gemini's
-/// `generateContent` — the chat endpoints. Image generation, video, music and
-/// voice all live at other paths on the same hosts, and the proxy refuses them
-/// by design: an allowlist that grew to cover every endpoint a provider offers
-/// would not be an allowlist.
+/// **Text and pictures, not video or sound**, and the line is the proxy's
+/// allowlist rather than a preference: `/v1/messages`,
+/// `/v1/chat/completions`, `/v1/responses`, `/v1/images/generations`, and
+/// Gemini's `generateContent`. Each entry is a deliberate addition. An
+/// allowlist that grew to cover every endpoint a provider offers would not be
+/// an allowlist — our own account administration lives on those same hosts.
 ///
-/// So a member with a plan and no key of their own gets real answers, real
-/// pages and real code, and still falls back to the simulation for media. That
-/// is a real limit and the app says so rather than routing a media turn at a
-/// credential it cannot attach — which produced a 401 blaming the member's key
-/// for a key they never had.
+/// Images were the last thing a membership did not buy, and their absence read
+/// as the product being broken rather than as a boundary: a member watched a
+/// real page get written and then a procedural gradient appear where a
+/// photograph should be. They are priced per picture on the server, because an
+/// image reply reports no tokens and the flat fallback charge would bill about
+/// a tenth of what one costs.
+///
+/// Video, music, voice and avatars stay out, and not only for want of an
+/// allowlist entry: HeyGen, ElevenLabs, Flux, Replicate and fal are not in the
+/// proxy's host table at all, so there is nothing to forward to. Those remain
+/// the member's own key.
 bool membershipCovers(ChatRoute route) => switch (route) {
       ChatRoute.chat ||
       ChatRoute.code ||
@@ -51,10 +57,10 @@ bool membershipCovers(ChatRoute route) => switch (route) {
       ChatRoute.translate ||
       ChatRoute.deck ||
       ChatRoute.shortReels ||
-      ChatRoute.brandPack =>
+      ChatRoute.brandPack ||
+      ChatRoute.imageGen =>
         true,
-      // Every one of these needs an endpoint the proxy does not forward.
-      ChatRoute.imageGen ||
+      // Every one of these needs a host the proxy does not know.
       ChatRoute.video ||
       ChatRoute.audio ||
       ChatRoute.voice ||

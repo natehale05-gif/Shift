@@ -67,7 +67,7 @@ class _CountingGeminiClient extends GeminiClient {
 
   @override
   Stream<ChatEvent> generateImage({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
   }) async* {
     callCount++;

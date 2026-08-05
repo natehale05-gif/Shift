@@ -19,14 +19,21 @@ void main() {
       }
     });
 
-    test('does not cover the media routes', () {
-      // The regression this pins. Image generation, video, music and voice
-      // live at endpoints the proxy refuses by design, so treating a
-      // membership as usable for them made routing pick a provider whose
-      // credential could not be attached — and the provider answered 401,
-      // which the app reported as a bad key, for a key the member never had.
+    test('covers images, which is the newest entry', () {
+      // Added deliberately, with a per-picture price on the server: an image
+      // reply reports no tokens, so the flat unreported-call charge would bill
+      // about a tenth of what one costs, and a ceiling that under-counts by
+      // 10x does not bound anything.
+      expect(membershipCovers(ChatRoute.imageGen), isTrue);
+    });
+
+    test('does not cover video, music or voice', () {
+      // Not a preference — HeyGen, ElevenLabs, Flux, Replicate and fal are not
+      // in the proxy's host table at all, so there is nothing to forward to.
+      // Routing must not offer a provider whose credential cannot be attached:
+      // that produced a 401 the app reported as a bad key, for a key the
+      // member never had.
       for (final route in [
-        ChatRoute.imageGen,
         ChatRoute.video,
         ChatRoute.audio,
         ChatRoute.voice,

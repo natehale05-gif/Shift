@@ -252,11 +252,27 @@ class GeminiClient implements KeyValidatable {
 
   /// Generates an image (plus any accompanying text) in one call.
   Stream<ChatEvent> generateImage({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
   }) async* {
+    // Direct: the key rides in the URL, which is Gemini's own scheme. Managed:
+    // the proxy attaches `x-goog-api-key` and the URL carries no key at all,
+    // which is also why it never appears in a log between here and Google.
+    final (uri, headers) = switch (access) {
+      DirectKey(:final key) => (
+          GeminiApiConfig.generateEndpoint(GeminiApiConfig.imageModel, key),
+          const <String, String>{},
+        ),
+      ManagedAccess(:final base, headers: final auth) => (
+          ManagedAccess(base: base, headers: const {}).resolve(
+            '/v1beta/models/${GeminiApiConfig.imageModel}:generateContent',
+          ),
+          auth,
+        ),
+    };
+
     final response = await _postJson(
-      GeminiApiConfig.generateEndpoint(GeminiApiConfig.imageModel, apiKey),
+      uri,
       buildRequestBody(
         conversation: Conversation(
           id: '_',
@@ -267,6 +283,7 @@ class GeminiClient implements KeyValidatable {
         userInput: prompt,
         imageOutput: true,
       ),
+      extraHeaders: headers,
     );
     final (events, _, usage) =
         mapChunk(response, model: GeminiApiConfig.imageModel);
@@ -285,12 +302,15 @@ class GeminiClient implements KeyValidatable {
   }
 
   Future<Map<String, dynamic>> _postJson(
-      Uri uri, Map<String, dynamic> body) async {
+    Uri uri,
+    Map<String, dynamic> body, {
+    Map<String, String> extraHeaders = const {},
+  }) async {
     final client = _clientFactory();
     try {
       final response = await client.post(
         uri,
-        headers: const {'content-type': 'application/json'},
+        headers: {'content-type': 'application/json', ...extraHeaders},
         body: jsonEncode(body),
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {

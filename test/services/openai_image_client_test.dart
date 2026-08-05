@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shift_ai/providers/clients/openai_image_client.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/turn/chat_service.dart';
 
 void main() {
@@ -30,7 +31,7 @@ void main() {
     });
 
     final events = await client(() => mock)
-        .generateImage(apiKey: 'sk-test', prompt: 'a pink flower')
+        .generateImage(access: const DirectKey('sk-test'), prompt: 'a pink flower')
         .toList();
 
     expect(sentBody['model'], OpenAiImageClient.defaultModel);
@@ -60,7 +61,7 @@ void main() {
     });
 
     final events = await client(() => mock)
-        .generateImage(apiKey: 'sk-test', prompt: 'a pink flower')
+        .generateImage(access: const DirectKey('sk-test'), prompt: 'a pink flower')
         .toList();
 
     expect(events.whereType<ImageGenerated>().single.pngBytes, png);
@@ -71,7 +72,7 @@ void main() {
         (_) async => http.Response(jsonEncode({'data': []}), 200));
 
     final events = await client(() => mock)
-        .generateImage(apiKey: 'sk-test', prompt: 'x')
+        .generateImage(access: const DirectKey('sk-test'), prompt: 'x')
         .toList();
 
     expect(events.whereType<ImageGenerated>(), isEmpty);
@@ -83,7 +84,7 @@ void main() {
     final mock = MockClient((_) async => http.Response('{"error":"denied"}', 403));
 
     final events = await client(() => mock)
-        .generateImage(apiKey: 'sk-test', prompt: 'x')
+        .generateImage(access: const DirectKey('sk-test'), prompt: 'x')
         .toList();
 
     final error = events.whereType<MessageError>().single;
@@ -95,7 +96,7 @@ void main() {
     final mock = MockClient((_) async => http.Response('{}', 429));
 
     final events = await client(() => mock)
-        .generateImage(apiKey: 'sk-test', prompt: 'x')
+        .generateImage(access: const DirectKey('sk-test'), prompt: 'x')
         .toList();
 
     expect(events.whereType<MessageError>().single.message,

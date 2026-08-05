@@ -1263,20 +1263,33 @@ class RealChatService implements ChatService {
   /// The image stream for the chosen image provider. All three map onto the
   /// same ImageGenerated → ImageBlock path, which is why adding one is a case
   /// here and nothing else.
-  Stream<ChatEvent> _imageStream(String providerId, String prompt) {
-    return switch (providerId) {
-      'flux' => _flux.generateImage(apiKey: keys.keyFor('flux'), prompt: prompt),
-      'replicate' => _replicate.generateImage(
-          apiKey: keys.keyFor('replicate'), prompt: prompt),
-      'fal' => _fal.generateImage(apiKey: keys.keyFor('fal'), prompt: prompt),
-      'openai' => _openAiImages.generateImage(
-          apiKey: keys.keyFor('openai'),
-          prompt: prompt,
-          baseUrl: _registry.byId('openai')?.baseUrl ??
-              'https://api.openai.com/v1',
-        ),
-      _ => _gemini.generateImage(apiKey: keys.geminiKey, prompt: prompt),
-    };
+  Stream<ChatEvent> _imageStream(String providerId, String prompt) async* {
+    // Flux, Replicate and fal are the member's own keys only: they are not in
+    // the proxy's table at all, so there is no managed route to offer and
+    // `_spendable()` never selects them for a membership.
+    if (providerId == 'flux' || providerId == 'replicate' || providerId == 'fal') {
+      yield* switch (providerId) {
+        'flux' => _flux.generateImage(apiKey: keys.keyFor('flux'), prompt: prompt),
+        'replicate' => _replicate.generateImage(
+            apiKey: keys.keyFor('replicate'), prompt: prompt),
+        _ => _fal.generateImage(apiKey: keys.keyFor('fal'), prompt: prompt),
+      };
+      return;
+    }
+
+    // OpenAI and Gemini go through the same access resolution as every text
+    // call, which is what makes a membership cover pictures.
+    final access = await _accessFor(providerId) ??
+        DirectKey(providerId == 'gemini' ? keys.geminiKey : keys.keyFor(providerId));
+
+    yield* providerId == 'openai'
+        ? _openAiImages.generateImage(
+            access: access,
+            prompt: prompt,
+            baseUrl: _registry.byId('openai')?.baseUrl ??
+                'https://api.openai.com/v1',
+          )
+        : _gemini.generateImage(access: access, prompt: prompt);
   }
 
   /// Freeform image prompts get the same "ask before guessing" gate as the

@@ -6,6 +6,7 @@ import 'package:shift_ai/data/models/artifact.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/turn/chat_service.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/data/persistence/persistence_service.dart';
 import 'package:shift_ai/providers/clients/gemini_client.dart';
 import 'package:shift_ai/turn/backends/live_backend.dart';
@@ -30,7 +31,7 @@ class _RecordingGeminiClient extends GeminiClient {
 
   @override
   Stream<ChatEvent> generateImage({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
   }) async* {
     lastImagePrompt = prompt;

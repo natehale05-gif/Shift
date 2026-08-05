@@ -31,7 +31,11 @@ const UPSTREAMS = {
   },
   openai: {
     host: 'https://api.openai.com',
-    allow: ['/v1/chat/completions', '/v1/responses'],
+    // `/v1/images/generations` is here so a membership covers pictures, not
+    // only words. It is priced separately — see `IMAGE_CALL_MICROS` — because
+    // an image reports no tokens, and the flat unreported-call charge would
+    // bill about a tenth of what one costs.
+    allow: ['/v1/chat/completions', '/v1/responses', '/v1/images/generations'],
     authorize: bearer,
   },
   gemini: {
@@ -165,3 +169,23 @@ const STRIPPED = new Set([
   'origin',
   'referer',
 ]);
+
+/**
+ * Whether a path generates a picture rather than text.
+ *
+ * The distinction is a billing one, and it has to be made from the request
+ * because the *reply* does not say: an image response carries no token counts,
+ * so the meter sees nothing and the flat unreported-call charge applies —
+ * about a tenth of what an image actually costs. A ceiling that under-counts
+ * by 10x is not a ceiling.
+ *
+ * Gemini is the awkward case and is deliberately matched on the model rather
+ * than the path: it generates images through the same `:generateContent` a
+ * chat turn uses, and the only thing distinguishing them is which model was
+ * asked.
+ */
+export function isImageCall(provider, path) {
+  if (provider === 'openai') return path.startsWith('/v1/images/generations');
+  if (provider === 'gemini') return path.includes('image');
+  return false;
+}

@@ -27,8 +27,13 @@ import {
   serviceRequest,
   withAdapter,
 } from '../_shared/handler.js';
-import { costMicros, UNREPORTED_CALL_MICROS } from '../_shared/pricing.js';
 import {
+  costMicros,
+  IMAGE_CALL_MICROS,
+  UNREPORTED_CALL_MICROS,
+} from '../_shared/pricing.js';
+import {
+  isImageCall,
   parseProxyPath,
   upstreamFor,
   upstreamHeaders,
@@ -106,11 +111,12 @@ export const handle = withAdapter(async (req, ctx) => {
   });
 
   const meter = new UsageMeter();
+  const image = isImageCall(provider, path);
   const streamed = meteredBody(upstream.body, meter, (finished) => {
     // Floating on purpose: the member's reply must not wait on our
     // bookkeeping. A failure here is logged and swallowed for the same reason
     // — a metering error is not a reason to break a conversation.
-    record(ctx, provider, finished).catch((error) => {
+    record(ctx, provider, finished, image).catch((error) => {
       console.error('usage not recorded', error);
     });
   });
@@ -250,14 +256,24 @@ const CODE_EXECUTION_BETA = 'code-execution-2025-08-25';
  * Zero would make "return a shape the meter does not understand" into a way to
  * spend SHIFT's keys for free.
  */
-async function record(ctx, provider, meter) {
-  const cost = meter.sawUsage
-    ? costMicros({
-        model: meter.model,
-        inputTokens: meter.inputTokens,
-        outputTokens: meter.outputTokens,
-      })
-    : UNREPORTED_CALL_MICROS;
+async function record(ctx, provider, meter, image = false) {
+  // An image is priced per picture, and it has to be: the reply carries no
+  // token counts for the meter to read. Left to the unreported-call charge it
+  // would bill about a tenth of what one costs, and a ceiling that under-counts
+  // by 10x does not bound anything.
+  //
+  // Checked before `sawUsage` deliberately. Gemini generates images through the
+  // same endpoint as a chat turn and *does* report tokens for them, which would
+  // otherwise price a picture as a short conversation.
+  const cost = image
+    ? IMAGE_CALL_MICROS
+    : meter.sawUsage
+        ? costMicros({
+            model: meter.model,
+            inputTokens: meter.inputTokens,
+            outputTokens: meter.outputTokens,
+          })
+        : UNREPORTED_CALL_MICROS;
 
   await serviceRequest(ctx, '/usage_events', {
     method: 'POST',
