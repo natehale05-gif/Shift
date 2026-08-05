@@ -8,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/theme/app_typography.dart';
 import '../../data/stores/conversation_store.dart';
 import '../voice/voice_mode_controller.dart';
+import '../../data/stores/account_store.dart';
 import '../../data/stores/api_keys_store.dart';
 
 /// Opens hands-free voice mode: you talk, it answers out loud, and it starts
@@ -16,20 +17,31 @@ import '../../data/stores/api_keys_store.dart';
 Future<void> showVoiceModeOverlay(BuildContext context) {
   final conversations = context.read<ConversationStore>();
   final keys = context.read<ApiKeysStore>();
+  // Read here rather than inside the dialog: `showDialog` builds under a
+  // different element, and the account is not in that tree.
+  final account = context.read<AccountStore>();
   return showDialog(
     context: context,
     barrierDismissible: false,
     barrierColor: Colors.black.withValues(alpha: 0.92),
-    builder: (_) =>
-        _VoiceModeOverlay(conversations: conversations, keys: keys),
+    builder: (_) => _VoiceModeOverlay(
+      conversations: conversations,
+      keys: keys,
+      account: account,
+    ),
   );
 }
 
 class _VoiceModeOverlay extends StatefulWidget {
   final ConversationStore conversations;
   final ApiKeysStore keys;
+  final AccountStore account;
 
-  const _VoiceModeOverlay({required this.conversations, required this.keys});
+  const _VoiceModeOverlay({
+    required this.conversations,
+    required this.keys,
+    required this.account,
+  });
 
   @override
   State<_VoiceModeOverlay> createState() => _VoiceModeOverlayState();
@@ -41,6 +53,10 @@ class _VoiceModeOverlayState extends State<_VoiceModeOverlay>
       VoiceModeController(
         conversations: widget.conversations,
         keys: widget.keys,
+        // Voice mode speaks through the same proxy a voiceover inside a turn
+        // does, so a plan pays for it and the call is metered.
+        managedProviders: () => widget.account.spendableProviders,
+        managedAccess: widget.account.managedAccess,
       );
   late final AnimationController _pulse = AnimationController(
     vsync: this,

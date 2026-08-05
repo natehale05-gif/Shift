@@ -49,11 +49,27 @@ class VoiceModeController extends ChangeNotifier {
   final ApiKeysStore? keys;
   final ElevenLabsClient _elevenLabs;
 
+  /// The providers a membership currently pays for, and how to pay with it.
+  ///
+  /// The same two closures the turn pipeline takes, for the same reason: this
+  /// is a real ElevenLabs call over ordinary HTTP, so the proxy forwards and
+  /// meters it exactly as it does a voiceover inside a turn. It was left out
+  /// of the membership on the grounds that it "runs outside the turn pipeline
+  /// and has no meter on it" — which was wrong. The meter is in the proxy, not
+  /// in the pipeline, and every call the proxy forwards is counted.
+  final Set<String> Function() managedProviders;
+  final Future<ProviderAccess?> Function(String provider)? managedAccess;
+
   VoiceModeController({
     required this.conversations,
     this.keys,
     ElevenLabsClient? elevenLabsClient,
-  }) : _elevenLabs = elevenLabsClient ?? ElevenLabsClient();
+    Set<String> Function()? managedProviders,
+    this.managedAccess,
+  })  : _elevenLabs = elevenLabsClient ?? ElevenLabsClient(),
+        managedProviders = managedProviders ?? _none;
+
+  static Set<String> _none() => const {};
 
   WebAudioPlayer? _player;
   StreamSubscription<void>? _playerEnded;
@@ -180,16 +196,24 @@ class VoiceModeController extends ChangeNotifier {
   /// arriving asynchronously does not have, and priming it only helps if the
   /// browser honours the priming. Playing returned audio has no such rule —
   /// it is the same path the voiceover cards already use, which do play.
-  Future<bool> _speakWithProvider(String spoken) async {
+  @visibleForTesting
+  Future<bool> speakWithProvider(String spoken) async {
     final store = keys;
-    if (store == null || !store.hasKey('elevenlabs')) return false;
+    final covered = managedProviders().contains('elevenlabs');
+    if (store == null && !covered) return false;
+    if (store != null && !store.hasKey('elevenlabs') && !covered) return false;
+
+    // Membership first, then the member's own key — the same precedence the
+    // turn pipeline uses, and for the same reason: they pay for the plan
+    // monthly, so it is what should be spent, and running out of ceiling
+    // degrades to their own key rather than dropping them back to the
+    // platform's robot voice mid-sentence.
+    final access = await managedAccess?.call('elevenlabs') ??
+        (store == null ? null : DirectKey(store.keyFor('elevenlabs')));
+    if (access == null) return false;
+
     try {
-      // The member's own key. Live voice runs outside the turn pipeline, so
-      // it has no membership resolver to ask — a plan covers the voice a
-      // *turn* speaks, not this realtime loop, and pretending otherwise would
-      // mean spending SHIFT's key from a path with no meter on it.
-      final pcm = await _elevenLabs.speak(
-          access: DirectKey(store.keyFor('elevenlabs')), text: spoken);
+      final pcm = await _elevenLabs.speak(access: access, text: spoken);
       if (pcm.isEmpty) return false;
       final wav = AudioSynthService.wavFromPcm16(pcm,
           sampleRate: ElevenLabsClient.sampleRate);
@@ -216,7 +240,7 @@ class VoiceModeController extends ChangeNotifier {
     _setPhase(VoicePhase.speaking);
     // A real voice first; the platform engine only if there is no voice key or
     // the call fails.
-    _speakWithProvider(spoken).then((spokenByProvider) {
+    speakWithProvider(spoken).then((spokenByProvider) {
       if (spokenByProvider || !_running) return;
       TtsService.speak(spoken);
     });
