@@ -85,6 +85,45 @@ test('every proxyable provider has a working route', () => {
   }
 });
 
+test('the proxy identifies SHIFT where the provider asks it to', () => {
+  // OpenRouter wants `HTTP-Referer` and `X-Title`. They used to ride out from
+  // the member's device, which broke the call — every header beyond the
+  // CORS-simple set makes the browser preflight, and one the proxy has not
+  // allowed is a request blocked before it leaves the phone. They belong here
+  // anyway: it is SHIFT's key being spent, so it is SHIFT being identified.
+  const headers = upstreamHeaders('openrouter', new Headers(), 'sk-or-test');
+
+  assert.equal(headers.get('HTTP-Referer'), 'https://shiftai.club');
+  assert.equal(headers.get('X-Title'), 'SHIFT AI');
+  assert.equal(headers.get('authorization'), 'Bearer sk-or-test');
+});
+
+test('the proxy asks for the beta the body needs', async () => {
+  // Code execution needs `anthropic-beta`, and a member's device cannot send
+  // it — the browser would preflight a header the proxy has not allowed, which
+  // is how `anthropic-version` blocked every managed turn. So the capability
+  // moved to the side holding the key: the body already says what it wants.
+  const world = await fakeWorld();
+  await proxy(
+    proxyRequest('/anthropic/v1/messages',
+        '{"model":"claude-opus-4-8","tools":[{"type":"code_execution_20250825"}]}'),
+    { env: ENV, fetch: world.fetch },
+  );
+
+  const call = world.calls.find((c) => c.url.includes('api.anthropic.com'));
+  assert.ok(call, 'the provider was never reached');
+  assert.match(call.headers.get('anthropic-beta') ?? '', /code-execution/);
+});
+
+test('a body with no code execution asks for no beta', async () => {
+  const world = await fakeWorld();
+  await proxy(proxyRequest('/anthropic/v1/messages'),
+      { env: ENV, fetch: world.fetch });
+
+  const call = world.calls.find((c) => c.url.includes('api.anthropic.com'));
+  assert.equal(call.headers.get('anthropic-beta'), null);
+});
+
 test('an unknown model is charged the most expensive rate, not nothing', () => {
   // The failure that costs real money. A model the table has not heard of
   // must not be free, or the ceiling never stops anyone.

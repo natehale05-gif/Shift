@@ -258,7 +258,14 @@ class AnthropicClient implements KeyValidatable {
       ManagedAccess(:final base) =>
         ManagedAccess(base: base, headers: const {}).resolve('/v1/messages'),
     };
-    if (tools.any((t) => (t['type'] as String? ?? '').startsWith('code_execution'))) {
+    // Direct calls only. On a membership this header would be a third
+    // preflight the proxy has to allow by name — after `anthropic-version` and
+    // OpenRouter's `HTTP-Referer`, both of which blocked the request before it
+    // left the device. The proxy sets it instead, reading the same `tools` out
+    // of the body it is already forwarding, so the capability is not lost —
+    // it moves to the side that holds the key.
+    if (access is DirectKey &&
+        tools.any((t) => (t['type'] as String? ?? '').startsWith('code_execution'))) {
       headers['anthropic-beta'] = AnthropicTools.codeExecutionBeta;
     }
 

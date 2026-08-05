@@ -56,7 +56,15 @@ const UPSTREAMS = {
   openrouter: {
     host: 'https://openrouter.ai/api',
     allow: ['/v1/chat/completions'],
-    authorize: bearer,
+    authorize(headers, key) {
+      bearer(headers, key);
+      // SHIFT identifying itself on SHIFT's own key — attached here rather
+      // than by the member's device, which has no business knowing OpenRouter
+      // asks for these. Sent from a browser they would also need CORS
+      // permission the proxy has no reason to grant.
+      headers.set('HTTP-Referer', 'https://shiftai.club');
+      headers.set('X-Title', 'SHIFT AI');
+    },
   },
 };
 

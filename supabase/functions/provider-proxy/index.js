@@ -96,9 +96,12 @@ export const handle = withAdapter(async (req, ctx) => {
   }
 
   const body = await requestBody(req, provider);
+  const headers = upstreamHeaders(provider, req.headers, secret);
+  betaHeadersFor(provider, body, headers);
+
   const upstream = await ctx.fetch(target, {
     method: 'POST',
-    headers: upstreamHeaders(provider, req.headers, secret),
+    headers,
     body,
   });
 
@@ -198,6 +201,47 @@ async function requestBody(req, provider) {
 }
 
 const OPENAI_SHAPED = new Set(['openai', 'groq', 'mistral', 'openrouter']);
+
+/**
+ * Opt-in headers a provider requires for a feature the *body* asks for.
+ *
+ * Anthropic's code execution needs `anthropic-beta`, and a member's device
+ * cannot send it: every header beyond the CORS-simple set makes the browser
+ * preflight, and that is how `anthropic-version` came to block every managed
+ * turn. So the capability moves to the side holding the key — the request the
+ * proxy is already forwarding says what it wants, and the proxy asks for it.
+ *
+ * Read from the body rather than trusted from a header for the same reason:
+ * the body is the thing the provider will act on.
+ */
+function betaHeadersFor(provider, body, headers) {
+  if (provider !== 'anthropic' || typeof body !== 'string') return;
+
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return; // Not ours to interpret. Forward it as it came.
+  }
+
+  const tools = Array.isArray(parsed?.tools) ? parsed.tools : [];
+  const wantsCodeExecution = tools.some(
+    (tool) => typeof tool?.type === 'string' && tool.type.startsWith('code_execution'),
+  );
+  if (wantsCodeExecution && !headers.has('anthropic-beta')) {
+    headers.set('anthropic-beta', CODE_EXECUTION_BETA);
+  }
+}
+
+/**
+ * Must equal `AnthropicTools.codeExecutionBeta` on the client.
+ *
+ * A second copy of a constant, checked rather than remembered:
+ * `tool/scan_proxy_providers.py` fails the build if the two drift. Wrong here,
+ * the provider rejects a tool the client believes it enabled — which reads as
+ * the model refusing to run code, not as a mismatched string.
+ */
+const CODE_EXECUTION_BETA = 'code-execution-2025-08-25';
 
 /**
  * Writes the usage row.

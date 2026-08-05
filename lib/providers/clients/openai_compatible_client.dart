@@ -179,10 +179,22 @@ class OpenAiCompatibleClient {
           OpenAiCompatibleConfig.chatCompletionsEndpoint(baseUrl),
           OpenAiCompatibleConfig.headers(key, extraHeaders: extraHeaders),
         ),
+      // No `extraHeaders` on a managed call, and not as an oversight.
+      //
+      // They are OpenRouter's `HTTP-Referer` and `X-Title` — SHIFT identifying
+      // itself on SHIFT's own key, which is the server's business rather than
+      // the device's. Sending them from here also breaks the call outright:
+      // every header beyond the CORS-simple set makes the browser preflight,
+      // and a header the proxy has not allowed is a request blocked before it
+      // leaves the phone. That is exactly how `anthropic-version` cost every
+      // managed Anthropic turn.
+      //
+      // `_shared/upstream.js` attaches them instead, where the key they
+      // describe actually lives.
       ManagedAccess(:final base, headers: final auth) => (
           ManagedAccess(base: base, headers: const {})
               .resolve(OpenAiCompatibleConfig.chatCompletionsPath),
-          {'content-type': 'application/json', ...extraHeaders, ...auth},
+          {'content-type': 'application/json', ...auth},
         ),
     };
 

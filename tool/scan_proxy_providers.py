@@ -46,12 +46,45 @@ def js_keys() -> set:
     return set(re.findall(r'^  ([\w-]+): \{', block.group(1), re.M))
 
 
+TOOLS = ROOT / 'lib' / 'providers' / 'clients' / 'anthropic_tools.dart'
+PROXY = ROOT / 'supabase' / 'functions' / 'provider-proxy' / 'index.js'
+
+
+def one(path: pathlib.Path, pattern: str, what: str) -> str:
+    found = re.search(pattern, path.read_text())
+    if not found:
+        raise SystemExit(f'{path.name}: could not find {what}')
+    return found.group(1)
+
+
+def betas_agree() -> bool:
+    """The code-execution beta identifier, which now lives in two languages.
+
+    The client used to send `anthropic-beta` itself. It cannot on a managed
+    call — the browser would preflight a header the proxy has not allowed —
+    so the proxy sets it, reading the same `tools` out of the body. That means
+    two copies of one string, and a mismatch is quiet: the provider rejects a
+    tool the client believes it enabled, which reads as the model declining to
+    run code rather than as a typo.
+    """
+    client = one(TOOLS, r"codeExecutionBeta = '([^']+)'", 'codeExecutionBeta')
+    server = one(PROXY, r"CODE_EXECUTION_BETA = '([^']+)'", 'CODE_EXECUTION_BETA')
+    if client == server:
+        print(f'code-execution beta agrees: {client}')
+        return True
+    print(f'FAIL: code-execution beta differs — client {client!r}, '
+          f'server {server!r}', file=sys.stderr)
+    return False
+
+
 def main() -> int:
     client, server = dart_set(), js_keys()
+    ok = betas_agree()
+
     if client == server:
         print(f'proxyable providers agree ({len(client)}): '
               f'{", ".join(sorted(client))}')
-        return 0
+        return 0 if ok else 1
 
     print('FAIL: the client and the proxy disagree about what is covered',
           file=sys.stderr)
