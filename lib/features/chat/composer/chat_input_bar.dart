@@ -20,6 +20,8 @@ import 'dart:async';
 import 'composer_attachments.dart';
 import 'composer_dictation.dart';
 import 'composer_options.dart';
+import '../../../data/stores/account_store.dart';
+import '../../../turn/live_mode.dart';
 import 'model_chip.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -301,12 +303,19 @@ class _ChatInputBarState extends State<ChatInputBar> {
           // reads twice and a daily counter for a quota this app does not
           // enforce, both sitting under every message forever. Demo mode's
           // line earns its place — it says the answers are not real.
-          if (!context.watch<ApiKeysStore>().isLive) ...[
+          if (describeLive(liveCapability(
+                hasOwnKey: context.watch<ApiKeysStore>().isLive,
+                hasMembership: context
+                    .watch<AccountStore>()
+                    .spendableProviders
+                    .isNotEmpty,
+              )).footer
+              case final footer?) ...[
             const SizedBox(height: AppSpacing.xs),
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'SHIFT AI is in demo mode — responses are simulated.',
+                footer,
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: colors.textSecondary,
                 ),

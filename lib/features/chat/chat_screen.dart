@@ -13,6 +13,8 @@ import '../../data/stores/conversation_store.dart';
 import '../../data/stores/user_prefs_store.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_theme.dart';
+import '../../data/stores/account_store.dart';
+import '../../turn/live_mode.dart';
 import '../../core/theme/app_typography.dart';
 import '../artifacts/artifact_panel.dart';
 import 'composer/chat_input_bar.dart';
@@ -133,7 +135,17 @@ class _ChatTitleState extends State<_ChatTitle> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.extension<AppSemanticColors>()!;
-    final live = context.watch<ApiKeysStore>().isLive;
+    // Asked through `liveCapability` rather than of the key store directly.
+    // "Has this device stored a key" is not the same question as "can this app
+    // answer for real", and the two disagreed for as long as memberships have
+    // existed: the chip said Simulated while the reply came from a real model.
+    final capability = liveCapability(
+      hasOwnKey: context.watch<ApiKeysStore>().isLive,
+      hasMembership:
+          context.watch<AccountStore>().spendableProviders.isNotEmpty,
+    );
+    final described = describeLive(capability);
+    final live = capability != LiveCapability.demo;
     final convo = context.watch<ConversationStore>().current;
     // Show the conversation's title once it has a name; the brand shows on the
     // empty/new state.
@@ -169,9 +181,7 @@ class _ChatTitleState extends State<_ChatTitle> {
         ),
         const SizedBox(width: AppSpacing.sm),
         Tooltip(
-          message: live
-              ? 'Live — chat calls the real API with your key.'
-              : 'Simulated — add an API key in Settings for live AI.',
+          message: described.tooltip,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
@@ -184,7 +194,7 @@ class _ChatTitleState extends State<_ChatTitle> {
               ),
             ),
             child: Text(
-              live ? 'Live' : 'Simulated',
+              described.chip,
               style: theme.textTheme.labelSmall?.copyWith(
                 color: live ? theme.colorScheme.primary : colors.textSecondary,
               ),
