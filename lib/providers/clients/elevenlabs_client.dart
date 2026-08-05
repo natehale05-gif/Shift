@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../streaming/http_client_stub.dart'
     if (dart.library.html) '../streaming/http_client_web.dart';
 import '../streaming/sse_client.dart';
+import 'provider_access.dart';
 import 'provider_registry.dart';
 
 /// ElevenLabs text-to-speech.
@@ -53,18 +54,21 @@ class ElevenLabsClient implements KeyValidatable {
   /// endpoint and proven only against a fake client. A failure surfaces its
   /// status through [elevenLabsProblem] rather than falling back in silence.
   Future<Uint8List> compose({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
     int lengthMs = 30000,
   }) async {
+    final music = routeCall(
+      access,
+      direct: (_) => Uri.parse('$base/music'),
+      directHeaders: headers,
+      path: '/v1/music',
+    );
     final client = _clientFactory();
     try {
       final response = await client.post(
-        Uri.parse('$base/music'),
-        headers: {
-          'xi-api-key': apiKey,
-          'Content-Type': 'application/json',
-        },
+        music.uri,
+        headers: music.headers,
         body: jsonEncode({'prompt': prompt, 'music_length_ms': lengthMs}),
       );
       if (response.statusCode >= 400) {
@@ -77,16 +81,25 @@ class ElevenLabsClient implements KeyValidatable {
   }
 
   Future<Uint8List> speak({
-    required String apiKey,
+    required ProviderAccess access,
     required String text,
     String voiceId = defaultVoiceId,
     String model = defaultModel,
   }) async {
+    final speech = routeCall(
+      access,
+      direct: (_) => endpoint(voiceId),
+      directHeaders: headers,
+      path: '/v1/text-to-speech/$voiceId',
+      // The output format rides in the query for both routes; the proxy strips
+      // only `key` and `api_key`, so everything the provider needs survives.
+      query: const {'output_format': outputFormat},
+    );
     final client = _clientFactory();
     try {
       final response = await client.post(
-        endpoint(voiceId),
-        headers: headers(apiKey),
+        speech.uri,
+        headers: speech.headers,
         body: jsonEncode({'text': text, 'model_id': model}),
       );
       if (response.statusCode < 200 || response.statusCode >= 300) {

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shift_ai/providers/clients/heygen_api_config.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/providers/clients/heygen_client.dart';
 
 void main() {
@@ -65,7 +66,7 @@ void main() {
     });
 
     final video = await client(() => mock)
-        .generateAvatarVideo(apiKey: 'hg-key', script: 'Hello world');
+        .generateAvatarVideo(access: const DirectKey('hg-key'), script: 'Hello world');
 
     final input = (submitted!['video_inputs'] as List).first as Map;
     expect(input['voice']['input_text'], 'Hello world');
@@ -96,7 +97,7 @@ void main() {
     });
 
     await client(() => mock)
-        .generateAvatarVideo(apiKey: 'k', script: 'Hi');
+        .generateAvatarVideo(access: const DirectKey('k'), script: 'Hi');
 
     final input = (submitted!['video_inputs'] as List).first as Map;
     expect(input['character']['avatar_id'], HeygenApiConfig.fallbackAvatarId);
@@ -123,7 +124,7 @@ void main() {
     });
 
     await client(() => mock).generateAvatarVideo(
-        apiKey: 'k', script: 'Hi', avatarId: 'mine', voiceId: 'my-voice');
+        access: const DirectKey('k'), script: 'Hi', avatarId: 'mine', voiceId: 'my-voice');
 
     expect(listings, 0, reason: 'no reason to ask when the caller decided');
     final input = (submitted!['video_inputs'] as List).first as Map;
@@ -139,7 +140,7 @@ void main() {
           jsonEncode({'data': {'status': 'failed', 'error': 'bad avatar'}}), 200);
     });
     expect(
-      () => client(() => mock).generateAvatarVideo(apiKey: 'k', script: 's'),
+      () => client(() => mock).generateAvatarVideo(access: const DirectKey('k'), script: 's'),
       throwsA(isA<Exception>()),
     );
   });

@@ -7,6 +7,7 @@ import '../../data/stores/conversation_store.dart';
 import 'speech_service.dart';
 import '../studios/media/audio_synth_service.dart';
 import '../../providers/clients/elevenlabs_client.dart';
+import '../../providers/clients/provider_access.dart';
 import '../../data/stores/api_keys_store.dart';
 import '../../core/platform/web_audio_player.dart';
 
@@ -183,8 +184,12 @@ class VoiceModeController extends ChangeNotifier {
     final store = keys;
     if (store == null || !store.hasKey('elevenlabs')) return false;
     try {
+      // The member's own key. Live voice runs outside the turn pipeline, so
+      // it has no membership resolver to ask — a plan covers the voice a
+      // *turn* speaks, not this realtime loop, and pretending otherwise would
+      // mean spending SHIFT's key from a path with no meter on it.
       final pcm = await _elevenLabs.speak(
-          apiKey: store.keyFor('elevenlabs'), text: spoken);
+          access: DirectKey(store.keyFor('elevenlabs')), text: spoken);
       if (pcm.isEmpty) return false;
       final wav = AudioSynthService.wavFromPcm16(pcm,
           sampleRate: ElevenLabsClient.sampleRate);

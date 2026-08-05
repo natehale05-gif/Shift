@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 
 import '../streaming/sse_client.dart';
+import 'provider_access.dart';
 import '../streaming/http_client_stub.dart'
     if (dart.library.html) '../streaming/http_client_web.dart';
 
@@ -89,6 +90,11 @@ class OpenAiVideoClient {
       : _clientFactory = clientFactory ?? createStreamingClient;
 
   static const base = 'https://api.openai.com/v1';
+
+  static Map<String, String> _directHeaders(String key) => {
+        'Authorization': 'Bearer $key',
+        'Content-Type': 'application/json',
+      };
   static const defaultModel = 'sora-2';
 
   /// How long to wait for a render before giving up. Sora takes minutes for a
@@ -99,7 +105,7 @@ class OpenAiVideoClient {
 
   /// Starts a render and returns the job.
   Future<VideoJob> start({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
     String model = defaultModel,
     int seconds = 4,
@@ -107,12 +113,15 @@ class OpenAiVideoClient {
   }) async {
     final client = _clientFactory();
     try {
+      final submit = routeCall(
+        access,
+        direct: (_) => Uri.parse('$base/videos'),
+        directHeaders: _directHeaders,
+        path: '/v1/videos',
+      );
       final response = await client.post(
-        Uri.parse('$base/videos'),
-        headers: {
-          'Authorization': 'Bearer $apiKey',
-          'Content-Type': 'application/json',
-        },
+        submit.uri,
+        headers: submit.headers,
         body: jsonEncode({
           'model': model,
           'prompt': prompt,
@@ -130,15 +139,18 @@ class OpenAiVideoClient {
   }
 
   Future<VideoJob> poll({
-    required String apiKey,
+    required ProviderAccess access,
     required String id,
   }) async {
+    final status = routeCall(
+      access,
+      direct: (_) => Uri.parse('$base/videos/$id'),
+      directHeaders: _directHeaders,
+      path: '/v1/videos/$id',
+    );
     final client = _clientFactory();
     try {
-      final response = await client.get(
-        Uri.parse('$base/videos/$id'),
-        headers: {'Authorization': 'Bearer $apiKey'},
-      );
+      final response = await client.get(status.uri, headers: status.headers);
       if (response.statusCode >= 400) {
         throw SseHttpException(response.statusCode, response.body);
       }
@@ -154,15 +166,18 @@ class OpenAiVideoClient {
   /// a bare URL in a `<video src>` would 401. The bytes go to the asset store
   /// like generated images and audio already do.
   Future<Uint8List> download({
-    required String apiKey,
+    required ProviderAccess access,
     required String id,
   }) async {
+    final content = routeCall(
+      access,
+      direct: (_) => Uri.parse('$base/videos/$id/content'),
+      directHeaders: _directHeaders,
+      path: '/v1/videos/$id/content',
+    );
     final client = _clientFactory();
     try {
-      final response = await client.get(
-        Uri.parse('$base/videos/$id/content'),
-        headers: {'Authorization': 'Bearer $apiKey'},
-      );
+      final response = await client.get(content.uri, headers: content.headers);
       if (response.statusCode >= 400) {
         throw SseHttpException(response.statusCode, response.body);
       }
@@ -174,7 +189,7 @@ class OpenAiVideoClient {
 
   /// Start, wait, download — the whole render as one call.
   Future<Uint8List> render({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
     String model = defaultModel,
     int seconds = 4,
@@ -182,7 +197,7 @@ class OpenAiVideoClient {
     void Function(VideoJob job)? onProgress,
   }) async {
     var job = await start(
-      apiKey: apiKey,
+      access: access,
       prompt: prompt,
       model: model,
       seconds: seconds,
@@ -198,12 +213,12 @@ class OpenAiVideoClient {
                 'minutes.');
       }
       await Future<void>.delayed(pollInterval);
-      job = await poll(apiKey: apiKey, id: job.id);
+      job = await poll(access: access, id: job.id);
       onProgress?.call(job);
     }
     if (job.status == VideoJobStatus.failed) {
       throw SseHttpException(422, job.error ?? 'The render failed.');
     }
-    return download(apiKey: apiKey, id: job.id);
+    return download(access: access, id: job.id);
   }
 }

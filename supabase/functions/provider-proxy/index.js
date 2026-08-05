@@ -29,11 +29,11 @@ import {
 } from '../_shared/handler.js';
 import {
   costMicros,
-  IMAGE_CALL_MICROS,
+  fixedPriceFor,
   UNREPORTED_CALL_MICROS,
 } from '../_shared/pricing.js';
 import {
-  isImageCall,
+  callKind,
   parseProxyPath,
   upstreamFor,
   upstreamHeaders,
@@ -42,7 +42,17 @@ import {
 import { meteredBody, UsageMeter } from '../_shared/usage_meter.js';
 
 export const handle = withAdapter(async (req, ctx) => {
-  if (req.method !== 'POST') return problem(405, 'Use POST.');
+  // GET as well as POST, because video and speech are asynchronous: the work
+  // is submitted with a POST and collected with a GET. A proxy that forwarded
+  // only POSTs could start a video and never fetch it — which is exactly what
+  // it did until video was added.
+  //
+  // Which GETs are reachable is the allowlist's business, not this line's:
+  // every entry carries its method, so `GET /v2/avatars` is permitted and
+  // `GET` to an account endpoint is not.
+  if (req.method !== 'POST' && req.method !== 'GET') {
+    return problem(405, 'Use POST or GET.');
+  }
 
   const url = new URL(req.url);
   const { provider, path } = parseProxyPath(url.pathname);
@@ -50,7 +60,7 @@ export const handle = withAdapter(async (req, ctx) => {
     return problem(404, 'Unknown provider.');
   }
 
-  const target = upstreamUrl(provider, path, url.search);
+  const target = upstreamUrl(provider, path, url.search, req.method);
   if (!target) {
     // Deliberately vague. Naming which prefixes are allowed tells someone
     // probing this endpoint exactly what to try next.
@@ -100,23 +110,25 @@ export const handle = withAdapter(async (req, ctx) => {
     );
   }
 
-  const body = await requestBody(req, provider);
+  // A GET has no body, and sending one is how a well-behaved server starts
+  // answering 400 to a request that was otherwise correct.
+  const body = req.method === 'POST' ? await requestBody(req, provider) : null;
   const headers = upstreamHeaders(provider, req.headers, secret);
-  betaHeadersFor(provider, body, headers);
+  if (body !== null) betaHeadersFor(provider, body, headers);
 
   const upstream = await ctx.fetch(target, {
-    method: 'POST',
+    method: req.method,
     headers,
-    body,
+    ...(body === null ? {} : { body }),
   });
 
   const meter = new UsageMeter();
-  const image = isImageCall(provider, path);
+  const kind = callKind(provider, path, req.method);
   const streamed = meteredBody(upstream.body, meter, (finished) => {
     // Floating on purpose: the member's reply must not wait on our
     // bookkeeping. A failure here is logged and swallowed for the same reason
     // — a metering error is not a reason to break a conversation.
-    record(ctx, provider, finished, image).catch((error) => {
+    record(ctx, provider, finished, kind).catch((error) => {
       console.error('usage not recorded', error);
     });
   });
@@ -256,17 +268,21 @@ const CODE_EXECUTION_BETA = 'code-execution-2025-08-25';
  * Zero would make "return a shape the meter does not understand" into a way to
  * spend SHIFT's keys for free.
  */
-async function record(ctx, provider, meter, image = false) {
-  // An image is priced per picture, and it has to be: the reply carries no
-  // token counts for the meter to read. Left to the unreported-call charge it
-  // would bill about a tenth of what one costs, and a ceiling that under-counts
-  // by 10x does not bound anything.
+async function record(ctx, provider, meter, kind = 'text') {
+  // Pictures, video and speech are priced per call, because their replies
+  // carry no token counts for the meter to read. Left to the unreported-call
+  // charge, an image bills about a tenth of what one costs and a video a
+  // fortieth — and a ceiling that under-counts by that much does not bound
+  // anything.
   //
-  // Checked before `sawUsage` deliberately. Gemini generates images through the
-  // same endpoint as a chat turn and *does* report tokens for them, which would
-  // otherwise price a picture as a short conversation.
-  const cost = image
-    ? IMAGE_CALL_MICROS
+  // The fixed price is checked *before* `sawUsage`, deliberately. Gemini
+  // generates pictures through the same endpoint as a chat turn and does
+  // report tokens for them, which would otherwise price a picture as a short
+  // conversation. And a poll priced at zero must stay zero even though the
+  // status body it returns is perfectly parseable.
+  const fixed = fixedPriceFor(kind);
+  const cost = fixed !== null
+    ? fixed
     : meter.sawUsage
         ? costMicros({
             model: meter.model,

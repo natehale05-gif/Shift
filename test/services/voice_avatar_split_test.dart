@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/studio_result.dart';
 import 'package:shift_ai/data/models/studio_type.dart';
@@ -28,7 +29,7 @@ class _FakeHeygen extends HeygenClient {
   int calls = 0;
   @override
   Future<HeygenVideo> generateAvatarVideo({
-    required String apiKey,
+    required ProviderAccess access,
     required String script,
     String? avatarId,
     String? voiceId,

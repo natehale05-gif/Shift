@@ -6,6 +6,7 @@ import '../streaming/http_client_stub.dart'
     if (dart.library.html) '../streaming/http_client_web.dart';
 import '../streaming/sse_client.dart';
 import 'heygen_api_config.dart';
+import 'provider_access.dart';
 import 'provider_registry.dart';
 
 /// A Heygen failure in words a user can act on.
@@ -57,7 +58,7 @@ class HeygenClient implements KeyValidatable {
   /// completed, and returns the finished video. Throws [SseHttpException] on a
   /// non-2xx response and [Exception] on failure/timeout.
   Future<HeygenVideo> generateAvatarVideo({
-    required String apiKey,
+    required ProviderAccess access,
     required String script,
     String? avatarId,
     String? voiceId,
@@ -67,16 +68,24 @@ class HeygenClient implements KeyValidatable {
       // Ask the account which avatar and voice it can use, rather than sending
       // ids picked at build time. Heygen retires stock avatars, so a constant
       // that worked once starts failing at submit for everyone.
-      avatarId ??= await _firstId(client, apiKey, HeygenApiConfig.avatarsEndpoint(),
+      avatarId ??= await _firstId(client, access, HeygenApiConfig.avatarsEndpoint,
+              '/v2/avatars',
               const ['avatars', 'talking_photos'], const ['avatar_id', 'talking_photo_id']) ??
           HeygenApiConfig.fallbackAvatarId;
-      voiceId ??= await _firstId(client, apiKey, HeygenApiConfig.voicesEndpoint(),
+      voiceId ??= await _firstId(client, access, HeygenApiConfig.voicesEndpoint,
+              '/v2/voices',
               const ['voices'], const ['voice_id']) ??
           HeygenApiConfig.fallbackVoiceId;
 
+      final generate = routeCall(
+        access,
+        direct: (_) => HeygenApiConfig.generateEndpoint(),
+        directHeaders: HeygenApiConfig.headers,
+        path: '/v2/video/generate',
+      );
       final submit = await client.post(
-        HeygenApiConfig.generateEndpoint(),
-        headers: HeygenApiConfig.headers(apiKey),
+        generate.uri,
+        headers: generate.headers,
         body: jsonEncode({
           'video_inputs': [
             {
@@ -108,10 +117,17 @@ class HeygenClient implements KeyValidatable {
 
       for (var attempt = 0; attempt < maxPolls; attempt++) {
         await Future<void>.delayed(pollInterval);
-        final poll = await client.get(
-          HeygenApiConfig.statusEndpoint(videoId),
-          headers: HeygenApiConfig.headers(apiKey),
+        // Polling is a GET, and it is why the proxy had to learn a second
+        // method: it could submit a render and never collect it.
+        final statusCall = routeCall(
+          access,
+          direct: (_) => HeygenApiConfig.statusEndpoint(videoId),
+          directHeaders: HeygenApiConfig.headers,
+          path: '/v1/video_status.get',
+          query: {'video_id': videoId},
         );
+        final poll =
+            await client.get(statusCall.uri, headers: statusCall.headers);
         if (poll.statusCode < 200 || poll.statusCode >= 300) {
           throw SseHttpException(poll.statusCode, poll.body);
         }
@@ -150,14 +166,20 @@ class HeygenClient implements KeyValidatable {
   /// come back under `avatars` and `talking_photos` with different id fields.
   Future<String?> _firstId(
     http.Client client,
-    String apiKey,
-    Uri endpoint,
+    ProviderAccess access,
+    Uri Function() endpoint,
+    String path,
     List<String> listKeys,
     List<String> idKeys,
   ) async {
     try {
-      final response =
-          await client.get(endpoint, headers: HeygenApiConfig.headers(apiKey));
+      final route = routeCall(
+        access,
+        direct: (_) => endpoint(),
+        directHeaders: HeygenApiConfig.headers,
+        path: path,
+      );
+      final response = await client.get(route.uri, headers: route.headers);
       if (response.statusCode < 200 || response.statusCode >= 300) return null;
       final payload =
           jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;

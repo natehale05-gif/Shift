@@ -85,3 +85,56 @@ export const UNREPORTED_CALL_MICROS = 20_000;
  * bill arrives.
  */
 export const IMAGE_CALL_MICROS = 200_000;
+
+/**
+ * What one generated video costs, in millionths of a dollar.
+ *
+ * $2.00. Video is the most expensive thing a membership can buy and the
+ * hardest to bound: an avatar render or a Sora clip is priced by length, and
+ * the length is in the request rather than the reply. Set above the range on
+ * purpose — a $25 plan should buy roughly a dozen videos, and a member who
+ * wants more can be granted more, which is a conversation. The alternative is
+ * discovering the real number on the provider's invoice.
+ */
+export const VIDEO_CALL_MICROS = 2_000_000;
+
+/**
+ * What one speech or music generation costs.
+ *
+ * $0.10. ElevenLabs bills per character and per second, neither of which comes
+ * back in the response, so this is a per-call figure above a typical clip
+ * rather than a measurement.
+ */
+export const SPEECH_CALL_MICROS = 100_000;
+
+/**
+ * What a status poll costs: nothing.
+ *
+ * Video and speech are asynchronous, so one deliverable is a submit and then a
+ * dozen polls. Charging them would make waiting cost more than generating —
+ * two dozen polls at the unreported-call rate is nearly fifty cents of nothing
+ * happening — and the polls are our client's doing, not a member's request.
+ *
+ * Free is safe here because of what a poll can be: the allowlist's GET entries
+ * are status, listing and content. None of them generates anything, so there
+ * is no way to make work free by relabelling it.
+ */
+export const POLL_CALL_MICROS = 0;
+
+/**
+ * The per-call price for a kind of work, or null when it is metered on tokens.
+ *
+ * Null rather than a default, so a caller has to decide what to do about it —
+ * text falls through to the token meter, and a kind added later without a
+ * price shows up as a missing case rather than as a quiet zero.
+ */
+export function fixedPriceFor(kind) {
+  return FIXED_PRICES[kind] ?? null;
+}
+
+const FIXED_PRICES = {
+  image: IMAGE_CALL_MICROS,
+  video: VIDEO_CALL_MICROS,
+  speech: SPEECH_CALL_MICROS,
+  poll: POLL_CALL_MICROS,
+};

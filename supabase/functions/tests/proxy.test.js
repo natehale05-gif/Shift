@@ -3,14 +3,17 @@ import test from 'node:test';
 
 import {
   costMicros,
+  fixedPriceFor,
   IMAGE_CALL_MICROS,
   rateFor,
   UNREPORTED_CALL_MICROS,
 } from '../_shared/pricing.js';
 import {
+  callKind,
   isImageCall,
   parseProxyPath,
   proxyableProviders,
+  upstreamFor,
   upstreamHeaders,
   upstreamUrl,
 } from '../_shared/upstream.js';
@@ -81,14 +84,54 @@ test('the session token is never forwarded to the provider', () => {
 });
 
 test('every proxyable provider has a working route', () => {
+  // Asserted by looking for the key rather than by naming the headers it
+  // could be in. The list-of-names version failed the moment ElevenLabs
+  // arrived with `xi-api-key` — a test that has to be edited every time a
+  // provider is added is a test that will one day be edited wrongly.
   for (const provider of proxyableProviders()) {
-    const headers = upstreamHeaders(provider, new Headers(), 'k');
-    const authorized =
-      headers.get('authorization') ||
-      headers.get('x-api-key') ||
-      headers.get('x-goog-api-key');
-    assert.ok(authorized, `${provider} attaches no credential`);
+    const headers = upstreamHeaders(provider, new Headers(), 'the-secret');
+    const carried = [...headers.values()].some((v) => v.includes('the-secret'));
+    assert.ok(carried, `${provider} attaches no credential`);
   }
+});
+
+test('every allowlist entry names a method', () => {
+  // The entries are `METHOD /prefix`. One written without a method would match
+  // nothing and silently disable a provider — or, if the parser were laxer,
+  // match everything.
+  for (const provider of proxyableProviders()) {
+    for (const entry of upstreamFor(provider).allow) {
+      assert.match(entry, /^(GET|POST) \//, `${provider}: ${entry}`);
+    }
+  }
+});
+
+test('a GET cannot reach an endpoint that generates', () => {
+  // The reason the method is part of the entry. Allowing GET everywhere so
+  // that polling works would open every provider's account endpoints, which
+  // describe SHIFT's billing rather than a member's work.
+  assert.equal(upstreamUrl('heygen', '/v2/video/generate', '', 'GET'), null);
+  assert.equal(upstreamUrl('anthropic', '/v1/messages', '', 'GET'), null);
+  assert.ok(upstreamUrl('heygen', '/v2/video/generate', '', 'POST'));
+});
+
+test('a submitted video can actually be collected', () => {
+  // The proxy was POST-only, so it could start a render and never fetch it.
+  assert.ok(upstreamUrl('heygen', '/v1/video_status.get', '?video_id=abc', 'GET'));
+  assert.ok(upstreamUrl('openai', '/v1/videos/vid_1', '', 'GET'));
+  assert.ok(upstreamUrl('elevenlabs', '/v1/text-to-speech/voice-1', '', 'POST'));
+});
+
+test('only the submit is charged, never the waiting', () => {
+  // One deliverable is a submit and then a dozen polls. At the unreported-call
+  // rate two dozen polls is nearly fifty cents of nothing happening, and the
+  // polls are our client's doing rather than a member's request.
+  assert.equal(callKind('heygen', '/v2/video/generate', 'POST'), 'video');
+  assert.equal(callKind('heygen', '/v1/video_status.get', 'GET'), 'poll');
+  assert.equal(fixedPriceFor('poll'), 0);
+  assert.ok(fixedPriceFor('video') > fixedPriceFor('speech'));
+  assert.equal(fixedPriceFor('text'), null,
+      'text must fall through to the token meter');
 });
 
 test('the proxy identifies SHIFT where the provider asks it to', () => {

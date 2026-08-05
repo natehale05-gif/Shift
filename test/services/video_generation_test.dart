@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shift_ai/data/models/chat_message.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/data/models/conversation.dart';
 import 'package:shift_ai/data/models/studio_result.dart';
 import 'package:shift_ai/data/persistence/persistence_service.dart';
@@ -34,7 +35,7 @@ class _FakeVideoClient extends OpenAiVideoClient {
 
   @override
   Future<Uint8List> render({
-    required String apiKey,
+    required ProviderAccess access,
     required String prompt,
     String model = OpenAiVideoClient.defaultModel,
     int seconds = 4,

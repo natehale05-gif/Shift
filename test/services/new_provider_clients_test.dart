@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shift_ai/features/studios/media/audio_synth_service.dart';
+import 'package:shift_ai/providers/clients/provider_access.dart';
 import 'package:shift_ai/providers/clients/elevenlabs_client.dart';
 import 'package:shift_ai/providers/clients/fal_client.dart';
 import 'package:shift_ai/providers/clients/replicate_client.dart';
@@ -185,7 +186,7 @@ void main() {
       });
 
       final spoken = await ElevenLabsClient(clientFactory: () => mock)
-          .speak(apiKey: 'sk_voice', text: 'Hello there');
+          .speak(access: const DirectKey('sk_voice'), text: 'Hello there');
 
       expect(body['text'], 'Hello there');
       expect(spoken, pcm);
@@ -202,7 +203,7 @@ void main() {
       final mock = MockClient((_) async => http.Response('nope', 401));
       expect(
           () => ElevenLabsClient(clientFactory: () => mock)
-              .speak(apiKey: 'bad', text: 'x'),
+              .speak(access: const DirectKey('bad'), text: 'x'),
           throwsA(anything));
     });
 

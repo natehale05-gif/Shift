@@ -26,28 +26,32 @@ const Set<String> proxyableProviders = {
   'groq',
   'mistral',
   'openrouter',
+  'heygen',
+  'elevenlabs',
 };
 
 /// Whether a membership can pay for this kind of turn.
 ///
-/// **Text and pictures, not video or sound**, and the line is the proxy's
-/// allowlist rather than a preference: `/v1/messages`,
-/// `/v1/chat/completions`, `/v1/responses`, `/v1/images/generations`, and
-/// Gemini's `generateContent`. Each entry is a deliberate addition. An
-/// allowlist that grew to cover every endpoint a provider offers would not be
-/// an allowlist — our own account administration lives on those same hosts.
+/// **Everything**, now that video, music and voice have hosts in the table and
+/// prices to go with them. The line is the proxy's allowlist rather than a
+/// preference, and every entry there is a deliberate addition: an allowlist
+/// that grew to cover each endpoint a provider offers would not be one, since
+/// our own account administration lives on those same hosts.
 ///
-/// Images were the last thing a membership did not buy, and their absence read
-/// as the product being broken rather than as a boundary: a member watched a
-/// real page get written and then a procedural gradient appear where a
-/// photograph should be. They are priced per picture on the server, because an
-/// image reply reports no tokens and the flat fallback charge would bill about
-/// a tenth of what one costs.
+/// The order this arrived in is the useful part. Text first, then pictures,
+/// then the asynchronous media — and each gap read, from the phone, as the
+/// product being broken rather than as a boundary. A member watched a real
+/// page get written and then a procedural gradient appear where a photograph
+/// should be.
 ///
-/// Video, music, voice and avatars stay out, and not only for want of an
-/// allowlist entry: HeyGen, ElevenLabs, Flux, Replicate and fal are not in the
-/// proxy's host table at all, so there is nothing to forward to. Those remain
-/// the member's own key.
+/// Each kind is priced by what it is, on the server: none of these replies
+/// carries token counts, and the flat unreported-call charge would bill about
+/// a tenth of an image and a fortieth of a video. Status polls are free, which
+/// is safe because the allowlist's GET entries only ever read.
+///
+/// Kept as an exhaustive switch even though every arm is now true. Adding a
+/// route should be a decision about whether a membership pays for it, not
+/// something a `default` answers on your behalf.
 bool membershipCovers(ChatRoute route) => switch (route) {
       ChatRoute.chat ||
       ChatRoute.code ||
@@ -58,12 +62,10 @@ bool membershipCovers(ChatRoute route) => switch (route) {
       ChatRoute.deck ||
       ChatRoute.shortReels ||
       ChatRoute.brandPack ||
-      ChatRoute.imageGen =>
-        true,
-      // Every one of these needs a host the proxy does not know.
+      ChatRoute.imageGen ||
       ChatRoute.video ||
       ChatRoute.audio ||
       ChatRoute.voice ||
       ChatRoute.avatar =>
-        false,
+        true,
     };

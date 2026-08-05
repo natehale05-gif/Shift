@@ -237,7 +237,7 @@ node --test supabase/functions/tests/*.test.js
 | Function | What it does |
 |---|---|
 | `provider-key` | the encrypting front door to the vault — the only way a secret gets in, for a member's own key or, with `scope: "platform"` and an admin, for SHIFT's |
-| `provider-proxy` | spends SHIFT's keys for a member — the only reader of the vault. Text **and images**; video, music and voice need hosts it does not know |
+| `provider-proxy` | spends SHIFT's keys for a member — the only reader of the vault. Text, images, video, music and voice |
 | `admin-membership` | grants a plan, until payments can sell one |
 | `stripe-webhook` | the only writer of `subscriptions` — entitlement comes from Stripe or from nowhere |
 
@@ -272,6 +272,20 @@ backwards: a response shape the meter does not recognise must still cost
 something, or "return something unparseable" becomes a way to spend SHIFT's
 keys for free. For the same reason an unknown model is priced at the *most
 expensive* rate in the table rather than at zero.
+
+**Video and speech are asynchronous, which is why the allowlist names a
+method.** A render is submitted with a POST and collected with a GET, so a
+POST-only proxy could start a video and never fetch it. Allowing GET
+everywhere instead would open every provider's account endpoints — which
+describe SHIFT's billing rather than a member's work — so each entry is
+`METHOD /prefix` and the method is matched, not assumed.
+
+**Only the submit is charged; polls are free.** One deliverable is a submit and
+then a dozen status GETs. At the unreported-call rate two dozen polls is nearly
+fifty cents of nothing happening, and the polls are our client's doing rather
+than a member's request. Free is safe because of what the GET entries are:
+status, listing and content. None of them generates anything, so there is no
+way to make work free by relabelling it.
 
 **Images are priced per picture, and that is not a rounding decision.** An
 image reply carries no token counts at all, so the meter sees nothing and the

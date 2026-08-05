@@ -49,3 +49,38 @@ final class ManagedAccess extends ProviderAccess {
     );
   }
 }
+
+/// Where one call goes and what it carries, whichever way it is being paid for.
+///
+/// Every client had grown its own `switch (access)` — three lines of URI and
+/// three of headers, repeated. That was tolerable while only the text clients
+/// took managed access; once video, speech and images did too it became six
+/// copies of a decision that has exactly one right answer, which is how one of
+/// them ends up subtly different.
+///
+/// [direct] and [directHeaders] are the provider's own scheme, given the key:
+/// HeyGen puts it in `x-api-key`, ElevenLabs in `xi-api-key`, Gemini in the
+/// URL. The managed branch needs none of that — the proxy attaches the
+/// credential — so it takes the path and the session headers and nothing else.
+({Uri uri, Map<String, String> headers}) routeCall(
+  ProviderAccess access, {
+  required Uri Function(String key) direct,
+  required Map<String, String> Function(String key) directHeaders,
+  required String path,
+  Map<String, String> query = const {},
+}) =>
+    switch (access) {
+      DirectKey(:final key) => (
+          uri: direct(key),
+          headers: directHeaders(key),
+        ),
+      ManagedAccess(:final base, headers: final auth) => (
+          uri: ManagedAccess(base: base, headers: const {})
+              .resolve(path, query: query),
+          // `content-type` is the only one the browser sends without asking
+          // permission first. Anything the provider additionally wants is the
+          // proxy's to add — a header the proxy has not allowed is a request
+          // blocked before it leaves the device.
+          headers: {'content-type': 'application/json', ...auth},
+        ),
+    };

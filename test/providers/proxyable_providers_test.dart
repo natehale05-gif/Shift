@@ -27,19 +27,28 @@ void main() {
       expect(membershipCovers(ChatRoute.imageGen), isTrue);
     });
 
-    test('does not cover video, music or voice', () {
-      // Not a preference — HeyGen, ElevenLabs, Flux, Replicate and fal are not
-      // in the proxy's host table at all, so there is nothing to forward to.
-      // Routing must not offer a provider whose credential cannot be attached:
-      // that produced a 401 the app reported as a bad key, for a key the
-      // member never had.
+    test('covers video, music and voice too', () {
+      // The last three, and the ones that needed most from the server: a host
+      // entry each, a second HTTP method so an asynchronous render can be
+      // collected, and a price, since none of these replies carries tokens.
       for (final route in [
         ChatRoute.video,
         ChatRoute.audio,
         ChatRoute.voice,
         ChatRoute.avatar,
       ]) {
-        expect(membershipCovers(route), isFalse, reason: '$route');
+        expect(membershipCovers(route), isTrue, reason: '$route');
+      }
+    });
+
+    test('a route cannot be added without deciding', () {
+      // Every arm is true today, so the switch looks redundant — it is not.
+      // Exhaustiveness is what makes the *next* route a decision rather than
+      // something a `default` answers on somebody's behalf, and routing a turn
+      // at a provider whose credential cannot be attached is how a 401 came to
+      // be reported as a bad key for a key the member never had.
+      for (final route in ChatRoute.values) {
+        expect(() => membershipCovers(route), returnsNormally, reason: '$route');
       }
     });
 
@@ -52,14 +61,21 @@ void main() {
       }
     });
 
-    test('the media providers are not in the proxyable set at all', () {
-      // Belt and braces with the route check above: even if a route were
-      // misclassified, there is no upstream entry for these, so the server
-      // would refuse them.
-      for (final provider in ['heygen', 'elevenlabs', 'flux', 'replicate', 'fal']) {
+    test('the image-only hosts are still not proxyable', () {
+      // Flux, Replicate and fal have no entry in the proxy's host table, so
+      // there is nothing to forward to and routing must never offer them on a
+      // membership. `_spendable()` intersects with this set for exactly that
+      // reason — the alternative is a call with an empty credential and a 401
+      // the app reports as a bad key.
+      for (final provider in ['flux', 'replicate', 'fal']) {
         expect(proxyableProviders.contains(provider), isFalse,
             reason: provider);
       }
+    });
+
+    test('the media providers that do have hosts are proxyable', () {
+      expect(proxyableProviders, contains('heygen'));
+      expect(proxyableProviders, contains('elevenlabs'));
     });
 
     test('the text providers are', () {

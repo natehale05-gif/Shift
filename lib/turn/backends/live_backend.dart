@@ -781,10 +781,15 @@ class RealChatService implements ChatService {
   /// with an "Open in Heygen" link and the real thumbnail as the poster.
   Future<({VideoResult? video, String? problem})> _tryHeygenVideo(
       String script) async {
-    if (!keys.hasKey('heygen')) return (video: null, problem: null);
+    // `_canUse`, not `keys.hasKey`: a membership pays for avatars now, and
+    // gating on a stored key is what kept every media route on the simulation
+    // for a member who had one.
+    if (!_canUse('heygen')) return (video: null, problem: null);
+    final access = await _accessFor('heygen');
+    if (access == null) return (video: null, problem: null);
     try {
       final video = await _heygen.generateAvatarVideo(
-        apiKey: keys.keyFor('heygen'),
+        access: access,
         script: script,
       );
       return (
@@ -1721,7 +1726,9 @@ class RealChatService implements ChatService {
     String? problem;
     try {
       bytes = await _elevenLabs.compose(
-          apiKey: keys.keyFor('elevenlabs'), prompt: userInput);
+          access: await _accessFor('elevenlabs') ??
+              DirectKey(keys.keyFor('elevenlabs')),
+          prompt: userInput);
     } on SseHttpException catch (e) {
       problem = elevenLabsProblem(e.statusCode, e.body);
     } catch (e) {
@@ -1767,7 +1774,8 @@ class RealChatService implements ChatService {
     Uint8List? bytes;
     try {
       bytes = await _openAiVideo.render(
-          apiKey: keys.keyFor('openai'), prompt: userInput);
+          access: await _accessFor('openai') ?? DirectKey(keys.keyFor('openai')),
+          prompt: userInput);
     } on SseHttpException catch (e) {
       problem = openAiVideoProblem(e.statusCode, e.body);
     } catch (e) {
@@ -1846,7 +1854,9 @@ class RealChatService implements ChatService {
     if (voiceId != 'elevenlabs') return (audio: base, problem: null);
     try {
       final pcm = await _elevenLabs.speak(
-          apiKey: keys.keyFor('elevenlabs'), text: script);
+          access: await _accessFor('elevenlabs') ??
+              DirectKey(keys.keyFor('elevenlabs')),
+          text: script);
       if (pcm.isEmpty) {
         return (audio: base, problem: 'ElevenLabs returned no audio, so this '
             'is the built-in synthesizer.');
