@@ -83,14 +83,68 @@
     @media (prefers-reduced-motion: reduce) {
       #boot .bar i { animation: none; width: 100%; opacity: .55; }
     }
+
+    #boot-help { text-align: center; max-width: 28rem; padding: 0 1.5rem; }
+    #boot-help a { font-weight: 600; }
+    #boot-help .detail {
+      margin-top: .75rem;
+      font: 400 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      opacity: .7;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
   <div id="boot">
     <div class="mark">S</div>
     <div class="bar"><i></i></div>
-    <div>Starting SHIFT AI…</div>
+    <div id="boot-status">Starting SHIFT AI…</div>
+    <div id="boot-help"></div>
   </div>
+
+  <script>
+    // If the engine never takes over, say so.
+    //
+    // Without this the splash spins forever and the page is indistinguishable
+    // from a slow connection — which is exactly what happened while working out
+    // why the app "wasn't showing up". Measured, not assumed: serving
+    // `main.dart.wasm` with the wrong MIME type makes the loader throw
+    // `WebAssembly.compile` errors and stop, and it does **not** fall back to
+    // the JavaScript build even though one is shipped beside it.
+    //
+    // main.dart removes #boot on its first frame, so this only ever fires when
+    // something genuinely failed.
+    (function () {
+      var errors = [];
+      window.addEventListener('error', function (e) {
+        if (e && e.message) errors.push(e.message);
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        if (e && e.reason) errors.push(String(e.reason));
+      });
+
+      setTimeout(function () {
+        var boot = document.getElementById('boot');
+        if (!boot || boot.classList.contains('away')) return;
+
+        var wasm = errors.some(function (m) {
+          return m.indexOf('WebAssembly') >= 0 || m.indexOf('wasm') >= 0;
+        });
+
+        document.getElementById('boot-status').textContent =
+          wasm ? 'This browser or host could not start the app engine.'
+               : 'This is taking longer than it should.';
+
+        document.getElementById('boot-help').innerHTML =
+          '<a href="?" style="color:inherit">Reload</a>' +
+          (errors.length
+            ? '<div class="detail">' +
+              errors[0].replace(/[<>&]/g, '') +
+              '</div>'
+            : '');
+      }, 25000);
+    })();
+  </script>
 
   <script src="flutter_bootstrap.js" async></script>
 </body>
