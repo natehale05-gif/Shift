@@ -7,6 +7,16 @@ the right specialised studio automatically.
 **[▶ Try it in your browser](https://natehale05-gif.github.io/Shift/)** — no
 install, no key required. Demo mode simulates every studio.
 
+> **[SHIFT v2 is being built at `/Shift/v2/`](https://natehale05-gif.github.io/Shift/v2/)**
+> — a rebuild around six modes (Chat, Code, Visual, Design, Work, Notes),
+> targeting the App Store and Google Play as well as the web and desktop.
+>
+> It is early: the shell and the six modes exist, and each mode says plainly
+> that it is not built yet and which wave builds it. Nothing there works
+> beyond navigation. The app above is the one to use.
+>
+> See [`app/README.md`](app/README.md) for what it is and why it exists.
+
 ## Download
 
 [![macOS](https://img.shields.io/badge/macOS-Install-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-macos.dmg)

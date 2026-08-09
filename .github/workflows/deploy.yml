@@ -1,4 +1,19 @@
-name: Deploy Flutter web to GitHub Pages
+# One GitHub Pages site, two apps.
+#
+#   https://natehale05-gif.github.io/Shift/      v1 — the shipped app
+#   https://natehale05-gif.github.io/Shift/v2/   v2 — the rebuild in progress
+#
+# **Why one workflow rather than two.** `actions/deploy-pages` publishes a
+# single artifact that *replaces* the whole site. Two workflows each uploading
+# their own tree would not coexist — the second to finish would delete the
+# first, and which one that is would depend on runner scheduling. So both apps
+# are built here and assembled into one tree before a single deploy.
+#
+# **Why v1 keeps the root.** The desktop installers check for updates against
+# it and the README's download buttons point at it. v2 currently renders six
+# empty states, so promoting it would replace a working app with a shell. The
+# swap is one line in the `assemble` step when v2 is ready.
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -17,7 +32,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  # v1, at the repository root. Frozen: its Flutter version is pinned
+  # separately from v2's because it is not being upgraded.
+  build-v1:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,22 +64,14 @@ jobs:
           python3 tool/scan_proxy_providers.py
 
       # --no-web-resources-cdn bundles CanvasKit locally instead of loading it
-      # from gstatic, so the app boots even where that CDN is blocked or slow —
-      # consistent with the app's CDN-free design (bundled fonts + mermaid).
+      # from gstatic, so the app boots even where that CDN is blocked or slow.
+      #
+      # The dart-defines are passed only when both repository variables are
+      # actually set. They were once passed unconditionally and had never been
+      # set, so every deploy compiled `SHIFT_SUPABASE_URL=""` — which is not
+      # "no opinion", it is "there is no backend", and the app correctly hid
+      # its account section with nothing to say why.
       - name: Build web
-        # The project's URL and anon key now live in lib/backend/
-        # backend_config.dart, so an ordinary build is configured and this step
-        # only has to get out of the way.
-        #
-        # It did not, before: it passed the repository variables
-        # unconditionally, and they had never been set — so every deploy
-        # compiled `SHIFT_SUPABASE_URL=""`, which is not "no opinion", it is
-        # "there is no backend". The app hid its account section exactly as it
-        # is supposed to when unconfigured, and sign-in was missing from the
-        # site with nothing to say why. An empty override is the one value that
-        # must never be passed by accident, so it is now passed only when both
-        # variables are actually set — which is still how a staging project or
-        # a self-hosted stack would be pointed at.
         run: |
           defines=""
           if [ -n "${{ vars.SHIFT_SUPABASE_URL }}" ] \
@@ -74,19 +83,100 @@ jobs:
           flutter build web --release --no-web-resources-cdn \
             --base-href "/${{ github.event.repository.name }}/" $defines
 
-      # Belt-and-suspenders SPA fallback. The app itself never changes the
-      # browser URL (single-route IndexedStack navigation), so this normally
-      # shouldn't matter, but it protects against a stray deep link 404-ing
-      # on GitHub Pages' static hosting.
-      - name: Add SPA fallback
-        run: cp build/web/index.html build/web/404.html
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-v1
+          path: build/web
+          retention-days: 1
+
+  # v2, under /v2/. Its own Flutter version, its own gate.
+  build-v2:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: python3 tool/scan_conditional_imports.py
+
+      # The base href has to match where the app is actually served from, or
+      # every asset request 404s against the site root. Verified locally under
+      # this exact subpath before it was written here.
+      - name: Build web
+        run: |
+          flutter build web --wasm --release --no-web-resources-cdn \
+            --base-href "/${{ github.event.repository.name }}/v2/"
+
+      - name: Assert the shipped HTML is actually shippable
+        run: |
+          set -euo pipefail
+
+          grep -q 'name="viewport"' build/web/index.html \
+            || { echo "::error::no viewport meta tag — every phone will render at ~980px"; exit 1; }
+
+          grep -q '<base href="/${{ github.event.repository.name }}/v2/"' build/web/index.html \
+            || { echo "::error::wrong base href — every asset will 404 under the subpath"; exit 1; }
+
+          grep -q '"useLocalCanvasKit":true' build/web/flutter_bootstrap.js \
+            || { echo "::error::build config does not use a local engine — it will fetch from gstatic at runtime"; exit 1; }
+
+          test -f build/web/canvaskit/skwasm.wasm \
+            || { echo "::error::the engine is not in the build output"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: site-v2
+          path: app/build/web
+          retention-days: 1
+
+  assemble:
+    needs: [build-v1, build-v2]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-v1
+          path: site
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: site-v2
+          path: site/v2
+
+      # A belt-and-suspenders SPA fallback for each app. Neither changes the
+      # browser URL itself, but a stray deep link would otherwise 404 against
+      # static hosting. v2 gets its own, because a 404 under /v2/ served with
+      # v1's HTML would boot the wrong app at the wrong base href.
+      - name: SPA fallbacks
+        run: |
+          set -euo pipefail
+          cp site/index.html site/404.html
+          cp site/v2/index.html site/v2/404.html
+
+      - name: Assert both apps are present and distinct
+        run: |
+          set -euo pipefail
+          grep -q '<base href="/Shift/"' site/index.html \
+            || { echo "::error::v1 is missing or has the wrong base href"; exit 1; }
+          grep -q '<base href="/Shift/v2/"' site/v2/index.html \
+            || { echo "::error::v2 is missing or has the wrong base href"; exit 1; }
+          echo "v1 $(du -sh site --exclude=site/v2 | cut -f1) · v2 $(du -sh site/v2 | cut -f1)"
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: site
 
   deploy:
-    needs: build
+    needs: assemble
     runs-on: ubuntu-latest
     environment:
       name: github-pages
