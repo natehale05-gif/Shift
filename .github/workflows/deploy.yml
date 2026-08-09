@@ -81,7 +81,7 @@ jobs:
             echo "Overriding the built-in project with the repository variables."
           fi
           flutter build web --release --no-web-resources-cdn \
-            --base-href "/${{ github.event.repository.name }}/" $defines
+            --base-href "/${{ github.event.repository.name }}/v1/" $defines
 
       - uses: actions/upload-artifact@v4
         with:
@@ -114,7 +114,7 @@ jobs:
       - name: Build web
         run: |
           flutter build web --wasm --release --no-web-resources-cdn \
-            --base-href "/${{ github.event.repository.name }}/v2/"
+            --base-href "/${{ github.event.repository.name }}/"
 
       - name: Assert the shipped HTML is actually shippable
         run: |
@@ -123,7 +123,7 @@ jobs:
           grep -q 'name="viewport"' build/web/index.html \
             || { echo "::error::no viewport meta tag — every phone will render at ~980px"; exit 1; }
 
-          grep -q '<base href="/${{ github.event.repository.name }}/v2/"' build/web/index.html \
+          grep -q '<base href="/${{ github.event.repository.name }}/"' build/web/index.html \
             || { echo "::error::wrong base href — every asset will 404 under the subpath"; exit 1; }
 
           grep -q '"useLocalCanvasKit":true' build/web/flutter_bootstrap.js \
@@ -144,15 +144,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # v2 owns the root, v1 sits under /v1/.
+      #
+      # It was the other way round, and the reason given for it was wrong: the
+      # plan said the desktop installers update against v1 at the root. They
+      # do not — `lib/core/update/update_check.dart` asks
+      # api.github.com/repos/.../releases/latest, and nothing installed cares
+      # what Pages serves.
+      #
+      # What the old arrangement actually cost: README's "Try it in your
+      # browser" button points at the root, so every visit — including the
+      # user's, three times — landed on v1 and looked like v2 had not
+      # deployed. Whatever address someone already has now leads to v2.
       - uses: actions/download-artifact@v4
         with:
-          name: site-v1
+          name: site-v2
           path: site
 
       - uses: actions/download-artifact@v4
         with:
-          name: site-v2
-          path: site/v2
+          name: site-v1
+          path: site/v1
 
       # This used to be `cp site/index.html site/404.html`, an SPA fallback,
       # with a second copy under v2/ whose comment named the risk exactly —
@@ -169,14 +181,47 @@ jobs:
       - name: A 404 that looks like a 404
         run: cp .github/pages/404.html site/404.html
 
-      - name: Assert both apps are present and distinct
+      # /Shift/v2/ is in the README, in this repo's history and in the user's
+      # browser history. Left alone it would 404 the moment v2 moved, which is
+      # trading one wrong destination for another.
+      - name: Keep the old v2 address working
         run: |
           set -euo pipefail
+          mkdir -p site/v2
+          cat > site/v2/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="0; url=/Shift/">
+            <title>SHIFT AI moved here</title>
+          </head>
+          <body style="font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2rem">
+            <p>SHIFT AI is now at <a href="/Shift/">/Shift/</a>.</p>
+          </body>
+          </html>
+          HTML
+
+      # Asserts *which app* is at each path, not merely that something is.
+      #
+      # The check this replaces compared each index's base href to its own
+      # path — which stays true for either app at the root, so after the swap
+      # it could not have told v1 from v2. That is the failure shape this
+      # branch keeps meeting: a check that cannot fail in the case it exists
+      # for. The `shift-app` meta tag is in both templates for this reason.
+      - name: Assert the right app is at the right path
+        run: |
+          set -euo pipefail
+          grep -q 'name="shift-app" content="v2"' site/index.html \
+            || { echo "::error::the root is not v2"; exit 1; }
+          grep -q 'name="shift-app" content="v1"' site/v1/index.html \
+            || { echo "::error::/v1/ is not v1"; exit 1; }
           grep -q '<base href="/Shift/"' site/index.html \
-            || { echo "::error::v1 is missing or has the wrong base href"; exit 1; }
-          grep -q '<base href="/Shift/v2/"' site/v2/index.html \
-            || { echo "::error::v2 is missing or has the wrong base href"; exit 1; }
-          echo "v1 $(du -sh site --exclude=site/v2 | cut -f1) · v2 $(du -sh site/v2 | cut -f1)"
+            || { echo "::error::v2 has the wrong base href"; exit 1; }
+          grep -q '<base href="/Shift/v1/"' site/v1/index.html \
+            || { echo "::error::v1 has the wrong base href"; exit 1; }
+          echo "v2 $(du -sh site --exclude=site/v1 | cut -f1) · v1 $(du -sh site/v1 | cut -f1)"
 
       - uses: actions/upload-pages-artifact@v3
         with:

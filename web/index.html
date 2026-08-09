@@ -28,6 +28,11 @@
         content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#F5F4EF" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#1A1A1C" media="(prefers-color-scheme: dark)">
+  <!-- Which app this is. See the matching tag in app/web/index.html: the two
+       builds share a name, an icon and a splash, so nothing on the page said
+       which one had loaded. `tool/verify_site.sh` asserts on it. -->
+  <meta name="shift-app" content="v1">
+
   <meta name="description"
         content="SHIFT AI — one studio, every AI tool. A middleware AI that routes your request to the right specialized studio.">
 

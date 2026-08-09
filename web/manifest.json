@@ -1,6 +1,6 @@
 {
-    "name": "SHIFT AI",
-    "short_name": "SHIFT AI",
+    "name": "SHIFT AI v1",
+    "short_name": "SHIFT v1",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#F5F4EF",

@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
 #
-# What the deployed site actually serves — asserted from a machine that can
-# reach it.
+# What the deployed site actually serves, and where the README sends people.
 #
-# Every check before this one verified the *artifact*: that the bytes uploaded
-# contained two apps with the right base hrefs. All of them passed while the
-# reported symptom — "/Shift/v2/ shows the old app" — was live. They could not
-# see the published site, because this sandbox's proxy blocks *.github.io, and
-# that was allowed to stand as "unverifiable" when the CI runner has no such
-# restriction and was simply never asked.
+# The second half is the one that was missing, and it is the one that mattered.
+# This script was written to settle "I'm not seeing v2 on Pages" and it checked
+# the site — correctly, and it passed — while the actual fault was that
+# `README.md`'s "Try it in your browser" button pointed at v1. Three rounds
+# went into a service worker, a wasm MIME type and a cached 404, and the one
+# artifact standing between a person and the app was never checked at all.
 #
-# The last check is the one that matters most and is the least obvious: a
-# missing path must come back *looking* missing. The site's 404 page used to be
-# a copy of v1's index.html, so every wrong URL under /Shift/ answered with v1
-# and booted it. A 404 wearing a working app's face is indistinguishable from
-# the app being at that URL.
+# So: assert *which app* answers each URL, and assert that every link in the
+# README goes where it claims. A check of the destination is not a check of the
+# signpost.
 #
 # Usage:
 #   tool/verify_site.sh https://natehale05-gif.github.io/Shift/
@@ -41,6 +38,7 @@ esac
 # be checked with the same script that checks /Shift/.
 base="/$(printf '%s' "$site" | sed -E 's#^[a-z]+://[^/]+/##')"
 
+readme="$(dirname "$0")/../README.md"
 retry="${VERIFY_RETRY:-10}"
 deadline=$(( $(date +%s) + ${VERIFY_TIMEOUT:-120} ))
 
@@ -63,47 +61,73 @@ probe() {
 #
 # The first live run of this script passed in under a second and printed one
 # line of success — indistinguishable, from the outside, from a script that
-# silently did nothing. Six requests in 400 ms against GitHub's own CDN is
-# plausible, and the sizes bear it out, but "plausible" is not the standard
-# this branch has earned. The observations are the record.
+# silently did nothing. The observations are the record.
 note() { printf '  %-46s %s\n' "$1" "$2"; }
+
+# Which of the two builds answered. Both apps share a name, an icon and a
+# splash screen, so this tag is the only thing that distinguishes them — and
+# comparing each base href to its own path, which is what this used to do,
+# stays true for *either* app at the root.
+app_marker() {
+  sed -n 's/.*name="shift-app" content="\([^"]*\)".*/\1/p' "$tmp/body" | head -1
+}
+
+# A README link, re-pointed at the site under test.
+#
+# In CI the site under test *is* the canonical URL, so this is the identity
+# and the real link is fetched. Locally it turns the published address into
+# the equivalent path on the replica — which is what makes this check runnable
+# at all here, since this sandbox's proxy blocks *.github.io. The path is the
+# part that goes wrong; the host has never been the problem.
+against_site() {
+  local rest
+  rest=$(printf '%s' "$1" | sed -E 's#^https?://[^/]+/[^/]+/##')
+  printf '%s%s' "$site" "$rest"
+}
 
 run_checks() {
   failures=()
 
   probe "$site"
-  note "$site" "HTTP $status · $ctype"
+  note "$site" "HTTP $status · $(app_marker)"
   [ "$status" = 200 ] \
-    || failures+=("v1: $site -> HTTP $status, want 200")
+    || failures+=("root: $site -> HTTP $status, want 200")
+  [ "$(app_marker)" = 'v2' ] \
+    || failures+=("root: $site serves '$(app_marker)', not v2 — this is the exact fault that had the user looking at the old app")
   grep -q "<base href=\"$base\"" "$tmp/body" \
-    || failures+=("v1: $site does not carry <base href=\"$base\">")
+    || failures+=("root: $site does not carry <base href=\"$base\">")
 
-  # The check that was failing when this script was written. If /v2/ is absent
-  # from the served tree, this is where it shows up — and with an honest 404
-  # page it shows up as a 404 rather than as v1 booting.
-  probe "${site}v2/"
-  note "${site}v2/" "HTTP $status · $ctype"
+  probe "${site}v1/"
+  note "${site}v1/" "HTTP $status · $(app_marker)"
   [ "$status" = 200 ] \
-    || failures+=("v2: ${site}v2/ -> HTTP $status, want 200")
-  grep -q "<base href=\"${base}v2/\"" "$tmp/body" \
-    || failures+=("v2: ${site}v2/ answered with something that is not v2")
+    || failures+=("v1: ${site}v1/ -> HTTP $status, want 200")
+  [ "$(app_marker)" = 'v1' ] \
+    || failures+=("v1: ${site}v1/ serves '$(app_marker)', not v1")
 
-  probe "${site}v2/flutter_bootstrap.js"
-  note "${site}v2/flutter_bootstrap.js" "HTTP $status · $ctype"
+  probe "${site}flutter_bootstrap.js"
+  note "${site}flutter_bootstrap.js" "HTTP $status · $ctype"
   [ "$status" = 200 ] \
-    || failures+=("v2 loader: ${site}v2/flutter_bootstrap.js -> HTTP $status, want 200")
+    || failures+=("loader: HTTP $status, want 200")
 
   # Measured, not assumed: a wrong MIME here does not degrade to the JS build
   # shipped beside it. The loader throws on WebAssembly.compile and stops, and
   # the splash spins forever.
-  probe "${site}v2/main.dart.wasm"
-  note "${site}v2/main.dart.wasm" "HTTP $status · $ctype · $(wc -c < "$tmp/body") bytes"
+  probe "${site}main.dart.wasm"
+  note "${site}main.dart.wasm" \
+    "HTTP $status · $ctype · $(wc -c < "$tmp/body") bytes"
   [ "$status" = 200 ] \
-    || failures+=("v2 engine: ${site}v2/main.dart.wasm -> HTTP $status, want 200")
+    || failures+=("engine: ${site}main.dart.wasm -> HTTP $status, want 200")
   case "$ctype" in
     application/wasm*) ;;
-    *) failures+=("v2 engine: served as '$ctype', not application/wasm — the loader refuses it and the app never boots") ;;
+    *) failures+=("engine: served as '$ctype', not application/wasm — the loader refuses it and the app never boots") ;;
   esac
+
+  # The address v2 used to live at. It is in the README, in this repo's
+  # history and in a browser history; it must lead somewhere.
+  probe "${site}v2/"
+  note "${site}v2/ (moved)" "HTTP $status"
+  [ "$status" = 200 ] \
+    || failures+=("the old v2 address -> HTTP $status; it should redirect, not 404")
 
   # Cache-busting suffix so a previously-cached 404 cannot answer this.
   probe "${site}no-such-path-$(date +%s)/"
@@ -116,12 +140,42 @@ run_checks() {
     failures+=("missing path: the 404 body is an application shell — a missing page is indistinguishable from a working one")
   fi
 
+  # --- the signpost, not the destination -----------------------------------
+  #
+  # Every published link in the README has to resolve, and the one people
+  # actually press has to serve the app it advertises.
+  if [ -f "$readme" ]; then
+    local try
+    try=$(grep -o 'Try it in your browser\](https://[^)]*)' "$readme" \
+          | sed -E 's/.*\((.*)\)/\1/' | head -1)
+
+    if [ -z "$try" ]; then
+      failures+=("README has no 'Try it in your browser' link to check")
+    else
+      probe "$(against_site "$try")"
+      note "README 'Try it' -> $try" "HTTP $status · $(app_marker)"
+      [ "$status" = 200 ] \
+        || failures+=("README 'Try it' link -> HTTP $status")
+      [ "$(app_marker)" = 'v2' ] \
+        || failures+=("README 'Try it' link serves '$(app_marker)' — it advertises the current app and points at another one")
+    fi
+
+    while read -r url; do
+      [ -n "$url" ] || continue
+      probe "$(against_site "$url")"
+      note "README link $url" "HTTP $status"
+      [ "$status" = 200 ] \
+        || failures+=("README links to $url, which answers HTTP $status")
+    done < <(grep -o 'https://natehale05-gif\.github\.io[^)" ]*' "$readme" \
+             | sort -u)
+  fi
+
   [ ${#failures[@]} -eq 0 ]
 }
 
 while :; do
   if run_checks; then
-    echo "$site and ${site}v2/ are both what they claim to be."
+    echo "$site serves v2, ${site}v1/ serves v1, and the README agrees."
     exit 0
   fi
   now=$(date +%s)

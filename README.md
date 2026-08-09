@@ -5,15 +5,22 @@ an Apple product. Talk to it like you would a person — it routes your request 
 the right specialised studio automatically.
 
 **[▶ Try it in your browser](https://natehale05-gif.github.io/Shift/)** — no
-install, no key required. Demo mode simulates every studio.
+install, no key required. This is **v2**, the rebuild: six modes (Chat, Code,
+Visual, Design, Work, Notes), targeting the App Store and Google Play as well
+as the web and desktop.
 
-> **[SHIFT v2 is being built at `/Shift/v2/`](https://natehale05-gif.github.io/Shift/v2/)**
-> — a rebuild around six modes (Chat, Code, Visual, Design, Work, Notes),
-> targeting the App Store and Google Play as well as the web and desktop.
+It is early, and worth saying plainly rather than discovering: the shell and
+the six modes exist and each mode says which wave builds it. Nothing works
+beyond navigation yet — the engine underneath it is being wired up now.
+
+> **[SHIFT v1 is at `/Shift/v1/`](https://natehale05-gif.github.io/Shift/v1/)**
+> — the finished app: eleven studios, artifacts, projects, demo mode. Use it
+> if you want something that works today. It is frozen; no new features go
+> into it.
 >
-> It is early: the shell and the six modes exist, and each mode says plainly
-> that it is not built yet and which wave builds it. Nothing there works
-> beyond navigation. The app above is the one to use.
+> The two swapped places, because this link is the one people press and it had
+> been pointing at v1 while v2 was reported missing. `tool/verify_site.sh` now
+> checks that the button above serves the app it advertises.
 >
 > See [`app/README.md`](app/README.md) for what it is and why it exists.
 

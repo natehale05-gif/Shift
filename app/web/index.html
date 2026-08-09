@@ -12,6 +12,15 @@
   <meta name="viewport"
         content="width=device-width, initial-scale=1, viewport-fit=cover">
 
+  <!-- Which app this is.
+       Two builds are published from this repo and they share a name, an icon
+       and a splash screen, so "which one am I looking at" was not answerable
+       from the page. `tool/verify_site.sh` asserts on this, because the check
+       it replaces — that the base href matches the path — stays true for
+       either app at the root and so could not tell them apart at all.
+       That gap cost three rounds of investigation. -->
+  <meta name="shift-app" content="v2">
+
   <meta name="description"
         content="SHIFT AI — chat, code, images, design, work and notes in one app.">
 

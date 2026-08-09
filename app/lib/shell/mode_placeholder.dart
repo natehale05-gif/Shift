@@ -82,6 +82,19 @@ class ModePlaceholder extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // Which app this is, on screen.
+              //
+              // Two builds are published from this repo and they share a name,
+              // an icon and a splash. When "am I looking at the new one?" came
+              // up, nothing in either app could answer it — so the question
+              // was settled by inspecting HTML, three times, while the real
+              // fault was a README link. A label costs one line.
+              const SizedBox(height: Space.lg),
+              Text(
+                'SHIFT AI v2 · rebuild in progress',
+                style: text.labelSmall?.copyWith(color: c.textFaint),
+              ),
             ],
           ),
         ),
