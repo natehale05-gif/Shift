@@ -9,6 +9,20 @@
 # packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
+analyzer:
+  exclude:
+    # v2 lives at `app/` and is a separate package with its own SDK
+    # constraint, its own dependencies and its own analysis_options. Without
+    # this, the root analyzer folds every file under `app/` into *this*
+    # package and reports a hundred undefined identifiers — v2's code checked
+    # against v1's dependency set.
+    #
+    # It does not reproduce on a machine that has run `flutter pub get` inside
+    # `app/`, because the resulting `app/.dart_tool` makes the analyzer treat
+    # it as its own package. So it appears only on a clean checkout, which is
+    # to say: only in CI, which is exactly where it did appear.
+    - app/**
+
 linter:
   # The lint rules applied to this project can be customized in the
   # section below to disable rules from the `package:flutter_lints/flutter.yaml`
