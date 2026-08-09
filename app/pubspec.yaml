@@ -10,11 +10,13 @@ environment:
   sdk: ^3.12.0
 
 dependencies:
+  fetch_client: ^1.2.1
   flutter:
     sdk: flutter
 
   # State. Deliberately not a heavyweight framework: the app's own stores are
   # ChangeNotifiers, and this is the smallest thing that publishes them.
+  http: ^1.6.0
   provider: ^6.1.2
 
   # Browser DOM access for the boot splash. `dart:html` is deprecated in
