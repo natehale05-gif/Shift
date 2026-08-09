@@ -142,6 +142,8 @@ jobs:
     needs: [build-v1, build-v2]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: site-v1
@@ -152,15 +154,20 @@ jobs:
           name: site-v2
           path: site/v2
 
-      # A belt-and-suspenders SPA fallback for each app. Neither changes the
-      # browser URL itself, but a stray deep link would otherwise 404 against
-      # static hosting. v2 gets its own, because a 404 under /v2/ served with
-      # v1's HTML would boot the wrong app at the wrong base href.
-      - name: SPA fallbacks
-        run: |
-          set -euo pipefail
-          cp site/index.html site/404.html
-          cp site/v2/index.html site/v2/404.html
+      # This used to be `cp site/index.html site/404.html`, an SPA fallback,
+      # with a second copy under v2/ whose comment named the risk exactly —
+      # "a 404 under /v2/ served with v1's HTML would boot the wrong app".
+      #
+      # Both lines were wrong. Actions-deployed Pages serves only the *site
+      # root* 404, so the v2 copy did nothing at all, and the root copy meant
+      # every missing path under /Shift/ answered with v1 and booted it. That
+      # is how "/Shift/v2/ shows the old app" reached a phone and stayed
+      # unexplained for days: a 404 wearing a working app's face.
+      #
+      # Neither app rewrites its own URL, so the fallback was never load
+      # bearing. The failure mode it created was.
+      - name: A 404 that looks like a 404
+        run: cp .github/pages/404.html site/404.html
 
       - name: Assert both apps are present and distinct
         run: |
@@ -181,6 +188,26 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Everything above this job checks the *artifact*. All of it passed while
+  # "/Shift/v2/ shows the old app" was live on a phone, because none of it can
+  # see the published site — and the sandbox those checks were written in
+  # cannot reach *.github.io, which was allowed to stand as "unverifiable"
+  # when this runner has no such restriction and was simply never asked.
+  #
+  # So: ask. `tool/verify_site.sh` fetches the deployed origin and asserts what
+  # it actually serves — including that a missing path comes back looking
+  # missing. Each of its assertions was broken on purpose against a local
+  # replica of this tree before it was trusted here.
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the live site
+        run: tool/verify_site.sh "${{ needs.deploy.outputs.url }}"

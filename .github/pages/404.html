@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Not found — SHIFT AI</title>
+
+  <!--
+    This page is deliberately *not* an application shell.
+
+    It used to be `cp site/index.html site/404.html` — a copy of v1's HTML,
+    kept as an SPA fallback for deep links. GitHub Pages serves the site-root
+    404 for every missing path under the site, so every wrong URL under
+    /Shift/ answered with v1 and booted it. A missing page that boots a
+    working app is indistinguishable from the app being at that URL, which is
+    how "/Shift/v2/ shows the old app" was reported and why it took days to
+    place. Neither app rewrites its own URL, so the fallback was never load
+    bearing; the failure mode it created was.
+
+    No base-href element here, on purpose: `tool/verify_site.sh` asserts a 404
+    body does not carry one, which is what makes "the 404 page is impersonating
+    an app again" a red build rather than a bug report. That assertion caught
+    this very comment on its first run, when the sentence above quoted the tag
+    it greps for — so the wording here is load bearing, and the check earned
+    some trust by failing on something real before it had ever seen the site.
+  -->
+  <style>
+    :root {
+      --ground: #FBFAFD;
+      --ink: #1A1626;
+      --muted: #6B6280;
+      --line: rgba(128, 118, 150, .22);
+      --accent: #D648E8;
+      --accent-2: #4A7DFF;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ground: #0A0714;
+        --ink: #F2EFF8;
+        --muted: #A79CBF;
+        --line: rgba(167, 156, 191, .24);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; min-height: 100%; }
+    body {
+      background: var(--ground);
+      color: var(--ink);
+      font: 400 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1.5rem;
+    }
+
+    main { width: 100%; max-width: 30rem; }
+
+    .mark {
+      width: 60px; height: 60px;
+      border-radius: 18px;
+      background: linear-gradient(140deg, var(--accent), var(--accent-2));
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 32px; font-weight: 700; letter-spacing: -1px;
+      margin-bottom: 1.75rem;
+    }
+
+    h1 {
+      margin: 0 0 .6rem;
+      font-size: 1.5rem;
+      font-weight: 650;
+      letter-spacing: -.01em;
+      text-wrap: balance;
+    }
+
+    p { margin: 0 0 1.75rem; color: var(--muted); }
+    code {
+      font: 400 .9em/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      color: var(--ink);
+      word-break: break-all;
+    }
+
+    nav { display: flex; flex-direction: column; gap: .75rem; }
+
+    a.card {
+      display: flex;
+      align-items: baseline;
+      gap: .75rem;
+      padding: .95rem 1.1rem;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color .18s ease, transform .18s ease;
+    }
+    a.card:hover, a.card:focus-visible { border-color: var(--accent); }
+    a.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    a.card strong { font-weight: 600; }
+    a.card span { color: var(--muted); font-size: .9rem; }
+
+    @media (prefers-reduced-motion: reduce) {
+      a.card { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark">S</div>
+    <h1>That page isn&rsquo;t here.</h1>
+    <p>Nothing is published at <code id="path"></code>. Both apps are below.</p>
+    <nav>
+      <a class="card" href="/Shift/">
+        <strong>SHIFT AI</strong>
+        <span>the shipped app</span>
+      </a>
+      <a class="card" href="/Shift/v2/">
+        <strong>SHIFT AI v2</strong>
+        <span>the rebuild, in progress</span>
+      </a>
+    </nav>
+  </main>
+
+  <script>
+    // Shown rather than guessed: the whole reason this page exists is that a
+    // wrong URL used to look like a working app, so it should say which URL.
+    document.getElementById('path').textContent = location.pathname;
+  </script>
+</body>
+</html>
