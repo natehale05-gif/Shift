@@ -59,10 +59,20 @@ probe() {
   [ -n "$status" ] || status=000
 }
 
+# Every probe reports what it saw, not merely whether it liked it.
+#
+# The first live run of this script passed in under a second and printed one
+# line of success — indistinguishable, from the outside, from a script that
+# silently did nothing. Six requests in 400 ms against GitHub's own CDN is
+# plausible, and the sizes bear it out, but "plausible" is not the standard
+# this branch has earned. The observations are the record.
+note() { printf '  %-46s %s\n' "$1" "$2"; }
+
 run_checks() {
   failures=()
 
   probe "$site"
+  note "$site" "HTTP $status · $ctype"
   [ "$status" = 200 ] \
     || failures+=("v1: $site -> HTTP $status, want 200")
   grep -q "<base href=\"$base\"" "$tmp/body" \
@@ -72,12 +82,14 @@ run_checks() {
   # from the served tree, this is where it shows up — and with an honest 404
   # page it shows up as a 404 rather than as v1 booting.
   probe "${site}v2/"
+  note "${site}v2/" "HTTP $status · $ctype"
   [ "$status" = 200 ] \
     || failures+=("v2: ${site}v2/ -> HTTP $status, want 200")
   grep -q "<base href=\"${base}v2/\"" "$tmp/body" \
     || failures+=("v2: ${site}v2/ answered with something that is not v2")
 
   probe "${site}v2/flutter_bootstrap.js"
+  note "${site}v2/flutter_bootstrap.js" "HTTP $status · $ctype"
   [ "$status" = 200 ] \
     || failures+=("v2 loader: ${site}v2/flutter_bootstrap.js -> HTTP $status, want 200")
 
@@ -85,6 +97,7 @@ run_checks() {
   # shipped beside it. The loader throws on WebAssembly.compile and stops, and
   # the splash spins forever.
   probe "${site}v2/main.dart.wasm"
+  note "${site}v2/main.dart.wasm" "HTTP $status · $ctype · $(wc -c < "$tmp/body") bytes"
   [ "$status" = 200 ] \
     || failures+=("v2 engine: ${site}v2/main.dart.wasm -> HTTP $status, want 200")
   case "$ctype" in
@@ -94,6 +107,7 @@ run_checks() {
 
   # Cache-busting suffix so a previously-cached 404 cannot answer this.
   probe "${site}no-such-path-$(date +%s)/"
+  note "a path that does not exist" "HTTP $status · $ctype"
   [ "$status" = 404 ] \
     || failures+=("missing path: HTTP $status, want 404")
   # Quoted, because that is what a Flutter shell emits and prose about the tag
