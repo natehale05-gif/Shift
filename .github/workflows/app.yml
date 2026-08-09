@@ -74,13 +74,27 @@ jobs:
       - name: Assert the shipped HTML is actually shippable
         run: |
           set -euo pipefail
+
           grep -q 'name="viewport"' build/web/index.html \
             || { echo "::error::no viewport meta tag — every phone will render at ~980px"; exit 1; }
+
           test -f build/web/main.dart.wasm \
             || { echo "::error::no wasm output — the build fell back to JS"; exit 1; }
-          if grep -rq 'gstatic.com' build/web/*.js build/web/*.mjs 2>/dev/null; then
-            echo "::error::the build references gstatic — the engine is not bundled"; exit 1
-          fi
+
+          # The engine must be served from our own origin, not gstatic.
+          #
+          # The first version of this grepped the loader for the string
+          # "gstatic.com" and failed on its own first run — because that string
+          # is a *fallback constant* in the loader, guarded by
+          # `!useLocalCanvasKit`, and is dead code once the engine is bundled.
+          # Grepping for it tested nothing about behaviour.
+          #
+          # These two are the real property: the build config says the engine
+          # is local, and the engine is actually there to serve.
+          grep -q '"useLocalCanvasKit":true' build/web/flutter_bootstrap.js \
+            || { echo "::error::build config does not use a local engine — it will fetch from gstatic at runtime"; exit 1; }
+          test -f build/web/canvaskit/skwasm.wasm \
+            || { echo "::error::the engine is not in the build output"; exit 1; }
 
       - uses: actions/upload-artifact@v4
         with:

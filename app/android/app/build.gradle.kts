@@ -59,12 +59,13 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
+            // No R8 minification. It was enabled here in the first draft and
+            // failed to compile in CI; more to the point it should not have
+            // been enabled at all. A Flutter app's Java/Kotlin surface is a
+            // thin shim around AOT-compiled Dart, so shrinking it saves very
+            // little — and Flutter's own template leaves it off for that
+            // reason. Trading a working build for a marginal size win is a bad
+            // trade; revisit only if the bundle is measured and found wanting.
         }
     }
 }
