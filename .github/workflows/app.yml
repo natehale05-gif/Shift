@@ -1,0 +1,219 @@
+# SHIFT v2 — the gate for everything in `app/`.
+#
+# v1 at the repository root keeps its own workflows and its own pinned Flutter
+# (3.35.5). Nothing here touches it: v1 is frozen and keeps deploying so there
+# is always something that runs.
+#
+# Every job is path-filtered to `app/`, so v1 commits do not spend six runners.
+name: App (v2)
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'app/**'
+      - '.github/workflows/app.yml'
+  pull_request:
+    paths:
+      - 'app/**'
+      - '.github/workflows/app.yml'
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: 3.44.9
+
+defaults:
+  run:
+    working-directory: app
+
+jobs:
+  # Analyze and test first, alone, so a compile error costs one runner rather
+  # than six. Every build job waits on it.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+      # The analyzer only ever resolves the *default* branch of a conditional
+      # import, so a stale path or a drifted name in the other one passes
+      # `analyze` and fails at `flutter build web`. Verified able to fail by
+      # renaming an export on purpose, because a check that cannot fail is
+      # worse than no check.
+      - run: python3 tool/scan_conditional_imports.py
+
+  web:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # `--wasm` because it is what the app ships; `--no-web-resources-cdn`
+      # because the default fetches the engine from gstatic at runtime, which
+      # is a third-party dependency on first paint and fails closed offline.
+      - name: Build (wasm, engine bundled)
+        run: flutter build web --wasm --release --no-web-resources-cdn
+
+      # A build that succeeds and produces the wrong thing is the failure mode
+      # this catches: the viewport meta tag is missing from Flutter's own
+      # template — still, in 3.44 — and without it every phone lays the app out
+      # at ~980px and scales it down. It has silently regressed once already.
+      - name: Assert the shipped HTML is actually shippable
+        run: |
+          set -euo pipefail
+          grep -q 'name="viewport"' build/web/index.html \
+            || { echo "::error::no viewport meta tag — every phone will render at ~980px"; exit 1; }
+          test -f build/web/main.dart.wasm \
+            || { echo "::error::no wasm output — the build fell back to JS"; exit 1; }
+          if grep -rq 'gstatic.com' build/web/*.js build/web/*.mjs 2>/dev/null; then
+            echo "::error::the build references gstatic — the engine is not bundled"; exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: app/build/web
+          retention-days: 7
+
+  linux:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: GTK headers the runner does not ship
+        run: sudo apt-get update && sudo apt-get install -y ninja-build libgtk-3-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build linux --release
+
+  android:
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+
+      # Signing is wired but empty: with the secrets absent this writes
+      # nothing, Gradle finds no `key.properties`, and the release build falls
+      # back to the debug key — installable for testing, and rejected by Play,
+      # which is the honest outcome. Adding the secrets later is a settings
+      # change rather than a workflow rewrite.
+      # The `secrets` context is not available in a step-level `if`, so the
+      # presence check goes through env — the standard workaround, and the
+      # reason this is a shell conditional rather than a workflow one.
+      - name: Upload key, when there is one
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "No upload keystore configured — the release build will use the debug key."
+            echo "That is installable for testing and rejected by Play, which is the point."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+          cat > android/key.properties <<EOF
+          storeFile=upload-keystore.jks
+          storePassword=$KEYSTORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+
+      # The App Bundle is what Play takes; the APK is what a person can
+      # sideload to try it. Both, because they fail differently.
+      - run: flutter build appbundle --release
+      - run: flutter build apk --release
+
+      - name: Assert nothing Play-hostile crept into the manifest
+        run: |
+          set -euo pipefail
+          MANIFEST=android/app/src/main/AndroidManifest.xml
+          if grep -q 'REQUEST_INSTALL_PACKAGES' "$MANIFEST"; then
+            echo "::error::REQUEST_INSTALL_PACKAGES is restricted by Play and got v1 nowhere near the store"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: |
+            app/build/app/outputs/bundle/release/*.aab
+            app/build/app/outputs/flutter-apk/*.apk
+          retention-days: 7
+
+  # macOS and iOS only build on a macOS runner, and iOS is the one target that
+  # has never been built anywhere for this project — so it gets its own job
+  # rather than being bolted onto the macOS one, to keep the failure legible.
+  ios:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Toolchain, before the build, so a failure names the SDK
+        run: flutter doctor -v
+      # Unsigned. Signing needs an Apple certificate and provisioning profile,
+      # which are the user's to supply; this proves the target compiles.
+      - run: flutter build ios --release --no-codesign
+
+  macos:
+    needs: check
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter build macos --release
+
+  windows:
+    needs: check
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Toolchain, before the build
+        run: flutter doctor -v
+      - run: flutter build windows --release

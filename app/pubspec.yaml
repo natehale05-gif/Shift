@@ -1,0 +1,102 @@
+name: shift
+description: "SHIFT AI — chat, code, images, design, work and notes in one app."
+publish_to: 'none'
+
+# Bumped per wave. The build number is what the stores order releases by, so it
+# only ever goes up, independently of whether the version string does.
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State. Deliberately not a heavyweight framework: the app's own stores are
+  # ChangeNotifiers, and this is the smallest thing that publishes them.
+  provider: ^6.1.2
+
+  # Browser DOM access for the boot splash. `dart:html` is deprecated in
+  # current Flutter; this is the supported replacement.
+  web: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  # Generates the launcher icons for Android, iOS, macOS, Windows and web from
+  # one source. Run `dart run flutter_launcher_icons` after changing the
+  # artwork; the generated assets are committed so CI needs no extra step.
+  flutter_launcher_icons: ^0.14.4
+
+# The icon is the artwork supplied for the product, not an approximation of it.
+# Its plate is transparent at the corners, so every target that composites onto
+# a background gets `#0A0714` — the same ground the dark theme uses, so the app
+# and its icon are visibly the same object.
+flutter_launcher_icons:
+  image_path: assets/icon/app_icon.png
+  android: true
+  # No adaptive icon: without a transparent glyph-only foreground, Android's
+  # circular mask crops the rounded-square plate badly. The legacy square icon
+  # ships instead of a cropped one. Revisit if a glyph-only version appears.
+  ios: true
+  remove_alpha_ios: true
+  background_color_ios: "#0A0714"
+  macos:
+    generate: true
+  windows:
+    generate: true
+  web:
+    generate: true
+    background_color: "#0A0714"
+    theme_color: "#0A0714"
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # Bundled as an asset as well as generated into the platform folders,
+    # because Linux has no launcher-icon generator and its GTK runner sets the
+    # window icon from a file at runtime.
+    - assets/icon/app_icon.png
+
+  fonts:
+    # The operating face. Inter is a screen-first UI typeface, and for chrome —
+    # labels, buttons, navigation, dense lists — that is the job. Every weight
+    # bundled here is actually used; an unused weight is payload nobody reads.
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+
+    # The reading face, and its use is a rule rather than a flourish: serif
+    # where you read paragraphs (a note, a reply, a generated document), sans
+    # where you operate. That split is what keeps a tool that spans a chat
+    # thread and a code editor from feeling like two apps.
+    - family: Source Serif 4
+      fonts:
+        - asset: assets/fonts/SourceSerif4-Regular.ttf
+        - asset: assets/fonts/SourceSerif4-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/SourceSerif4-Bold.ttf
+          weight: 700
+
+    # Registered under the literal family name "monospace" on purpose.
+    # CanvasKit renders text from bundled font bytes only — it does not fall
+    # back to the browser's generic monospace stack the way HTML does, so a
+    # TextStyle asking for "monospace" resolves to nothing unless a family by
+    # that exact name is bundled. Code mode and every code block depend on it.
+    - family: monospace
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700

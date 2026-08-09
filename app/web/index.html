@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+
+  <!-- Without this, every phone lays the app out at ~980px and scales it down,
+       so a responsive layout never gets to apply. This was missing from the
+       stock Flutter template in 3.35 and is *still* missing in 3.44 — checked,
+       not assumed. It is the single highest-value line in this file. -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <meta name="description"
+        content="SHIFT AI — chat, code, images, design, work and notes in one app.">
+
+  <!-- Both, so the browser chrome matches whichever theme the visitor is in.
+       A single theme-color paints the wrong ground for half of them. -->
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FBFAFD">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0714">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SHIFT AI">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>SHIFT AI</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* The engine takes seconds to take over on a cold visit and there is no
+       removing that floor in Flutter. What *is* removable is the blank white
+       page in front of it: this paints in one frame, and main.dart takes it
+       down once the first real frame is up. */
+    html, body { margin: 0; padding: 0; height: 100%; background: #FBFAFD; }
+    @media (prefers-color-scheme: dark) {
+      html, body { background: #0A0714; }
+    }
+
+    #boot {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      font: 500 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            Helvetica, Arial, sans-serif;
+      color: #6B6280;
+      transition: opacity .28s ease;
+    }
+    @media (prefers-color-scheme: dark) { #boot { color: #A79CBF; } }
+    #boot.away { opacity: 0; pointer-events: none; }
+
+    #boot .mark {
+      width: 76px; height: 76px;
+      border-radius: 22px;
+      background: linear-gradient(140deg, #D648E8, #4A7DFF);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 40px; font-weight: 700; letter-spacing: -1px;
+    }
+
+    #boot .bar {
+      width: 132px; height: 3px; border-radius: 2px;
+      background: rgba(128, 118, 150, .22);
+      overflow: hidden;
+    }
+    #boot .bar i {
+      display: block; width: 40%; height: 100%; border-radius: 2px;
+      background: linear-gradient(90deg, #D648E8, #4A7DFF);
+      animation: slide 1.15s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(330%); }
+    }
+    /* Someone who asked the OS for less motion gets a static bar rather than
+       no feedback at all. */
+    @media (prefers-reduced-motion: reduce) {
+      #boot .bar i { animation: none; width: 100%; opacity: .55; }
+    }
+  </style>
+</head>
+<body>
+  <div id="boot">
+    <div class="mark">S</div>
+    <div class="bar"><i></i></div>
+    <div>Starting SHIFT AI…</div>
+  </div>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
