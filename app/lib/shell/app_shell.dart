@@ -1,19 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
-import '../core/device/device_class.dart';
 import 'mode.dart';
-import 'mode_pills.dart';
+import 'mode_menu.dart';
 import 'mode_placeholder.dart';
-import 'mode_rail.dart';
 import 'shell_controller.dart';
 
 /// The frame every mode lives inside.
 ///
-/// Two arrangements, chosen by device class rather than by window width — see
-/// [deviceClassOf] for why those are different questions. A rail on anything
-/// roomy (desktop and tablet, including an iPad), a row of pills on a phone.
+/// **One switcher on every device.** This was a rail on desktop and a
+/// scrolling row of pills on a phone, chosen by device class. Both are gone in
+/// favour of a single dropdown, which is simpler to hold in your head and, on
+/// the phone, fixes the thing the pills spent most of their code apologising
+/// for: six labelled destinations do not fit across a phone, so two of six
+/// were always off-screen behind a scroll.
+///
+/// The device class still decides plenty — which surface Code mode gets, most
+/// of all — so [deviceClassOf] and the override behind it stay. It just no
+/// longer decides how you change mode.
 class AppShell extends StatelessWidget {
   const AppShell({super.key});
 
@@ -21,48 +27,31 @@ class AppShell extends StatelessWidget {
   Widget build(BuildContext context) {
     final shell = context.watch<ShellController>();
 
-    // The window, in logical pixels.
-    //
-    // This started out reading `View.of(context).display.size` — the physical
-    // screen — on the reasoning that an iPad in Split View is still an iPad.
-    // Two things killed that, both found by measuring rather than reasoning:
-    //
-    // 1. `Display.size` documents itself as physical pixels, and on web it
-    //    returns logical ones. Dividing by the device pixel ratio, as the
-    //    documented contract requires, turned a 390pt phone into 130 — and
-    //    130 is a phone either way, so the bug was invisible until a wider
-    //    device landed on the wrong side of the boundary.
-    // 2. A third of an iPad genuinely cannot host a file tree, an editor and
-    //    a terminal. Demoting it to the phone surface is the better answer,
-    //    not a compromise.
-    //
-    // The invariant that actually mattered — a desktop window dragged narrow
-    // must not swap someone's IDE for a task list — is not carried by this
-    // number at all. It is carried by [deviceClassOf]'s platform arm, which
-    // answers `desktop` for a desktop OS at any size.
-    final deviceClass = deviceClassOf(
-      platform: Theme.of(context).platform,
-      shortestSide: MediaQuery.sizeOf(context).shortestSide,
-      override: shell.deviceOverride,
-    );
-
-    final body = _ModeBody(mode: shell.mode);
+    final c = context.colors;
 
     return Scaffold(
-      backgroundColor: context.colors.ground,
-      body: deviceClass.isRoomy
-          ? Row(
-              children: [
-                ModeRail(current: shell.mode, onSelect: shell.openMode),
-                Expanded(child: body),
-              ],
-            )
-          : Column(
-              children: [
-                ModePills(current: shell.mode, onSelect: shell.openMode),
-                Expanded(child: body),
-              ],
+      backgroundColor: c.ground,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // A slim bar rather than an AppBar: the modes will eventually
+            // share this row with a conversation title and per-mode actions,
+            // and Material's AppBar wants to own its own layout.
+            Container(
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: c.divider)),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: Space.sm),
+              child: Row(
+                children: [
+                  ModeMenu(current: shell.mode, onSelect: shell.openMode),
+                ],
+              ),
             ),
+            Expanded(child: _ModeBody(mode: shell.mode)),
+          ],
+        ),
+      ),
     );
   }
 }
