@@ -4,10 +4,12 @@ import 'package:provider/provider.dart';
 
 import 'core/design/theme.dart';
 import 'data/api_keys_store.dart';
+import 'data/agent_run_store.dart';
 import 'data/agent_store.dart';
 import 'data/artifact_store.dart';
 import 'data/conversation_store.dart';
 import 'features/chat/turn_controller.dart';
+import 'features/code/agent_runner.dart';
 import 'shell/app_shell.dart';
 import 'shell/shell_controller.dart';
 
@@ -16,6 +18,7 @@ class ShiftApp extends StatelessWidget {
   final ConversationStore conversations;
   final ArtifactStore artifacts;
   final AgentStore agents;
+  final AgentRunStore runs;
 
   const ShiftApp({
     super.key,
@@ -23,6 +26,7 @@ class ShiftApp extends StatelessWidget {
     required this.conversations,
     required this.artifacts,
     required this.agents,
+    required this.runs,
   });
 
   @override
@@ -34,6 +38,9 @@ class ShiftApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: conversations),
         ChangeNotifierProvider.value(value: artifacts),
         ChangeNotifierProvider.value(value: agents),
+        ChangeNotifierProvider(
+          create: (_) => AgentRunner(agents: agents, runs: runs, keys: keys),
+        ),
         ChangeNotifierProvider(
           create: (_) => TurnController(
             keys: keys,

@@ -37,7 +37,7 @@ void main() {
 
   /// The two rows from the reference screenshots.
   Future<void> seedInto(AgentStore agents) async {
-    await agents.addWorkspace(const GitHubWorkspace(
+    await agents.addWorkspace(const GitHubRepo(
     id: 'w1', name: 'Yoked-Church-Web-App', repo: 'n/Yoked-Church-Web-App'));
     await agents.save(Agent(
     id: 'a1',

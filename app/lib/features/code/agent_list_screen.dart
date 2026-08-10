@@ -6,8 +6,10 @@ import '../../core/design/palette.dart';
 import '../../data/agent.dart';
 import '../../data/agent_store.dart';
 import 'agent_row.dart';
+import 'agent_screen.dart';
 import 'code_chrome.dart';
 import 'code_composer.dart';
+import 'start_agent.dart';
 
 /// A filtered list of agents — All Agents, Working, Needs Attention, In Review,
 /// or the contents of one workspace.
@@ -106,7 +108,16 @@ class AgentListScreen extends StatelessWidget {
                       ],
                     ),
             ),
-            CodeComposer(onSend: (_) {}),
+            CodeComposer(
+              onSend: (text) {
+                // Inside a workspace the target is obvious. Outside one it is
+                // only obvious when there is exactly one.
+                final target = workspaceId ?? soleWorkspaceOf(store);
+                if (target == null) return reportNoWorkspace(context);
+                startAgent(context,
+                    workspaceId: target, instruction: text);
+              },
+            ),
           ],
         ),
       ),
@@ -117,6 +128,7 @@ class AgentListScreen extends StatelessWidget {
         agent: agent,
         workspaceName:
             workspaceId != null ? null : store.workspace(agent.workspaceId)?.name,
-        onOpen: () {},
+        onOpen: () => Navigator.of(context)
+            .push(codeRoute((_) => AgentScreen(agentId: agent.id))),
       );
 }

@@ -114,6 +114,51 @@ class CodeListHeader extends StatelessWidget {
   }
 }
 
+/// The header on a **detail** screen: back, a centred title, and an overflow.
+///
+/// A different shape from [CodeListHeader] on purpose — the reference uses the
+/// standard centred nav bar once you are inside something, and the large
+/// left-aligned title only at the top of a list. Two shapes, and which one you
+/// are looking at tells you where you are.
+class CodeDetailHeader extends StatelessWidget {
+  final String title;
+  final VoidCallback? onMore;
+
+  const CodeDetailHeader({super.key, required this.title, this.onMore});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+
+    return Row(
+      children: [
+        CodeCircleButton(
+          icon: Icons.chevron_left_rounded,
+          tooltip: 'Back',
+          onTap: () => Navigator.of(context).maybePop(),
+        ),
+        Expanded(
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context)
+                .textTheme
+                .titleMedium
+                ?.copyWith(color: c.text, fontWeight: FontWeight.w600),
+          ),
+        ),
+        CodeCircleButton(
+          icon: Icons.more_horiz_rounded,
+          tooltip: 'More',
+          onTap: onMore,
+        ),
+      ],
+    );
+  }
+}
+
 /// A collapsible group of rows — "Needs Attention ⌄", "Open PR ⌄".
 ///
 /// Collapsible because a workspace with forty agents is a scroll, and the

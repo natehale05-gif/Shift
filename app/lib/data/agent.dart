@@ -20,8 +20,8 @@ sealed class Workspace {
 
     return switch (raw['kind']) {
       'local' when raw['path'] is String =>
-        LocalWorkspace(id: id, name: name, path: raw['path'] as String),
-      'github' when raw['repo'] is String => GitHubWorkspace(
+        LocalFolder(id: id, name: name, path: raw['path'] as String),
+      'github' when raw['repo'] is String => GitHubRepo(
           id: id,
           name: name,
           repo: raw['repo'] as String,
@@ -34,10 +34,15 @@ sealed class Workspace {
 
 /// A real folder on this machine. Desktop only — there is nothing to point at
 /// on a phone, and offering it there would be a control that cannot work.
-class LocalWorkspace extends Workspace {
+///
+/// Named for what it is rather than `LocalWorkspace`, which is taken: the agent
+/// layer's `LocalWorkspace` is the thing that *operates* on this path. Two types
+/// with one name, one describing the choice and one doing the work, is a
+/// collision a reader has to resolve every time.
+class LocalFolder extends Workspace {
   final String path;
 
-  const LocalWorkspace({
+  const LocalFolder({
     required super.id,
     required super.name,
     required this.path,
@@ -49,11 +54,11 @@ class LocalWorkspace extends Workspace {
 }
 
 /// A repository the server holds. Every device, and the phone's only option.
-class GitHubWorkspace extends Workspace {
+class GitHubRepo extends Workspace {
   final String repo;
   final String branch;
 
-  const GitHubWorkspace({
+  const GitHubRepo({
     required super.id,
     required super.name,
     required this.repo,

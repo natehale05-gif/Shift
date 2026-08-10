@@ -14,7 +14,11 @@ import '../../core/design/palette.dart';
 /// up…" inside an agent that is already running.
 class CodeComposer extends StatefulWidget {
   final String hint;
-  final ValueChanged<String> onSend;
+
+  /// Null while there is nothing to send to — an agent that is already working.
+  /// The field goes read-only rather than disappearing, because a composer that
+  /// comes and goes makes the screen jump under a thumb that is already there.
+  final ValueChanged<String>? onSend;
 
   const CodeComposer({
     super.key,
@@ -40,10 +44,11 @@ class _CodeComposerState extends State<CodeComposer> {
   }
 
   void _send() {
+    final send = widget.onSend;
     final text = _controller.text.trim();
-    if (text.isEmpty) return;
+    if (send == null || text.isEmpty) return;
     _controller.clear();
-    widget.onSend(text);
+    send(text);
   }
 
   @override
@@ -69,6 +74,7 @@ class _CodeComposerState extends State<CodeComposer> {
             Expanded(
               child: TextField(
                 controller: _controller,
+                readOnly: widget.onSend == null,
                 style: text.bodyLarge?.copyWith(color: c.text),
                 cursorColor: c.accent,
                 onSubmitted: (_) => _send(),
