@@ -1,40 +1,41 @@
 import 'package:flutter/material.dart';
 
-/// The type system, on Apple's scale.
+/// The type system, on Claude's scale.
 ///
-/// ## The face
+/// ## The faces, and an honest limit
 ///
-/// On iOS and macOS the UI face is **the system font** — San Francisco —
-/// reached by leaving `fontFamily` null, which is how Flutter resolves
-/// `.SF Pro Text`. Not a lookalike: SF is optically sized, its numerals align,
-/// and it is the single strongest signal that an app belongs on the device.
-/// Bundling a substitute there would be shipping a worse copy of a font the
-/// phone already has, and paying for it in download size.
+/// Claude's app uses **one family everywhere** — the same interface on an
+/// iPhone as on a Mac. So this deliberately does *not* follow the platform:
+/// an earlier version resolved San Francisco on Apple devices, which is the
+/// right instinct for a native app and the wrong one for matching Claude,
+/// where the point is that the app looks the same on every device.
 ///
-/// Everywhere else — Android, web, Windows, Linux — SF is neither present nor
-/// licensed for redistribution, so **Inter** stands in. It was drawn against
-/// the same brief and is the closest thing that can legally ship. CanvasKit
-/// renders only bundled bytes and will not fall back to a CSS stack, so on the
-/// web this must be a real bundled family or it is tofu.
+/// **The real typefaces cannot ship here.** Claude's interface face and its
+/// serif are licensed commercial fonts; redistributing them inside this app
+/// would be a licence breach, not a technicality. **Inter** and **Source
+/// Serif 4** are the closest open substitutes and are what actually ship.
+/// The proportions, weights and rhythm below are matched; the letterforms are
+/// not identical and cannot be. Said plainly here so nobody later reads
+/// "identical to Claude" and wonders why the *g* is a different shape.
 ///
-/// [uiFamilyFor] is therefore a function of the platform rather than a
-/// constant, which is the one wrinkle this file exists to hide.
+/// | Face | Job |
+/// |---|---|
+/// | Inter | operating the app — labels, buttons, navigation |
+/// | Source Serif 4 | reading at length — replies, notes, generated prose |
+/// | monospace | code, diffs, anything columnar |
 ///
 /// ## The scale
 ///
-/// Apple's, not an invented one: 34 / 28 / 22 / 20 / 17 / 16 / 15 / 13 / 12,
-/// with SF's own tracking at each size — display sizes tighten, small sizes
-/// loosen. Guessing at these is what makes an app read as *nearly* native,
-/// which is worse than not trying.
-///
-/// **17pt is body.** Every other platform's default is 14–16, and it is the
-/// difference most often missed: a 14pt iOS app looks cramped in a way people
-/// notice without being able to name.
+/// Claude's, which is a comfortable-reading scale rather than a platform one:
+/// **16 is body**, headings step gently, and long-form prose gets its own
+/// larger, looser setting in [proseStyle]. Tracking is near zero except where
+/// display sizes need pulling in — Inter is loose by default at 28pt and up.
 class ShiftType {
   const ShiftType._();
 
-  /// Inter, for platforms without SF.
-  static const fallbackUi = 'Inter';
+  /// The interface face, on every platform. See the note above on why this is
+  /// a constant rather than a function of the device.
+  static const ui = 'Inter';
 
   /// Long-form reading.
   static const prose = 'Source Serif 4';
@@ -42,24 +43,17 @@ class ShiftType {
   /// Code, diffs, anything columnar.
   static const code = 'monospace';
 
-  /// Null on Apple platforms, so Flutter resolves the real system font.
-  static String? uiFamilyFor(TargetPlatform platform) => switch (platform) {
-        TargetPlatform.iOS || TargetPlatform.macOS => null,
-        _ => fallbackUi,
-      };
+  /// Kept as a function so call sites need not change, but the answer no
+  /// longer depends on the device — see the note above.
+  static String? uiFamilyFor(TargetPlatform platform) => ui;
 
-  /// SF's optical tracking, which is a table rather than a formula: it goes
-  /// negative above ~20pt and positive below ~15pt. Applying one letterSpacing
-  /// across a scale is the giveaway that a type system was set by hand.
+  /// Inter runs loose at display sizes and needs pulling in; at text sizes it
+  /// is already right. One negative step rather than a table, because this is
+  /// not trying to reproduce an optically-sized family.
   static double _tracking(double size) {
-    if (size >= 34) return 0.37;
-    if (size >= 28) return 0.36;
-    if (size >= 22) return 0.35;
-    if (size >= 20) return 0.38;
-    if (size >= 17) return -0.43;
-    if (size >= 16) return -0.32;
-    if (size >= 15) return -0.23;
-    if (size >= 13) return -0.08;
+    if (size >= 28) return -0.8;
+    if (size >= 22) return -0.5;
+    if (size >= 18) return -0.3;
     return 0.0;
   }
 
@@ -80,7 +74,7 @@ class ShiftType {
         color: color,
       );
 
-  /// [platform] decides the face; the sizes never change.
+  /// [platform] is accepted but no longer changes the face — see above.
   static TextTheme textTheme(
     Color text,
     Color muted, {
@@ -89,88 +83,59 @@ class ShiftType {
     final ui = uiFamilyFor(platform);
 
     return TextTheme(
-      // Large Title — the one that scrolls up into a nav bar.
+      // The greeting on an empty conversation, and nothing else.
       displayLarge: _style(
-          family: ui,
-          size: 34,
-          lineHeight: 41,
-          weight: FontWeight.w700,
+          family: ui, size: 32, lineHeight: 40, weight: FontWeight.w500,
           color: text),
-      // Title 1.
       displayMedium: _style(
-          family: ui,
-          size: 28,
-          lineHeight: 34,
-          weight: FontWeight.w700,
+          family: ui, size: 26, lineHeight: 33, weight: FontWeight.w500,
           color: text),
-      // Title 2.
+
+      // Screen and section titles.
       headlineMedium: _style(
-          family: ui,
-          size: 22,
-          lineHeight: 28,
-          weight: FontWeight.w600,
+          family: ui, size: 20, lineHeight: 27, weight: FontWeight.w600,
           color: text),
-      // Title 3.
       headlineSmall: _style(
-          family: ui,
-          size: 20,
-          lineHeight: 25,
-          weight: FontWeight.w600,
+          family: ui, size: 17, lineHeight: 24, weight: FontWeight.w600,
           color: text),
 
-      // Headline — body size, semibold. The row title in a grouped list.
+      // Row and card titles.
       titleMedium: _style(
-          family: ui,
-          size: 17,
-          lineHeight: 22,
-          weight: FontWeight.w600,
+          family: ui, size: 15, lineHeight: 21, weight: FontWeight.w600,
           color: text),
-      // Subhead.
       titleSmall: _style(
-          family: ui,
-          size: 15,
-          lineHeight: 20,
-          weight: FontWeight.w600,
+          family: ui, size: 14, lineHeight: 20, weight: FontWeight.w600,
           color: text),
 
-      // Body. The default, and it is 17.
-      bodyLarge:
-          _style(family: ui, size: 17, lineHeight: 22, color: text),
-      // Callout.
-      bodyMedium:
-          _style(family: ui, size: 16, lineHeight: 21, color: text),
-      // Footnote.
-      bodySmall:
-          _style(family: ui, size: 13, lineHeight: 18, color: muted),
+      // Interface copy. 16 is body — not the 17 a native iOS app would use,
+      // and not the 14 Material defaults to.
+      bodyLarge: _style(family: ui, size: 16, lineHeight: 24, color: text),
+      bodyMedium: _style(family: ui, size: 15, lineHeight: 22, color: text),
+      bodySmall: _style(family: ui, size: 13, lineHeight: 19, color: muted),
 
-      // Buttons take body size and weight, because on iOS they are text.
+      // Buttons and chips: text-weight, not shouty.
       labelLarge: _style(
-          family: ui,
-          size: 17,
-          lineHeight: 22,
-          weight: FontWeight.w600,
+          family: ui, size: 15, lineHeight: 20, weight: FontWeight.w500,
           color: text),
-      // Caption 1.
-      labelMedium:
-          _style(family: ui, size: 12, lineHeight: 16, color: muted),
-      // Caption 2.
-      labelSmall: _style(
-          family: ui, size: 11, lineHeight: 13, color: muted, tracking: 0.06),
+      labelMedium: _style(family: ui, size: 13, lineHeight: 18, color: muted),
+      labelSmall: _style(family: ui, size: 12, lineHeight: 16, color: muted),
     );
   }
 
   /// Long-form reading — a reply, a note, generated prose.
   ///
-  /// The serif survives the move to Apple's system, but only here. It is now
-  /// the *exception*, not a second UI face: platform interface copy is SF, and
-  /// prose gets its own face for the same reason Books and News do — reading
-  /// at length is a different activity from operating, and the change of face
-  /// is what says so. Using it for labels and blurbs, as this app did, is what
-  /// made the interface read as a document.
+  /// This is where the serif belongs and the only place it appears. The rule
+  /// is unchanged from the Apple pass and survives it: reading at length is a
+  /// different activity from operating the app, and the change of face is what
+  /// says so. Using it for labels and blurbs made the interface read as a
+  /// document.
+  ///
+  /// Larger and looser than [TextTheme.bodyLarge] because it is measured in
+  /// paragraphs rather than in labels.
   static TextStyle proseStyle(Color text) => TextStyle(
         fontFamily: prose,
         fontSize: 17,
-        height: 26 / 17,
+        height: 28 / 17,
         color: text,
       );
 

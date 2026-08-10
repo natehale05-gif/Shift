@@ -15,18 +15,21 @@ import 'package:flutter/material.dart';
 /// the gradient's ends, and the solid accent is the point along it that stays
 /// legible as text on both grounds, which is not the midpoint.
 ///
-/// The neutrals **are** grey — Apple's, exactly. They used to carry a violet
-/// bias toward the accent on the reasoning that a tinted surface reads as part
-/// of the brand; on a device it read as an app that had been colour-shifted,
-/// because every real control beside it is neutral. The accent carries the
-/// brand and the paper stays out of the way, which is what Apple's own apps
-/// do: Music is pink, Notes is yellow, and neither tints its background.
+/// The neutrals are **warm** — this is Claude's palette, not a neutral grey
+/// one and not Apple's. Paper is a cream off-white rather than #FFF, the greys
+/// carry yellow rather than blue, and the accent is the terracotta from
+/// Anthropic's own mark. The warmth is most of the identity: swap the cream
+/// for white and the same layout stops looking like Claude immediately.
+///
+/// Two earlier directions are recorded here because they were each right for
+/// what was asked and each replaced: a violet-tinted set (brand-derived), and
+/// Apple's exact system greys (neutral, for a native-iOS look).
 class ShiftPalette {
   const ShiftPalette._();
 
-  /// The gradient ends. Used together — for the mark, for a progress sweep,
-  /// for the one accent moment on a screen — and never as a background behind
-  /// body text, where a gradient makes contrast unknowable.
+  /// The app icon's gradient. Kept for the mark itself — the launcher icon and
+  /// the boot splash are still the magenta-to-blue plate — but deliberately
+  /// absent from the interface, which is Claude's warm set below.
   static const magenta = Color(0xFFD648E8);
   static const blue = Color(0xFF4A7DFF);
 
@@ -119,70 +122,58 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
     required this.diffRemoved,
   });
 
-  /// Light mode, on iOS's own greys.
+  /// Light: cream paper, warm greys, terracotta.
   ///
-  /// `ground` is `systemBackground` and `surface` is
-  /// `secondarySystemBackground` — the pairing a *content* screen uses. The
-  /// grouped pair (grey behind, white cards) is for Settings-style lists and
-  /// is wrong here: it made the whole app read as one flat sheet of grey, with
-  /// nothing to lift a card off. Checked by looking at it rather than by
-  /// picking the first plausible entry in the colour list.
-  ///
-  /// Separators are the real hairline values, not a light grey chosen by eye.
-  ///
-  /// **The neutrals used to carry a violet bias**, on the reasoning that a
-  /// tinted surface reads as part of the brand. It also read as *not Apple*:
-  /// the platform's greys are neutral, so a purple-cast white beside a real
-  /// system control looks like a colour-managed screenshot. The accent below
-  /// carries the brand instead, which is what Apple's own apps do — Music is
-  /// pink, Notes is yellow, and neither tints its paper.
+  /// `ground` is the paper the whole app sits on and `surfaceRaised` is the
+  /// near-white a menu or a card lifts to — the opposite way round from a
+  /// grey-ground system, and the reason a panel here reads as *lighter* than
+  /// its surroundings rather than darker.
   static const light = ShiftColors(
-    ground: Color(0xFFFFFFFF),
-    surface: Color(0xFFF2F2F7),
+    ground: Color(0xFFFAF9F5),
+    surface: Color(0xFFF0EEE6),
     surfaceRaised: Color(0xFFFFFFFF),
-    surfaceSunken: Color(0xFFE5E5EA),
-    divider: Color(0xFFC6C6C8),
-    border: Color(0xFFD1D1D6),
-    borderFocus: Color(0xFF8944D6),
-    text: Color(0xFF000000),
-    textMuted: Color(0xFF6C6C70),
-    textFaint: Color(0xFF8E8E93),
-    accent: Color(0xFF8944D6),
+    surfaceSunken: Color(0xFFEDEAE0),
+    divider: Color(0xFFE5E2D9),
+    border: Color(0xFFDAD6C9),
+    borderFocus: Color(0xFFC15F3C),
+    text: Color(0xFF141413),
+    textMuted: Color(0xFF6B6961),
+    textFaint: Color(0xFF91908A),
+    accent: Color(0xFFC15F3C),
     onAccent: Color(0xFFFFFFFF),
-    accentWash: Color(0xFFF1E9FB),
-    success: Color(0xFF248A3D),
-    warning: Color(0xFFB25000),
-    danger: Color(0xFFD70015),
-    diffAdded: Color(0xFFE8F6EC),
-    diffRemoved: Color(0xFFFDECEC),
+    accentWash: Color(0xFFF6EDE7),
+    success: Color(0xFF3F7A55),
+    warning: Color(0xFF9A6410),
+    danger: Color(0xFFB4362F),
+    diffAdded: Color(0xFFE8F2E9),
+    diffRemoved: Color(0xFFF9E9E7),
   );
 
-  /// Dark mode, likewise.
+  /// Dark: warm charcoal, never black.
   ///
-  /// True black ground rather than the icon's near-black plate: on an OLED
-  /// iPhone that is what the platform does, and it is what makes an inset card
-  /// at `#1C1C1E` read as a card at all. Text is `#FFFFFF` and the two muted
-  /// steps are `secondaryLabel` and `tertiaryLabel`, so the hierarchy matches
-  /// every other app on the device rather than approximating it.
+  /// The ground is a brown-grey, not a neutral one and not #000. That is the
+  /// whole trick of this dark mode — a true-black ground under the same
+  /// terracotta reads as a generic dark theme, and the accent goes muddy
+  /// against it. Text is warm off-white for the same reason.
   static const dark = ShiftColors(
-    ground: Color(0xFF000000),
-    surface: Color(0xFF1C1C1E),
-    surfaceRaised: Color(0xFF2C2C2E),
-    surfaceSunken: Color(0xFF0A0A0C),
-    divider: Color(0xFF38383A),
-    border: Color(0xFF48484A),
-    borderFocus: Color(0xFFBF5AF2),
-    text: Color(0xFFFFFFFF),
-    textMuted: Color(0xFF98989F),
-    textFaint: Color(0xFF6C6C70),
-    accent: Color(0xFFBF5AF2),
-    onAccent: Color(0xFFFFFFFF),
-    accentWash: Color(0xFF2A1B38),
-    success: Color(0xFF30D158),
-    warning: Color(0xFFFF9F0A),
-    danger: Color(0xFFFF453A),
-    diffAdded: Color(0xFF102A18),
-    diffRemoved: Color(0xFF2E1416),
+    ground: Color(0xFF262624),
+    surface: Color(0xFF30302E),
+    surfaceRaised: Color(0xFF3A3A37),
+    surfaceSunken: Color(0xFF1F1E1D),
+    divider: Color(0xFF3E3E3B),
+    border: Color(0xFF4A4A46),
+    borderFocus: Color(0xFFD97757),
+    text: Color(0xFFF5F4EF),
+    textMuted: Color(0xFFB0AEA5),
+    textFaint: Color(0xFF8A887F),
+    accent: Color(0xFFD97757),
+    onAccent: Color(0xFF1F1E1D),
+    accentWash: Color(0xFF3A2E28),
+    success: Color(0xFF6FBF8E),
+    warning: Color(0xFFE0A44A),
+    danger: Color(0xFFE8776B),
+    diffAdded: Color(0xFF1E2E22),
+    diffRemoved: Color(0xFF33201E),
   );
 
   @override

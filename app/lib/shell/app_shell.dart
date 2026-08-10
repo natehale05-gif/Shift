@@ -34,21 +34,17 @@ class AppShell extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // A nav bar at the platform's own proportions: 44pt tall, a
-            // half-pixel hairline underneath rather than a 1pt rule, and the
-            // title on the leading edge. The hairline is the detail people
-            // read without noticing — a full pixel reads as a web page.
+            // Claude's top bar: taller than a platform nav bar, and with no
+            // rule under it at all. The content simply sits on the same paper,
+            // which is why the app reads as one surface rather than as a
+            // stack of bars. A divider here was the last thing making it look
+            // like a document viewer.
+            //
+            // 52 rather than 44: the extra height is what keeps a quiet
+            // control from looking cramped against the top edge, and the
+            // tap-target test still measures the control, not the bar.
             Container(
-              // 44 of content *plus* the hairline. Written as 44.5 because a
-              // flat 44 puts the border inside the box and leaves the tap
-              // target at 43.5 — which the tap-target test caught, for the
-              // third time in this shell's short life.
-              height: 44.5,
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: c.divider, width: 0.5),
-                ),
-              ),
+              height: 52,
               padding: const EdgeInsets.symmetric(horizontal: Space.sm),
               child: Row(
                 children: [

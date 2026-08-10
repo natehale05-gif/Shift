@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
+import '../core/design/typography.dart';
 import 'mode.dart';
 
 /// What a mode shows before it is built.
@@ -38,33 +39,19 @@ class ModePlaceholder extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // An app-icon-shaped tile: 60pt at a ~22% corner radius, which
-              // is the proportion iOS uses for a home-screen icon. Reading as
-              // "an app's mark" rather than "a coloured square" is entirely a
-              // function of that ratio.
-              Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  color: c.accentWash,
-                  borderRadius: BorderRadius.circular(13.5),
-                ),
-                alignment: Alignment.center,
-                child: Icon(mode.activeIcon, size: 30, color: c.accent),
-              ),
+              // A plain accent glyph, no tile behind it. Claude's empty states
+              // put a mark and a line of text on the paper and nothing else;
+              // the rounded app-icon tile the Apple pass used is a home-screen
+              // idiom and reads as decoration here.
+              Icon(mode.activeIcon, size: 30, color: c.accent),
               const SizedBox(height: Space.lg),
-              // Large Title, which is what a screen is titled with here.
-              Text(mode.label, style: text.displayLarge),
-              const SizedBox(height: Space.sm),
-              // Body at 17, in SF — not the serif.
-              //
-              // The serif still exists and is still defended, but only for
-              // long-form generated prose. Using it for interface copy is what
-              // made this screen read as a document rather than as an app, and
-              // there is no serif anywhere in Apple's own interface.
+              Text(mode.label, style: text.displayMedium),
+              const SizedBox(height: Space.md),
+              // The serif, and the one place it belongs: this is the sentence
+              // someone actually reads on an otherwise empty screen.
               Text(
                 mode.blurb,
-                style: text.bodyLarge?.copyWith(color: c.textMuted),
+                style: ShiftType.proseStyle(c.textMuted),
               ),
               const SizedBox(height: Space.xl),
               Container(

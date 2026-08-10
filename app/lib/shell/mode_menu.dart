@@ -4,34 +4,33 @@ import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
 import 'mode.dart';
 
-/// The mode switcher, as an iOS pull-down menu.
+/// The mode switcher, shaped like Claude's model picker.
 ///
-/// The shape is the platform's, not an invention: a title that is also a
-/// button, a chevron that says so, and a rounded panel of rows underneath.
-/// Details that make it read as native rather than as a menu someone drew:
+/// A quiet text button with the current name and a small chevron, opening a
+/// soft-cornered panel of rows. The differences from the iOS pull-down this
+/// replaced are all deliberate, and together they are most of why one reads as
+/// Claude and the other as a system menu:
 ///
-/// * **Rows are 44pt** and the label is **17pt** — body size. A 14pt row is
-///   the most common tell that a menu was styled on a desktop.
-/// * **The icon is on the trailing edge.** Apple puts it there; Material puts
-///   it on the leading edge, and following Material here is what made the
-///   first version look like an Android app in Apple colours.
-/// * **A checkmark marks the current row**, rather than a filled background.
-///   Selection in an iOS menu is stated, not highlighted.
-/// * **Hairline separators**, inset to the text, between rows.
-/// * **No stroke around the panel.** iOS menus have a shadow and no border.
-///
-/// Subtitles are a real iOS menu element (Files and Photos both use them), so
-/// the line saying what each mode is for survives the move — it is the part
-/// that answers "why would I go there", which "Work" alone does not.
+/// * **A bordered panel, not a shadowed one.** Claude's surfaces are defined
+///   by a hairline and a large radius; iOS defines them by a shadow and no
+///   border. This is the single most visible difference.
+/// * **12pt radius**, not 13 — and the rows are inset, so the highlight on a
+///   hovered row is a rounded rectangle inside the panel rather than a
+///   full-bleed band.
+/// * **Rows are 15pt**, not body-sized. Claude's interface is denser than a
+///   phone-first one.
+/// * **The current row is washed in the accent** and keeps a check. iOS states
+///   selection without tinting; Claude tints.
+/// * **No separators.** Spacing carries the grouping.
 class ModeMenu extends StatelessWidget {
   final AppMode current;
   final ValueChanged<AppMode> onSelect;
 
   const ModeMenu({super.key, required this.current, required this.onSelect});
 
-  /// Apple's pull-down width. Wide enough for a two-line subtitle, and still
-  /// inside a 320pt phone once the screen's own margins are allowed for.
-  static const double panelWidth = 280;
+  /// Wide enough for the hint line, and still inside a 320pt phone once the
+  /// screen's own margins are allowed for.
+  static const double panelWidth = 272;
 
   @override
   Widget build(BuildContext context) {
@@ -43,31 +42,25 @@ class ModeMenu extends StatelessWidget {
       style: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(c.surfaceRaised),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
-        elevation: const WidgetStatePropertyAll(8),
-        shadowColor: WidgetStatePropertyAll(c.text.withValues(alpha: 0.18)),
+        // Barely-there elevation: the hairline does the work, and a heavy
+        // shadow under a bordered panel reads as two competing edges.
+        elevation: const WidgetStatePropertyAll(3),
+        shadowColor: WidgetStatePropertyAll(c.text.withValues(alpha: 0.10)),
         shape: WidgetStatePropertyAll(
-          // 13, which is iOS's menu radius. Not 12 and not 16 — at this size
-          // the difference is visible next to a real system menu.
-          RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: c.border),
+          ),
         ),
-        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
+        padding: const WidgetStatePropertyAll(EdgeInsets.all(Space.xs)),
       ),
       menuChildren: [
-        for (final (i, mode) in AppMode.values.indexed) ...[
-          if (i > 0)
-            // Inset to the text, which is how every grouped list and menu on
-            // the platform draws its separators. A full-bleed rule reads as a
-            // table.
-            Padding(
-              padding: const EdgeInsets.only(left: Space.lg),
-              child: Divider(height: 0.5, thickness: 0.5, color: c.divider),
-            ),
+        for (final mode in AppMode.values)
           _ModeItem(
             mode: mode,
             selected: mode == current,
             onSelect: onSelect,
           ),
-        ],
       ],
       builder: (context, controller, _) => Semantics(
         button: true,
@@ -87,21 +80,13 @@ class ModeMenu extends StatelessWidget {
               children: [
                 Text(
                   current.label,
-                  // Title 3 semibold: a nav-bar title that happens to be a
-                  // button. The mode is the most important word on screen.
-                  style: text.headlineSmall?.copyWith(color: c.text),
+                  // A label, not a title. Claude's model picker is a quiet
+                  // control in the corner, not the loudest word on screen.
+                  style: text.titleMedium?.copyWith(color: c.textMuted),
                 ),
-                const SizedBox(width: Space.xs),
-                // A small plain chevron, not a filled disc.
-                //
-                // The first attempt used `expand_circle_down_rounded`, which
-                // on the reasoning that iOS pull-downs use a circled chevron
-                // sounded right and rendered as a heavy dark dot beside the
-                // title — Material's disc is solid where Apple's is a hairline
-                // ring. A bare 15pt chevron in tertiary grey is both closer to
-                // the platform and quieter, which is the point of it.
+                const SizedBox(width: Space.xxs),
                 Icon(Icons.keyboard_arrow_down_rounded,
-                    size: 22, color: c.textFaint),
+                    size: 18, color: c.textFaint),
               ],
             ),
           ),
@@ -134,12 +119,19 @@ class _ModeItem extends StatelessWidget {
           Size(ModeMenu.panelWidth, kMinTouchTarget),
         ),
         padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
+          EdgeInsets.symmetric(horizontal: Space.md, vertical: 10),
         ),
-        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(Radii.sm)),
+        ),
+        // Tinted rather than merely checked, which is Claude's way of showing
+        // a current item.
+        backgroundColor: WidgetStatePropertyAll(
+          selected ? c.accentWash : Colors.transparent,
+        ),
       ),
       child: SizedBox(
-        width: ModeMenu.panelWidth - Space.lg * 2,
+        width: ModeMenu.panelWidth - Space.md * 2 - Space.xs * 2,
         child: Row(
           children: [
             Expanded(
@@ -149,16 +141,13 @@ class _ModeItem extends StatelessWidget {
                 children: [
                   Text(
                     mode.label,
-                    // Body, 17. Semibold only when current, which with the
-                    // checkmark is the whole of the selected treatment — an
-                    // iOS menu does not tint its rows.
-                    style: text.bodyLarge?.copyWith(
-                      color: c.text,
+                    style: text.bodyMedium?.copyWith(
+                      color: selected ? c.accent : c.text,
                       fontWeight:
-                          selected ? FontWeight.w600 : FontWeight.w400,
+                          selected ? FontWeight.w600 : FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 1),
+                  const SizedBox(height: Space.xxs),
                   Text(
                     mode.menuHint,
                     maxLines: 1,
@@ -168,15 +157,11 @@ class _ModeItem extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: Space.md),
-            // Trailing, which is the side Apple uses. A checkmark replaces the
-            // mode's own icon on the current row, because the row's job then
-            // is to say "you are here" rather than to identify itself.
-            Icon(
-              selected ? Icons.check_rounded : mode.icon,
-              size: 20,
-              color: selected ? c.accent : c.textMuted,
-            ),
+            const SizedBox(width: Space.sm),
+            // Only the current row carries a mark, and the others carry
+            // nothing — Claude's menus are not icon lists.
+            if (selected)
+              Icon(Icons.check_rounded, size: 16, color: c.accent),
           ],
         ),
       ),
