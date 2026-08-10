@@ -18,6 +18,11 @@ dependencies:
   # ChangeNotifiers, and this is the smallest thing that publishes them.
   gpt_markdown: ^1.1.8
   http: ^1.6.0
+
+  # Path arithmetic for the agent's workspace. The containment check is the
+  # security boundary of Code mode, and hand-rolled path normalisation is a
+  # famously bad place to be clever.
+  path: ^1.9.0
   provider: ^6.1.2
 
   # Browser DOM access for the boot splash. `dart:html` is deprecated in
