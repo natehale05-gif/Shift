@@ -34,6 +34,12 @@ class Reply extends ChatItem {
   final StringBuffer _text = StringBuffer();
   String? provider;
   String? failure;
+
+  /// The technical fact behind [failure]. Shown only behind a disclosure, and
+  /// stored, because the failure worth diagnosing is usually the one that
+  /// already scrolled off screen.
+  String? failureDetail;
+
   bool done = false;
 
   /// Stopped by the user rather than by the model finishing. Kept separate
@@ -51,6 +57,7 @@ class Reply extends ChatItem {
         'text': text,
         if (provider != null) 'provider': provider,
         if (failure != null) 'failure': failure,
+        if (failureDetail != null) 'failureDetail': failureDetail,
         'interrupted': interrupted,
       };
 
@@ -62,6 +69,7 @@ class Reply extends ChatItem {
       ..write('${json['text'] ?? ''}')
       ..provider = json['provider'] as String?
       ..failure = json['failure'] as String?
+      ..failureDetail = json['failureDetail'] as String?
       ..interrupted = json['interrupted'] == true
       ..done = true;
     return reply;
@@ -242,8 +250,9 @@ class TurnController extends ChangeNotifier {
           reply.provider ??= provider;
         case TextDelta(:final text):
           reply.write(text);
-        case StepFailed(:final reason):
+        case StepFailed(:final reason, :final detail):
           reply.failure ??= reason;
+          reply.failureDetail ??= detail;
         case TurnFinished():
           reply.done = true;
           _running = false;

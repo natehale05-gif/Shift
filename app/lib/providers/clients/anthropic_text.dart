@@ -3,6 +3,8 @@ import 'dart:convert';
 import '../../turn/job_output.dart';
 import '../../turn/turn_event.dart';
 import '../access.dart';
+import '../failure_text.dart';
+import '../streaming/reachability.dart';
 import '../streaming/sse_client.dart';
 
 /// Talking to the Messages API.
@@ -29,14 +31,27 @@ class AnthropicText {
 
   final SseClient _sse;
 
-  AnthropicText({SseClient? sse}) : _sse = sse ?? SseClient();
+  /// Asked **only after a transport failure**, never on the happy path.
+  ///
+  /// Injected so a test can force each answer: the three sentences it chooses
+  /// between are unreproducible in this sandbox, because CORS does not exist
+  /// off-web and every test and local run here is off-web.
+  final Future<Reach> Function() _reach;
+
+  AnthropicText({SseClient? sse, Future<Reach> Function()? reach})
+      : _sse = sse ?? SseClient(),
+        _reach = reach ?? probeReach;
 
   /// Where the request goes, and what it carries.
   ///
   /// A managed call keeps the provider's own path and body — the proxy is
   /// transparent — so this method is the only place that has to know which
   /// arm it got.
-  static ({Uri uri, Map<String, String> headers}) _target(
+  ///
+  /// Public because the connection test in Settings sends the *same* request
+  /// this client does. A test that used a different URL or different headers
+  /// would answer a different question from the one being asked.
+  static ({Uri uri, Map<String, String> headers}) target(
     ProviderAccess access,
   ) =>
       switch (access) {
@@ -100,7 +115,7 @@ class AnthropicText {
     required String instruction,
     String? system,
   }) async* {
-    final target = _target(access);
+    final resolved = target(access);
 
     // A non-2xx arrives as an exception from the transport, and letting it
     // escape loses the status — the runner's catch-all then says "that step
@@ -108,25 +123,37 @@ class AnthropicText {
     // and an outage alike. Three different problems with three different
     // fixes, and only one of them is the user's.
     yield* mapEvents(
-      _statusAware(_sse.postJson(
-        uri: target.uri,
-        headers: target.headers,
-        body: jsonEncode(buildBody(
-          model: model,
-          instruction: instruction,
-          system: system,
-        )),
-      ), stepId),
+      _statusAware(
+        _sse.postJson(
+          uri: resolved.uri,
+          headers: resolved.headers,
+          body: jsonEncode(buildBody(
+            model: model,
+            instruction: instruction,
+            system: system,
+          )),
+        ),
+        stepId,
+        _reach,
+      ),
       stepId: stepId,
     );
   }
 
-  /// Turns a transport-level HTTP failure into a [StepFailed] that says which
+  /// Turns a transport-level failure into an `error` frame that says which
   /// failure it was.
+  ///
+  /// Re-emitted as a frame rather than thrown, so there is exactly one place
+  /// that turns a provider problem into a sentence rather than two that can
+  /// disagree.
   static Stream<SseEvent> _statusAware(
     Stream<SseEvent> events,
     String stepId,
+    Future<Reach> Function() reach,
   ) async* {
+    String? sentence;
+    String? detail;
+
     try {
       // `await for`, not `yield*`. A `yield*` forwards a stream's error
       // straight to the consumer without ever throwing inside this function,
@@ -135,40 +162,36 @@ class AnthropicText {
       await for (final event in events) {
         yield event;
       }
+      return;
     } on SseHttpException catch (e) {
-      // Re-emitted as an `error` frame so there is one place that turns a
-      // provider problem into a sentence, rather than two that can disagree.
-      yield SseEvent(
-        event: 'error',
-        data: jsonEncode({
-          'error': {'message': _forStatus(e.statusCode)}
-        }),
-      );
-    } catch (_) {
-      // No status at all: the request never completed. A browser blocking it
-      // on CORS looks exactly like being offline from in here, so the sentence
-      // covers both rather than guessing between them.
-      yield SseEvent(
-        event: 'error',
-        data: jsonEncode({
-          'error': {'message': _unreachable}
-        }),
-      );
+      sentence = sentenceForStatus(e.statusCode);
+      detail = 'HTTP ${e.statusCode} from api.anthropic.com';
+    } on SseTimeoutException catch (e) {
+      sentence = sentenceForTimeout;
+      detail = '$e · api.anthropic.com';
+    } catch (e) {
+      // No status at all: the request never completed. From in here a browser
+      // refusing it looks exactly like being offline — which is why the
+      // sentence is chosen by asking whether *anything* is reachable, rather
+      // than by guessing.
+      //
+      // The exception is kept, not discarded. `catch (_)` threw away the one
+      // fact that distinguishes a blocked fetch from a stalled socket, at the
+      // only point in the program where that fact exists.
+      detail = '$e · api.anthropic.com';
     }
+
+    // Outside the try: awaiting inside a catch and then yielding is legal but
+    // reads as if the probe were part of the failing operation, and it is not.
+    sentence ??= sentenceForUnreachable(await reach());
+
+    yield SseEvent(
+      event: 'error',
+      data: jsonEncode({
+        'error': {'message': sentence, 'shift_detail': detail}
+      }),
+    );
   }
-
-  static const _unreachable =
-      'Could not reach the provider. Check your connection and try again.';
-
-  static String _forStatus(int status) => switch (status) {
-        400 => 'The provider rejected that request.',
-        401 || 403 =>
-          'That key was rejected. Check it is complete and still active.',
-        404 => 'That model is not available on this key.',
-        429 => 'Rate limited. Try again in a moment.',
-        529 => 'The provider is overloaded right now.',
-        _ => 'The provider could not complete that step.',
-      };
 
   /// Folds the SSE stream into [TurnEvent]s. Static and taking a stream, so
   /// the whole mapping is testable against recorded events with no HTTP at
@@ -238,9 +261,16 @@ class AnthropicText {
                   stopReason;
 
         case 'error':
-          final message =
-              (payload['error'] as Map<String, dynamic>?)?['message'];
-          yield StepFailed(stepId, reason: _readable(message));
+          final error = payload['error'] as Map<String, dynamic>?;
+          yield StepFailed(
+            stepId,
+            reason: _readable(error?['message']),
+            // Only ever set by [_statusAware], which writes it from the
+            // exception it caught. A provider's own error body never reaches
+            // here — the sentence is what a person reads, and this is what
+            // they can paste into a bug report.
+            detail: error?['shift_detail'] as String?,
+          );
           return;
       }
     }
@@ -267,22 +297,15 @@ class AnthropicText {
 
   /// The sentence shown to a person.
   ///
-  /// Messages produced by [_forStatus] are already written for a reader and
-  /// pass through; anything the provider itself said does not, because a raw
-  /// API message tells the reader nothing they can act on and occasionally
-  /// tells them something they should not see.
+  /// Sentences we wrote pass through; anything the provider itself said does
+  /// not, because a raw API message tells the reader nothing they can act on
+  /// and occasionally tells them something they should not see.
   static String _readable(Object? message) {
     final text = message is String ? message : '';
-    if (_written.contains(text)) return text;
+    if (writtenSentences.contains(text)) return text;
     if (text.contains('credit') || text.contains('billing')) {
-      return 'That provider account is out of credit.';
+      return sentenceForStatus(402);
     }
-    return 'The provider could not complete that step.';
+    return sentenceForStatus(500);
   }
-
-  static final _written = {
-    for (final status in [400, 401, 403, 404, 429, 529, 500])
-      _forStatus(status),
-    _unreachable,
-  };
 }

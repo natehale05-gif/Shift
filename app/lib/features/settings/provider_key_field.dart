@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
+import '../../providers/access.dart';
+import '../../providers/probe.dart';
 import '../../providers/registry.dart';
 
 /// One provider's row: what it can do, where to get a key, and the key.
@@ -14,12 +16,23 @@ class ProviderKeyField extends StatefulWidget {
   final ValueChanged<String> onSave;
   final VoidCallback onRemove;
 
+  /// The real key, for the connection test. Read lazily rather than held, so
+  /// nothing in this widget's state is the secret itself.
+  final String? Function()? readKey;
+
+  /// Injected so the test's own states can be driven without a network. Every
+  /// sentence it can produce is unreproducible in a sandbox — CORS does not
+  /// exist off-web, and off-web is where every test runs.
+  final Future<ProbeOutcome> Function(ProviderAccess access)? probe;
+
   const ProviderKeyField({
     super.key,
     required this.provider,
     required this.saved,
     required this.onSave,
     required this.onRemove,
+    this.readKey,
+    this.probe,
   });
 
   @override
@@ -30,10 +43,38 @@ class _ProviderKeyFieldState extends State<ProviderKeyField> {
   final _controller = TextEditingController();
   String? _problem;
 
+  bool _testing = false;
+  ProbeOutcome? _outcome;
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Sends one real request and reports which of the states it hit.
+  ///
+  /// This is the control that turns "it says it cannot reach the provider" into
+  /// an answer. A failed chat turn cannot distinguish a dead key from a blocked
+  /// request; this can, because it asks the reachability probe too.
+  Future<void> _test() async {
+    final key = widget.readKey?.call();
+    if (key == null || key.isEmpty) return;
+
+    setState(() {
+      _testing = true;
+      _outcome = null;
+    });
+
+    final run = widget.probe ??
+        (access) => runProbe(providerId: widget.provider.id, access: access);
+    final outcome = await run(DirectKey(key));
+
+    if (!mounted) return;
+    setState(() {
+      _testing = false;
+      _outcome = outcome;
+    });
   }
 
   void _save() {
@@ -95,7 +136,7 @@ class _ProviderKeyFieldState extends State<ProviderKeyField> {
           ),
           const SizedBox(height: Space.md),
 
-          if (saved != null)
+          if (saved != null) ...[
             Row(
               children: [
                 Expanded(
@@ -104,14 +145,31 @@ class _ProviderKeyFieldState extends State<ProviderKeyField> {
                     style: text.bodyMedium?.copyWith(color: c.textMuted),
                   ),
                 ),
+                if (canProbe(widget.provider))
+                  TextButton(
+                    onPressed: _testing ? null : _test,
+                    child: Text(
+                      _testing ? 'Testing…' : 'Test connection',
+                      style: text.labelLarge?.copyWith(color: c.accent),
+                    ),
+                  ),
                 TextButton(
                   onPressed: widget.onRemove,
                   child: Text('Remove',
                       style: text.labelLarge?.copyWith(color: c.danger)),
                 ),
               ],
-            )
-          else ...[
+            ),
+            if (_outcome case final outcome?) ...[
+              const SizedBox(height: Space.xs),
+              Text(
+                probeSentence(outcome),
+                style: text.bodySmall?.copyWith(
+                  color: outcome == ProbeOutcome.working ? c.accent : c.textMuted,
+                ),
+              ),
+            ],
+          ] else ...[
             TextField(
               controller: _controller,
               // Obscured while typing: this is a secret, and on a phone it is

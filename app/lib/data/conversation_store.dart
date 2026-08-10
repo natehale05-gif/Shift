@@ -61,9 +61,10 @@ class ConversationStore extends ChangeNotifier {
     try {
       final list = jsonDecode(raw);
       if (list is! List) return;
+      // `?element` — an entry that will not parse is dropped rather than
+      // failing the whole index. One unreadable row should cost that row.
       _index = [
-        for (final entry in list)
-          if (ConversationSummary.fromJson(entry) case final s?) s,
+        for (final entry in list) ?ConversationSummary.fromJson(entry),
       ]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     } catch (_) {
       // A corrupt index costs the list, not the app. The bodies are still on

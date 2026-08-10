@@ -62,12 +62,51 @@ class SseHttpException implements Exception {
   String toString() => 'HTTP $statusCode: $body';
 }
 
+/// The HTTP client every provider call should use.
+///
+/// Re-exported from here so the `if (dart.library.js_interop)` pair has exactly
+/// one import site. A second one is a second chance to write
+/// `dart.library.html`, which is **false** under dart2wasm and would silently
+/// select the buffering XHR client in a browser — no error, no exception, just
+/// streaming quietly ceasing to stream.
+http.Client createProviderHttpClient() => createStreamingClient();
+
+/// A request that was accepted and then never answered.
+///
+/// Separate from [SseHttpException] because it needs a different sentence and a
+/// different remedy: there is no status to read, but unlike a refused request,
+/// trying again is a reasonable thing to do.
+class SseTimeoutException implements Exception {
+  final Duration waited;
+
+  const SseTimeoutException(this.waited);
+
+  @override
+  String toString() => 'No response after ${waited.inSeconds}s';
+}
+
 /// POSTs JSON and exposes the streamed answer as parsed events.
 class SseClient {
   final http.Client Function() _clientFactory;
 
-  SseClient({http.Client Function()? clientFactory})
-      : _clientFactory = clientFactory ?? createStreamingClient;
+  /// How long to wait for the response *headers*.
+  ///
+  /// Without a bound a hung connection sits forever: the composer stays busy,
+  /// nothing arrives, and there is no way to tell that from a model thinking.
+  /// Only the headers are bounded — once bytes are flowing, a long gap between
+  /// deltas is a model working, not a stall, and cutting that off would abort
+  /// good replies.
+  ///
+  /// Private, deliberately. Several test fakes `implements SseClient`, and a
+  /// public field would oblige every one of them to declare a timeout they do
+  /// not use — a change to this class's contract for something that is an
+  /// implementation detail of the real one.
+  final Duration _headersTimeout;
+
+  SseClient({
+    http.Client Function()? clientFactory,
+    this._headersTimeout = const Duration(seconds: 20),
+  }) : _clientFactory = clientFactory ?? createStreamingClient;
 
   /// Which transport this build resolved to. See [streamingClientKind].
   static const String clientKind = streamingClientKind;
@@ -83,7 +122,10 @@ class SseClient {
         ..headers.addAll(headers)
         ..body = body;
 
-      final response = await client.send(request);
+      final response = await client.send(request).timeout(
+            _headersTimeout,
+            onTimeout: () => throw SseTimeoutException(_headersTimeout),
+          );
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw SseHttpException(
           response.statusCode,

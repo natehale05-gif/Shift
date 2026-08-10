@@ -50,11 +50,22 @@ class AppShell extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: c.ground,
-      drawer: wide ? null : const Drawer(
-        width: Sidebar.width,
-        shape: RoundedRectangleBorder(),
-        child: Sidebar(),
-      ),
+      drawer: wide
+          ? null
+          : Drawer(
+              width: Sidebar.width,
+              shape: const RoundedRectangleBorder(),
+              // Closes itself once you have chosen. Without this the drawer
+              // stayed open over the conversation it had just opened — on a
+              // phone that is the whole screen, so picking a chat looked like
+              // nothing had happened. `Sidebar` had the hook for this from the
+              // start and the drawer was the one caller not passing it.
+              child: Builder(
+                builder: (context) => Sidebar(
+                  onDismiss: () => Navigator.of(context).maybePop(),
+                ),
+              ),
+            ),
       body: SafeArea(
         child: wide
             ? Row(

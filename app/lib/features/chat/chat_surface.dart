@@ -8,6 +8,7 @@ import '../../data/api_keys_store.dart';
 import '../../shell/mode.dart';
 import '../settings/settings_screen.dart';
 import 'composer.dart';
+import 'failure_card.dart';
 import 'markdown_view.dart';
 import 'message_actions.dart';
 import 'turn_controller.dart';
@@ -184,70 +185,12 @@ class _Item extends StatelessWidget {
               if (reply.text.isNotEmpty) MarkdownView(reply.text),
               if (reply.failure != null) ...[
                 if (reply.text.isNotEmpty) const SizedBox(height: Space.md),
-                // A failure is stated in place, in the interface face, so it
-                // is never mistaken for something a model said.
-                Container(
-                  decoration: BoxDecoration(
-                    color: c.surface,
-                    borderRadius: BorderRadius.circular(Radii.md),
-                    border: Border.all(color: c.border),
-                  ),
-                  padding: const EdgeInsets.all(Space.md),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.info_outline_rounded,
-                              size: 18, color: c.textMuted),
-                          const SizedBox(width: Space.sm),
-                          Expanded(
-                            child: Text(
-                              reply.failure!,
-                              style:
-                                  text.bodyMedium?.copyWith(color: c.textMuted),
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      // A message that names a destination should be able to
-                      // get you there. Without this the remedy is "open the
-                      // drawer, scroll to the bottom, find Settings" — three
-                      // steps the sentence does not mention, on a screen where
-                      // the sidebar is hidden behind a hamburger. Asked about
-                      // directly, which is how a discoverability problem
-                      // usually surfaces: as a question, not as a bug report.
-                      if (reply.failure!.contains('Settings')) ...[
-                        const SizedBox(height: Space.sm),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: () => Navigator.of(context).push(
-                              MaterialPageRoute<void>(
-                                builder: (_) => const SettingsScreen(),
-                              ),
-                            ),
-                            icon: Icon(Icons.key_rounded,
-                                size: 16, color: c.accent),
-                            label: Text(
-                              'Add a key',
-                              style:
-                                  text.labelLarge?.copyWith(color: c.accent),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                FailureCard(reply: reply),
               ],
               if (!reply.done && reply.text.isEmpty && reply.failure == null)
                 Text('Thinking…',
                     style: text.bodyMedium?.copyWith(color: c.textFaint)),
-              if (reply.done && reply.failure == null)
-                MessageActions(reply: reply),
+              if (reply.done) MessageActions(reply: reply),
             ],
           ),
         ),

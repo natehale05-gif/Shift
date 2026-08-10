@@ -128,10 +128,20 @@ class StepFailed extends TurnEvent {
   /// output was essential; true when they can proceed with a hole.
   final bool blocksDependents;
 
+  /// The technical fact behind [reason], for a bug report — an exception name,
+  /// a status, the host that was asked. Never shown inline: it is for the
+  /// person diagnosing, not the person reading.
+  ///
+  /// It exists because the alternative is a screenshot of a sentence that four
+  /// different faults all produce, which is what made the last regression take
+  /// three rounds to place. Never carries a key or a header.
+  final String? detail;
+
   const StepFailed(
     super.stepId, {
     required this.reason,
     this.blocksDependents = true,
+    this.detail,
   });
 }
 

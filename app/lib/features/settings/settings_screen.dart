@@ -90,6 +90,7 @@ class SettingsScreen extends StatelessWidget {
                     saved: keys.masked(provider.id),
                     onSave: (value) => keys.set(provider.id, value),
                     onRemove: () => keys.remove(provider.id),
+                    readKey: () => keys.get(provider.id),
                   ),
                   const SizedBox(height: Space.md),
                 ],

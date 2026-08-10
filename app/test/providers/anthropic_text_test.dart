@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift/providers/access.dart';
 import 'package:shift/providers/clients/anthropic_text.dart';
+import 'package:shift/providers/failure_text.dart';
+import 'package:shift/providers/streaming/reachability.dart';
 import 'package:shift/providers/streaming/sse_client.dart';
 import 'package:shift/turn/job_output.dart';
 import 'package:shift/turn/turn_event.dart';
@@ -418,4 +420,119 @@ void _transportTests() {
     expect(reason, isNot(contains('Failed to fetch')),
         reason: 'the raw exception tells the reader nothing they can act on');
   });
+
+  group('a transport failure names which kind it was', () {
+    // The failure the app could not tell apart. Off-web there is no browser to
+    // block anything, so the probe answers `unknown` and the old wording
+    // stands; in a browser it is the difference between "your wifi is off" and
+    // "your browser refused this request", which have nothing in common except
+    // that Dart cannot see either one.
+    Future<StepFailed> failWith(Reach reach) async {
+      final events = await AnthropicText(
+        sse: _DeadSse(),
+        reach: () async => reach,
+      )
+          .stream(
+            stepId: 's',
+            access: const DirectKey('sk-ant-x'),
+            model: 'claude-opus-4-8',
+            instruction: 'hi',
+          )
+          .toList();
+      return events.whereType<StepFailed>().single;
+    }
+
+    test('offline is reported as offline', () async {
+      expect((await failWith(Reach.down)).reason, contains('offline'));
+    });
+
+    test('reachable-but-refused blames the block, not the connection',
+        () async {
+      final reason = (await failWith(Reach.up)).reason;
+      expect(reason, contains('blocked'));
+      expect(reason.toLowerCase(), isNot(contains('check your connection')));
+    });
+
+    test('off-web keeps the wording that shipped', () async {
+      expect((await failWith(Reach.unknown)).reason, contains('Could not reach'));
+    });
+
+    test('the exception survives as a detail, not as the sentence', () async {
+      // `catch (_)` threw this away at the only point in the program where it
+      // exists — so a screenshot of the sentence could not distinguish four
+      // different faults, and diagnosing took three rounds.
+      final failure = await failWith(Reach.up);
+      expect(failure.detail, contains('Failed to fetch'));
+      expect(failure.detail, contains('api.anthropic.com'));
+      expect(failure.reason, isNot(contains('Failed to fetch')));
+    });
+
+    test('a timeout is not reported as unreachable', () async {
+      final events = await AnthropicText(
+        sse: _StalledSse(),
+        // Forced to `up` so a wrong answer here would be visible: if the
+        // timeout arm were missing, this would claim a content blocker.
+        reach: () async => Reach.up,
+      )
+          .stream(
+            stepId: 's',
+            access: const DirectKey('sk-ant-x'),
+            model: 'claude-opus-4-8',
+            instruction: 'hi',
+          )
+          .toList();
+
+      final failure = events.whereType<StepFailed>().single;
+      expect(failure.reason, sentenceForTimeout);
+      expect(failure.detail, contains('5s'));
+    });
+
+    test('the probe is not run when the request succeeds', () async {
+      // A diagnostic that costs a spare request per turn is a diagnostic that
+      // should not ship. Asserted rather than assumed.
+      var probed = false;
+      await AnthropicText(
+        sse: _OkSse(),
+        reach: () async {
+          probed = true;
+          return Reach.up;
+        },
+      )
+          .stream(
+            stepId: 's',
+            access: const DirectKey('sk-ant-x'),
+            model: 'claude-opus-4-8',
+            instruction: 'hi',
+          )
+          .toList();
+
+      expect(probed, isFalse);
+    });
+  });
+}
+
+/// A transport that is accepted and then never answers.
+class _StalledSse implements SseClient {
+  @override
+  Stream<SseEvent> postJson({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+  }) =>
+      Stream.error(const SseTimeoutException(Duration(seconds: 5)));
+}
+
+/// A transport that works.
+class _OkSse implements SseClient {
+  @override
+  Stream<SseEvent> postJson({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+  }) =>
+      replay([
+        _blockStart,
+        delta('hi'),
+        ('message_stop', '{}'),
+      ]);
 }

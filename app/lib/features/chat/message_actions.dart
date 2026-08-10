@@ -11,6 +11,12 @@ import 'turn_controller.dart';
 /// Always visible rather than revealed on hover: hover does not exist on the
 /// device this is mostly used on, and a control that only appears to some of
 /// your users is a control half of them will never find.
+///
+/// **Shown under a failed reply too.** It used to be hidden there, which meant
+/// the one case where trying again is the obvious next move was the one case
+/// with no button for it — the remedy was to retype the message. Copy drops out
+/// instead when there is nothing to copy, because a control that copies an
+/// empty string is worse than no control.
 class MessageActions extends StatelessWidget {
   final Reply reply;
 
@@ -26,11 +32,12 @@ class MessageActions extends StatelessWidget {
       padding: const EdgeInsets.only(top: Space.sm),
       child: Row(
         children: [
-          _Action(
-            icon: Icons.content_copy_rounded,
-            tooltip: 'Copy',
-            onTap: () => Clipboard.setData(ClipboardData(text: reply.text)),
-          ),
+          if (reply.text.isNotEmpty)
+            _Action(
+              icon: Icons.content_copy_rounded,
+              tooltip: 'Copy',
+              onTap: () => Clipboard.setData(ClipboardData(text: reply.text)),
+            ),
           // Retry re-runs the same request rather than replaying anything:
           // the plan is a pure function of the input, so asking again is
           // asking the same question, not repeating an answer.

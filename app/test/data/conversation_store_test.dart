@@ -72,6 +72,34 @@ void main() {
           reason: 'no key is configured, so this turn failed and should '
               'still say so after a reload');
     });
+
+    test('the detail behind a failure survives too', () async {
+      // The failure worth diagnosing is usually the one that already scrolled
+      // off screen — or that the app was closed on. A detail kept only in
+      // memory is one nobody can send you.
+      final first = await open();
+      final turn = TurnController(conversations: first);
+      addTearDown(turn.dispose);
+      await turn.send('hello', mode: AppMode.chat);
+
+      final live = turn.items.whereType<Reply>().single..failureDetail =
+          'ClientException: Failed to fetch · api.anthropic.com';
+      await first.save(
+        id: turn.conversationId!,
+        title: 'hello',
+        items: [
+          for (final item in turn.items)
+            if (item is UserSaid) item.toJson() else (item as Reply).toJson(),
+        ],
+      );
+      expect(live.failureDetail, isNotNull);
+
+      final second = await open();
+      final restored = itemsFromJson(second.body(second.index.single.id))
+          .whereType<Reply>()
+          .single;
+      expect(restored.failureDetail, contains('Failed to fetch'));
+    });
   });
 
   group('the list', () {
