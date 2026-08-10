@@ -211,6 +211,7 @@ void main() {
   });
 
   _statusTests();
+  _transportTests();
 
   group('managed calls', () {
     test('carry no key and no version header', () async {
@@ -244,6 +245,51 @@ void main() {
       expect(sentHeaders!.containsKey('anthropic-version'), isFalse);
       expect(sentHeaders!['Authorization'], 'Bearer session');
       expect(seen!.path, endsWith('/v1/messages'));
+    });
+
+    test('a direct call declares browser access, or the browser blocks it',
+        () async {
+      // The header this omitted when the client was ported from v1. Anthropic
+      // refuses a browser origin without it, so the request never leaves the
+      // device — and because every test and every local run happens off-web,
+      // where CORS does not apply, nothing here could see it. It only showed
+      // up on a phone, as "That step could not be completed".
+      Map<String, String>? sent;
+      final client = AnthropicText(sse: _RecordingSse((_, h) => sent = h));
+
+      await client
+          .stream(
+            stepId: 's',
+            access: const DirectKey('sk-ant-test'),
+            model: 'claude-opus-4-8',
+            instruction: 'hi',
+          )
+          .toList();
+
+      expect(sent!['anthropic-dangerous-direct-browser-access'], 'true');
+    });
+
+    test('a managed call does not declare it', () async {
+      // The header says "this device is knowingly holding a key". On the
+      // managed path it is not, and every header beyond the simple set also
+      // forces a preflight the proxy would have to allow.
+      Map<String, String>? sent;
+      final client = AnthropicText(sse: _RecordingSse((_, h) => sent = h));
+
+      await client
+          .stream(
+            stepId: 's',
+            access: ManagedAccess(
+              base: Uri.parse('https://proxy.test/pp/anthropic'),
+              headers: const {'Authorization': 'Bearer session'},
+            ),
+            model: 'claude-opus-4-8',
+            instruction: 'hi',
+          )
+          .toList();
+
+      expect(sent!.containsKey('anthropic-dangerous-direct-browser-access'),
+          isFalse);
     });
 
     test('a direct call carries both', () async {
@@ -341,5 +387,35 @@ void _statusTests() {
       // The body carries "nope"; the reader gets a written sentence instead.
       expect(await _failureFor(500), isNot(contains('nope')));
     });
+  });
+}
+
+/// A transport that fails without any HTTP status, which is what a browser
+/// blocking a request on CORS looks like from inside Dart.
+class _DeadSse implements SseClient {
+  @override
+  Stream<SseEvent> postJson({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+  }) =>
+      Stream.error(Exception('Failed to fetch'));
+}
+
+void _transportTests() {
+  test('a request that never completes says so, not "step failed"', () async {
+    final events = await AnthropicText(sse: _DeadSse())
+        .stream(
+          stepId: 's',
+          access: const DirectKey('sk-ant-x'),
+          model: 'claude-opus-4-8',
+          instruction: 'hi',
+        )
+        .toList();
+
+    final reason = events.whereType<StepFailed>().single.reason;
+    expect(reason, contains('Could not reach'));
+    expect(reason, isNot(contains('Failed to fetch')),
+        reason: 'the raw exception tells the reader nothing they can act on');
   });
 }

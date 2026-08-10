@@ -46,6 +46,21 @@ class AnthropicText {
               'content-type': 'application/json',
               'x-api-key': key,
               'anthropic-version': apiVersion,
+              // Required for a call made from a browser. Without it Anthropic
+              // refuses the origin and the browser blocks the request before
+              // it leaves the device — so there is no HTTP status to report
+              // and the failure surfaces as a bare transport error.
+              //
+              // Dropped when porting this client from v1, where it was
+              // present and commented. The consequence was invisible off-web,
+              // which is where every test and every local run happens, and
+              // only appeared on the phone.
+              //
+              // The name is a warning and it is accurate: it declares that
+              // this device is knowingly holding a key. That is true here and
+              // deliberately *not* true of a managed call below, which is why
+              // it is only on this arm.
+              'anthropic-dangerous-direct-browser-access': 'true',
             },
           ),
         ManagedAccess(:final base, :final headers) => (
@@ -129,8 +144,21 @@ class AnthropicText {
           'error': {'message': _forStatus(e.statusCode)}
         }),
       );
+    } catch (_) {
+      // No status at all: the request never completed. A browser blocking it
+      // on CORS looks exactly like being offline from in here, so the sentence
+      // covers both rather than guessing between them.
+      yield SseEvent(
+        event: 'error',
+        data: jsonEncode({
+          'error': {'message': _unreachable}
+        }),
+      );
     }
   }
+
+  static const _unreachable =
+      'Could not reach the provider. Check your connection and try again.';
 
   static String _forStatus(int status) => switch (status) {
         400 => 'The provider rejected that request.',
@@ -255,5 +283,6 @@ class AnthropicText {
   static final _written = {
     for (final status in [400, 401, 403, 404, 429, 529, 500])
       _forStatus(status),
+    _unreachable,
   };
 }
