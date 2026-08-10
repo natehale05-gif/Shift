@@ -58,7 +58,16 @@ class Reply extends ChatItem {
         if (provider != null) 'provider': provider,
         if (failure != null) 'failure': failure,
         if (failureDetail != null) 'failureDetail': failureDetail,
-        'interrupted': interrupted,
+        // `|| !done` is the load-bearing half. The only way a half-written
+        // reply reaches disk is a snapshot taken while it was still arriving,
+        // and if that snapshot is what survives — the tab was closed, the app
+        // was killed — then it genuinely did not finish. Storing it as
+        // complete would present a truncated answer as a whole one, which
+        // [fromJson] then cements by forcing `done`.
+        //
+        // Costs nothing on the terminal write: by then `done` is true and this
+        // is exactly `interrupted`.
+        'interrupted': interrupted || !done,
       };
 
   /// A stored reply is always finished. A half-written one is not worth
@@ -127,27 +136,64 @@ class TurnController extends ChangeNotifier {
     ApiKeysStore? keys,
     this.conversations,
     Map<Capability, StepExecutor> Function()? executors,
+    this.snapshotEvery = const Duration(seconds: 3),
   }) : executors = executors ?? (() => _fromKeys(keys));
 
   String? get conversationId => _conversationId;
 
+  /// How often a still-arriving reply is written while it streams.
+  ///
+  /// Not per delta — that is a serialise-and-write per character. Not never,
+  /// either, which is what it was: a tab closed mid-reply lost the whole
+  /// exchange, stop button or no stop button. Wall-clock rather than a delta
+  /// count, so a fast model and a slow one cost the same number of writes.
+  ///
+  /// Settable so a test can drive the path without waiting on a real clock.
+  final Duration snapshotEvery;
+
+  DateTime? _lastSnapshot;
+
+  /// Guards against overlapping writes. [KvStore.put] is a read-modify-write
+  /// of the whole map, so two saves in flight at once can drop each other's
+  /// keys — including the index that makes a conversation findable.
+  bool _writing = false;
+
   Future<void> _persist() async {
     final store = conversations;
     final id = _conversationId;
-    if (store == null || id == null || items.isEmpty) return;
+    if (store == null || id == null || items.isEmpty || _writing) return;
 
     final title = items.whereType<UserSaid>().isEmpty
         ? 'New chat'
         : items.whereType<UserSaid>().first.text;
 
-    await store.save(
-      id: id,
-      title: title,
-      items: [
-        for (final item in items)
-          if (item is UserSaid) item.toJson() else (item as Reply).toJson(),
-      ],
-    );
+    _writing = true;
+    try {
+      await store.save(
+        id: id,
+        title: title,
+        items: [
+          for (final item in items)
+            if (item is UserSaid) item.toJson() else (item as Reply).toJson(),
+        ],
+      );
+    } finally {
+      _writing = false;
+      _lastSnapshot = DateTime.now();
+    }
+  }
+
+  /// Writes mid-turn, at most once per [snapshotEvery].
+  ///
+  /// The terminal write still happens; this only bounds how much a crash, a
+  /// closed tab or a killed app can take with it. Skipped entirely when a
+  /// write is already in flight, so a slow disk never queues a backlog of
+  /// saves behind a fast stream.
+  void _snapshot() {
+    final last = _lastSnapshot;
+    if (_writing || last == null) return;
+    if (DateTime.now().difference(last) < snapshotEvery) return;
+    unawaited(_persist());
   }
 
   /// Opens a stored conversation.
@@ -187,12 +233,21 @@ class TurnController extends ChangeNotifier {
   /// Stops the turn where it is. What arrived is kept — half an answer is
   /// worth more than none, and discarding it would punish someone for
   /// changing their mind.
-  void stop() {
+  ///
+  /// **And it is saved.** Stopping reaches the stream by *cancelling* the
+  /// subscription, and a cancelled subscription fires neither `onDone` nor
+  /// `onError` — which is where the only other call to [_persist] lives. So
+  /// the one ending a person chooses on purpose was the one ending that never
+  /// wrote: stop on the first turn of a chat and the whole conversation was
+  /// absent from the sidebar, as though it had not happened.
+  ///
+  /// Returns a future so a test can await the write. Nothing in the app does —
+  /// `Future<void> Function()` is assignable to `VoidCallback`, so the stop
+  /// button is wired to it unchanged.
+  Future<void> stop() async {
     if (!_running) return;
     _sub?.cancel();
     _sub = null;
-    _turnDone?.complete();
-    _turnDone = null;
     for (final item in items.reversed) {
       if (item is Reply && !item.done) {
         item.done = true;
@@ -202,6 +257,13 @@ class TurnController extends ChangeNotifier {
     }
     _running = false;
     notifyListeners();
+
+    // Before completing the turn, not after. Completing first would let `send`
+    // return ahead of the write — the exact fire-and-forget defect recorded
+    // below, one method over.
+    await _persist();
+    if (_turnDone?.isCompleted == false) _turnDone!.complete();
+    _turnDone = null;
   }
 
   /// With no key this still resolves to nothing and every step fails with a
@@ -236,6 +298,10 @@ class TurnController extends ChangeNotifier {
     final reply = Reply();
     items.add(reply);
     _running = true;
+    // The clock starts here, so a turn that finishes inside the window writes
+    // once at the end rather than twice. Without it the first delta always
+    // snapshots, whatever the interval says.
+    _lastSnapshot = DateTime.now();
     notifyListeners();
 
     final graph = planJobs(TurnRequest(input: text, mode: mode));
@@ -260,13 +326,17 @@ class TurnController extends ChangeNotifier {
           return;
       }
       notifyListeners();
-      // Saved when a turn ends, not on every delta: writing the whole
-      // transcript per token would be a serialise-and-write per character.
+      // Saved when a turn ends, and — at most every few seconds — while it is
+      // still arriving. Not on every delta: writing the whole transcript per
+      // token would be a serialise-and-write per character. Not only at the
+      // end either, which is what it was: a tab closed mid-reply took the
+      // whole exchange with it.
       //
-      // Awaited *before* the turn is declared finished. Fire-and-forget here
-      // meant `send` returned before the write landed, so a reload
-      // immediately afterwards found nothing — which is exactly the thing
+      // The terminal write is awaited *before* the turn is declared finished.
+      // Fire-and-forget there meant `send` returned before the write landed,
+      // so a reload immediately afterwards found nothing — exactly the thing
       // this feature promises not to do.
+      _snapshot();
     }, onDone: () async {
       reply.done = true;
       _running = false;
