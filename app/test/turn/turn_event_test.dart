@@ -16,6 +16,7 @@ String describe(TurnEvent event) => switch (event) {
       ToolUseStarted(:final tool) => 'tool $tool',
       ToolUseFinished(:final tool) => 'tool done $tool',
       CitationsFound(:final citations) => 'cite ${citations.length}',
+      ArtifactProduced(:final artifact) => 'artifact ${artifact.title}',
       StepCompleted() => 'done',
       StepFailed(:final reason) => 'failed $reason',
       TurnFinished(:final incomplete) => 'finished incomplete=$incomplete',

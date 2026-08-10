@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks every `if (dart.library.html)` import pair in lib/.
+"""Checks every conditional import pair in v1's `lib/` and v2's `app/lib/`.
 
 The analyzer only ever resolves the **default** branch of a conditional
 import. A stale path or a drifted name in the other branch therefore passes
@@ -22,7 +22,14 @@ import re
 import sys
 from pathlib import Path
 
-LIB = Path(__file__).resolve().parent.parent / "lib"
+ROOT = Path(__file__).resolve().parent.parent
+
+# **Both apps.** This scanned only v1 for the whole of the v2 rebuild, so every
+# report of "N pairs clean" during it was true of v1 and silent about v2 --
+# whose pairs key on `dart.library.js_interop` and are the ones most likely to
+# be wrong, because `dart.library.html` is *false* under dart2wasm and picking
+# the wrong arm raises nothing at all.
+LIBS = [ROOT / "lib", ROOT / "app" / "lib"]
 
 # Both keywords: `export` facades (open_url, file_intake) re-expose the whole
 # branch, so they need a stricter check than `import` ones do. Captures the
@@ -70,13 +77,16 @@ def main() -> int:
     problems = []
     pairs = 0
 
-    for source in sorted(LIB.rglob("*.dart")):
+    for lib in LIBS:
+      if not lib.is_dir():
+          continue
+      for source in sorted(lib.rglob("*.dart")):
         text = source.read_text()
         for keyword, default_path, other_path, prefix in CONDITIONAL.findall(text):
             pairs += 1
             default = (source.parent / default_path).resolve()
             other = (source.parent / other_path).resolve()
-            rel = source.relative_to(LIB)
+            rel = source.relative_to(ROOT)
 
             missing = [p for p in (default, other) if not p.is_file()]
             if missing:

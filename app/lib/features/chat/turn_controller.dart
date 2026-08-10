@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/api_keys_store.dart';
+import '../../data/artifact.dart';
+import '../../data/artifact_store.dart';
 import '../../data/conversation_store.dart';
 import '../../providers/access.dart';
 import '../../shell/mode.dart';
@@ -40,6 +42,13 @@ class Reply extends ChatItem {
   /// already scrolled off screen.
   String? failureDetail;
 
+  /// The deliverable this reply produced, if it produced one.
+  ///
+  /// Stamped on the reply rather than kept in a list beside the transcript, so
+  /// the card that reopens it sits where the page was made — and so the
+  /// ordering survives a reload without anything having to reconstruct it.
+  String? artifactId;
+
   bool done = false;
 
   /// Stopped by the user rather than by the model finishing. Kept separate
@@ -58,6 +67,7 @@ class Reply extends ChatItem {
         if (provider != null) 'provider': provider,
         if (failure != null) 'failure': failure,
         if (failureDetail != null) 'failureDetail': failureDetail,
+        if (artifactId != null) 'artifactId': artifactId,
         // `|| !done` is the load-bearing half. The only way a half-written
         // reply reaches disk is a snapshot taken while it was still arriving,
         // and if that snapshot is what survives — the tab was closed, the app
@@ -79,6 +89,7 @@ class Reply extends ChatItem {
       ..provider = json['provider'] as String?
       ..failure = json['failure'] as String?
       ..failureDetail = json['failureDetail'] as String?
+      ..artifactId = json['artifactId'] as String?
       ..interrupted = json['interrupted'] == true
       ..done = true;
     return reply;
@@ -107,7 +118,11 @@ class TurnController extends ChangeNotifier {
   /// How the engine is reached. Injected so a test can drive the surface with
   /// fake executors, and so the real answer to "which provider, paid for how"
   /// stays in one place rather than in a widget.
-  final Map<Capability, StepExecutor> Function() executors;
+  ///
+  /// `late final` rather than an initializer because the default needs `this`:
+  /// the text executor has to be able to ask which conversation is open when it
+  /// produces an artifact, and that id does not exist until the first message.
+  late final Map<Capability, StepExecutor> Function() executors;
 
   bool _running = false;
   StreamSubscription<TurnEvent>? _sub;
@@ -135,9 +150,44 @@ class TurnController extends ChangeNotifier {
   TurnController({
     ApiKeysStore? keys,
     this.conversations,
+    this.artifacts,
     Map<Capability, StepExecutor> Function()? executors,
     this.snapshotEvery = const Duration(seconds: 3),
-  }) : executors = executors ?? (() => _fromKeys(keys));
+  }) {
+    this.executors =
+        executors ?? () => _fromKeys(keys, () => _conversationId ?? '');
+  }
+
+  /// Where deliverables are kept. Optional, like [conversations], so a test can
+  /// drive the controller with no disk at all.
+  final ArtifactStore? artifacts;
+
+  /// What this conversation produced beside itself, newest last.
+  final List<Artifact> produced = [];
+
+  String? _openArtifactId;
+
+  /// The artifact the panel is showing, or null when it is closed.
+  Artifact? get openArtifact {
+    final id = _openArtifactId;
+    if (id == null) return null;
+    for (final a in produced.reversed) {
+      if (a.id == id) return a;
+    }
+    return null;
+  }
+
+  Artifact? byId(String id) {
+    for (final a in produced) {
+      if (a.id == id) return a;
+    }
+    return null;
+  }
+
+  void showArtifact(String? id) {
+    _openArtifactId = id;
+    notifyListeners();
+  }
 
   String? get conversationId => _conversationId;
 
@@ -205,6 +255,13 @@ class TurnController extends ChangeNotifier {
     items
       ..clear()
       ..addAll(itemsFromJson(conversations?.body(id) ?? const []));
+    produced
+      ..clear()
+      ..addAll(artifacts?.forConversation(id) ?? const []);
+    // Deliberately closed: opening a stored conversation is choosing the
+    // conversation, not the page inside it. The card in the transcript is how
+    // it is reopened.
+    _openArtifactId = null;
     _last = null;
     notifyListeners();
   }
@@ -273,7 +330,10 @@ class TurnController extends ChangeNotifier {
   ///
   /// The membership arm of [resolveAccess] is written and dormant: it needs an
   /// account, which lands with sign-in.
-  static Map<Capability, StepExecutor> _fromKeys(ApiKeysStore? keys) {
+  static Map<Capability, StepExecutor> _fromKeys(
+    ApiKeysStore? keys,
+    String Function() conversationId,
+  ) {
     bool usable(String id) => keys?.has(id) ?? false;
 
     Future<ProviderAccess?> access(String id) async {
@@ -282,7 +342,11 @@ class TurnController extends ChangeNotifier {
     }
 
     return {
-      Capability.text: TextExecutor(usable: usable, access: access),
+      Capability.text: TextExecutor(
+        usable: usable,
+        access: access,
+        conversationId: conversationId,
+      ),
       Capability.image: ImageExecutor(usable: usable, access: access),
     };
   }
@@ -316,6 +380,16 @@ class TurnController extends ChangeNotifier {
           reply.provider ??= provider;
         case TextDelta(:final text):
           reply.write(text);
+        case ArtifactProduced(:final artifact):
+          // Saved as it arrives rather than with the transcript at the end: an
+          // artifact is the thing the turn was *for*, so losing it to a stop
+          // or a closed tab is the worst version of the defect N2e fixed.
+          produced.add(artifact);
+          reply.artifactId = artifact.id;
+          // Opened on arrival, which is what every app shaped like this does —
+          // the page is the answer, so showing it is not an interruption.
+          _openArtifactId = artifact.id;
+          unawaited(artifacts?.save(artifact) ?? Future<void>.value());
         case StepFailed(:final reason, :final detail):
           reply.failure ??= reason;
           reply.failureDetail ??= detail;
@@ -363,6 +437,8 @@ class TurnController extends ChangeNotifier {
     _conversationId = null;
     _last = null;
     items.clear();
+    produced.clear();
+    _openArtifactId = null;
     notifyListeners();
   }
 

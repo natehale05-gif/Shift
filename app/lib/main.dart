@@ -4,6 +4,7 @@ import 'package:flutter/scheduler.dart';
 import 'app.dart';
 import 'core/platform/boot_splash.dart';
 import 'data/api_keys_store.dart';
+import 'data/artifact_store.dart';
 import 'data/conversation_store.dart';
 import 'data/kv_store.dart';
 
@@ -18,10 +19,15 @@ Future<void> main() async {
   final kv = KvStore();
   final keys = ApiKeysStore(kv);
   final conversations = ConversationStore(kv);
+  final artifacts = ArtifactStore(kv);
   await keys.load();
   await conversations.load();
 
-  runApp(ShiftApp(keys: keys, conversations: conversations));
+  runApp(ShiftApp(
+    keys: keys,
+    conversations: conversations,
+    artifacts: artifacts,
+  ));
 
   // After the first real frame, not before: the HTML splash is what the user
   // is looking at until then, and taking it down early trades a branded screen

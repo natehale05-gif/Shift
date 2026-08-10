@@ -1,3 +1,4 @@
+import '../data/artifact.dart';
 import 'job_output.dart';
 
 /// Everything that can happen during a turn.
@@ -105,6 +106,19 @@ class Citation {
   });
 
   bool get hasSpan => start != null && end != null;
+}
+
+/// A step's reply carried a deliverable — a page, a document, a file — that
+/// belongs beside the conversation rather than inside it.
+///
+/// Separate from [StepCompleted] because the two answer different questions:
+/// what the next step receives, versus what the person is shown. A page is
+/// both, and collapsing them would mean either the panel reading the step's
+/// output and guessing, or the next step receiving a widget.
+class ArtifactProduced extends TurnEvent {
+  final Artifact artifact;
+
+  const ArtifactProduced(super.stepId, this.artifact);
 }
 
 /// A step finished and produced something.

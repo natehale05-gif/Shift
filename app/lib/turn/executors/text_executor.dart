@@ -2,6 +2,8 @@ import '../../providers/access.dart';
 import '../../providers/clients/anthropic_text.dart';
 import '../../providers/select.dart';
 import '../capability.dart';
+import '../extract_artifact.dart';
+import '../fence_filter.dart';
 import '../job_graph.dart';
 import '../job_output.dart';
 import '../job_runner.dart';
@@ -24,12 +26,22 @@ class TextExecutor implements StepExecutor {
   final String? pinned;
   final AnthropicText anthropic;
 
+  /// Which conversation an artifact belongs to, read at the moment one is
+  /// produced rather than held — the id is minted on the first message, so a
+  /// value captured when the executors were built would be the previous
+  /// conversation's, or nothing at all.
+  final String Function() conversationId;
+
   TextExecutor({
     required this.usable,
     required this.access,
     this.pinned,
     AnthropicText? anthropic,
-  }) : anthropic = anthropic ?? AnthropicText();
+    String Function()? conversationId,
+  })  : anthropic = anthropic ?? AnthropicText(),
+        conversationId = conversationId ?? _noConversation;
+
+  static String _noConversation() => '';
 
   ProviderChoice? _choose(JobStep step) =>
       chooseProvider(Capability.text, usable: usable, pinned: pinned);
@@ -75,7 +87,7 @@ class TextExecutor implements StepExecutor {
     // identically in a log and is not the feature.
     final context = _describe(inputs);
 
-    yield* switch (choice.provider.id) {
+    final events = switch (choice.provider.id) {
       'anthropic' => anthropic.stream(
           stepId: step.id,
           access: credential,
@@ -93,6 +105,82 @@ class TextExecutor implements StepExecutor {
           ),
         ),
     };
+
+    yield* _withArtifact(step, events);
+  }
+
+  /// Holds fenced blocks back from the transcript, and at the end either turns
+  /// them into an artifact or puts them back.
+  ///
+  /// **Here rather than in the client**, so one implementation covers every
+  /// provider. v1 shipped this inside its Anthropic path and the consequence
+  /// was that Gemini and OpenAI produced no artifacts at all — a fence in the
+  /// chat and an empty panel — for months.
+  ///
+  /// The invariant, stated once: **withholding is a presentation choice, so
+  /// every exit path either turns held text into an artifact or puts it back in
+  /// the reply.** v1 lost whole pages to a version of this that only handled a
+  /// clean finish.
+  Stream<TurnEvent> _withArtifact(
+    JobStep step,
+    Stream<TurnEvent> events,
+  ) async* {
+    final fences = FenceFilter();
+    final reply = StringBuffer();
+    var failed = false;
+    var ended = false;
+
+    Stream<TurnEvent> finish() async* {
+      if (ended) return;
+      ended = true;
+
+      final trailing = fences.flush();
+      if (trailing.isNotEmpty) yield TextDelta(step.id, trailing);
+      if (!fences.sawFence) return;
+
+      // Extraction only on a clean finish: half a document previews as a
+      // broken page, and presenting one as a deliverable is worse than showing
+      // the source. The held text still comes back either way.
+      final artifact = failed
+          ? null
+          : extractArtifact(
+              reply.toString(),
+              conversationId: conversationId(),
+              request: step.instruction,
+            );
+
+      if (artifact != null) {
+        yield ArtifactProduced(step.id, artifact);
+      } else {
+        yield TextDelta(step.id, fences.replayText());
+      }
+    }
+
+    await for (final event in events) {
+      switch (event) {
+        case TextDelta(:final text):
+          reply.write(text);
+          final prose = fences.feed(text);
+          if (prose.isNotEmpty) yield TextDelta(step.id, prose);
+
+        // All three endings are terminal. A `StepFailed` mid-fence is the
+        // truncated-reply case — the model hit its ceiling — and it is exactly
+        // where v1 dropped the page on the floor.
+        case StepFailed():
+          failed = true;
+          yield* finish();
+          yield event;
+
+        case StepCompleted():
+          yield* finish();
+          yield event;
+
+        default:
+          yield event;
+      }
+    }
+
+    yield* finish();
   }
 
   /// What the step should know about what came before it.

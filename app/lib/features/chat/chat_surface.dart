@@ -7,6 +7,8 @@ import '../../core/design/typography.dart';
 import '../../data/api_keys_store.dart';
 import '../../shell/mode.dart';
 import '../settings/settings_screen.dart';
+import '../artifacts/artifact_card.dart';
+import '../artifacts/artifact_panel.dart';
 import 'composer.dart';
 import 'failure_card.dart';
 import 'markdown_view.dart';
@@ -32,17 +34,65 @@ class ChatSurface extends StatelessWidget {
   /// paragraph does not need a head-turn to read.
   static const double column = 720;
 
+  /// The narrowest the conversation can be and still be worth having beside
+  /// the panel — about a phone's width, which is a shape people read all day.
+  static const double _minimumColumn = 420;
+
   @override
   Widget build(BuildContext context) {
     final turn = context.watch<TurnController>();
 
-    return Center(
+    final conversation = Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: column),
         child: turn.isEmpty
             ? const _EmptyConversation()
             : _Transcript(turn: turn),
       ),
+    );
+
+    final artifact = turn.openArtifact;
+    if (artifact == null) return conversation;
+
+    // Beside the conversation when both can be usable, and over it when they
+    // cannot. A *layout* question, so it reads the space it has rather than
+    // the device class the way Code mode's surfaces will.
+    //
+    // Measured against what the conversation needs to stay usable, not against
+    // [column], which is its comfortable *maximum*. Written the other way
+    // first, and a 1300pt window put the panel full-screen with 1040pt of room
+    // going spare — taking the transcript and the composer with it, so there
+    // was no way to reply to the thing being previewed.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final together =
+            constraints.maxWidth >= ArtifactPanel.width + _minimumColumn;
+        if (!together) {
+          return Stack(
+            children: [
+              conversation,
+              Positioned.fill(
+                child: ArtifactPanel(
+                  artifact: artifact,
+                  onClose: () => turn.showArtifact(null),
+                ),
+              ),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: conversation),
+            SizedBox(
+              width: ArtifactPanel.width,
+              child: ArtifactPanel(
+                artifact: artifact,
+                onClose: () => turn.showArtifact(null),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -190,6 +240,20 @@ class _Item extends StatelessWidget {
               if (!reply.done && reply.text.isEmpty && reply.failure == null)
                 Text('Thinking…',
                     style: text.bodyMedium?.copyWith(color: c.textFaint)),
+              if (reply.artifactId case final id?)
+                Builder(builder: (context) {
+                  final made = context.read<TurnController>().byId(id);
+                  return made == null
+                      ? const SizedBox.shrink()
+                      : Padding(
+                          padding: const EdgeInsets.only(top: Space.sm),
+                          child: ArtifactCard(
+                            artifact: made,
+                            onOpen: () =>
+                                context.read<TurnController>().showArtifact(id),
+                          ),
+                        );
+                }),
               if (reply.done) MessageActions(reply: reply),
             ],
           ),
