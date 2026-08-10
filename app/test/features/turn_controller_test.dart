@@ -256,6 +256,9 @@ void _controlTests() {
       unawaited(turn.send('hello', mode: AppMode.chat));
       await executor.streaming;
       await pumpEventQueue();
+      // The snapshot itself, not a guess at how many turns of the event loop
+      // a real file write takes — that guess passed here and failed on CI.
+      await turn.snapshotting;
 
       expect(turn.running, isTrue, reason: 'this is the mid-flight case');
 

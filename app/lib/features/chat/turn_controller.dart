@@ -243,8 +243,19 @@ class TurnController extends ChangeNotifier {
     final last = _lastSnapshot;
     if (_writing || last == null) return;
     if (DateTime.now().difference(last) < snapshotEvery) return;
-    unawaited(_persist());
+    _snapshotting = _persist();
   }
+
+  /// The snapshot in flight, if there is one.
+  ///
+  /// Exposed only so a test can await the *write* rather than guess at how
+  /// many turns of the event loop a real file takes. Pumping the queue is not
+  /// a substitute: it passed on this machine and failed on a loaded CI runner,
+  /// which makes it a check that reports the machine rather than the code.
+  @visibleForTesting
+  Future<void> get snapshotting => _snapshotting ?? Future.value();
+
+  Future<void>? _snapshotting;
 
   /// Opens a stored conversation.
   void open(String id) {
