@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
 import '../features/chat/turn_controller.dart';
+import '../features/settings/settings_screen.dart';
 
 /// The conversation list.
 ///
@@ -75,6 +76,15 @@ class Sidebar extends StatelessWidget {
                         ),
                       ],
                     ),
+            ),
+            // Settings lives at the foot of the list, which is where it lives
+            // in every app shaped like this — and it is the destination the
+            // chat's own error message names, so it has to be findable from
+            // wherever that message is read.
+            Divider(height: 1, thickness: 1, color: c.divider),
+            Padding(
+              padding: const EdgeInsets.all(Space.sm),
+              child: _SettingsEntry(onOpen: onDismiss),
             ),
           ],
         ),
@@ -154,6 +164,45 @@ class _Row extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: text.bodyMedium?.copyWith(color: c.text),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsEntry extends StatelessWidget {
+  final VoidCallback? onOpen;
+
+  const _SettingsEntry({this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(Radii.sm),
+        onTap: () {
+          onOpen?.call();
+          Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const SettingsScreen()),
+          );
+        },
+        child: Container(
+          constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(
+              horizontal: Space.md, vertical: Space.sm),
+          child: Row(
+            children: [
+              Icon(Icons.settings_outlined, size: 18, color: c.textMuted),
+              const SizedBox(width: Space.sm),
+              Text('Settings',
+                  style: text.bodyMedium?.copyWith(color: c.textMuted)),
+            ],
           ),
         ),
       ),

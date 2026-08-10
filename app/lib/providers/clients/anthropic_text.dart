@@ -87,8 +87,13 @@ class AnthropicText {
   }) async* {
     final target = _target(access);
 
+    // A non-2xx arrives as an exception from the transport, and letting it
+    // escape loses the status — the runner's catch-all then says "that step
+    // could not be completed", which is true of a rejected key, a rate limit
+    // and an outage alike. Three different problems with three different
+    // fixes, and only one of them is the user's.
     yield* mapEvents(
-      _sse.postJson(
+      _statusAware(_sse.postJson(
         uri: target.uri,
         headers: target.headers,
         body: jsonEncode(buildBody(
@@ -96,10 +101,46 @@ class AnthropicText {
           instruction: instruction,
           system: system,
         )),
-      ),
+      ), stepId),
       stepId: stepId,
     );
   }
+
+  /// Turns a transport-level HTTP failure into a [StepFailed] that says which
+  /// failure it was.
+  static Stream<SseEvent> _statusAware(
+    Stream<SseEvent> events,
+    String stepId,
+  ) async* {
+    try {
+      // `await for`, not `yield*`. A `yield*` forwards a stream's error
+      // straight to the consumer without ever throwing inside this function,
+      // so the catch below never ran and the status was lost anyway — which
+      // is a fix that looks right, compiles, and does nothing.
+      await for (final event in events) {
+        yield event;
+      }
+    } on SseHttpException catch (e) {
+      // Re-emitted as an `error` frame so there is one place that turns a
+      // provider problem into a sentence, rather than two that can disagree.
+      yield SseEvent(
+        event: 'error',
+        data: jsonEncode({
+          'error': {'message': _forStatus(e.statusCode)}
+        }),
+      );
+    }
+  }
+
+  static String _forStatus(int status) => switch (status) {
+        400 => 'The provider rejected that request.',
+        401 || 403 =>
+          'That key was rejected. Check it is complete and still active.',
+        404 => 'That model is not available on this key.',
+        429 => 'Rate limited. Try again in a moment.',
+        529 => 'The provider is overloaded right now.',
+        _ => 'The provider could not complete that step.',
+      };
 
   /// Folds the SSE stream into [TurnEvent]s. Static and taking a stream, so
   /// the whole mapping is testable against recorded events with no HTTP at
@@ -196,11 +237,23 @@ class AnthropicText {
     }
   }
 
+  /// The sentence shown to a person.
+  ///
+  /// Messages produced by [_forStatus] are already written for a reader and
+  /// pass through; anything the provider itself said does not, because a raw
+  /// API message tells the reader nothing they can act on and occasionally
+  /// tells them something they should not see.
   static String _readable(Object? message) {
     final text = message is String ? message : '';
+    if (_written.contains(text)) return text;
     if (text.contains('credit') || text.contains('billing')) {
       return 'That provider account is out of credit.';
     }
     return 'The provider could not complete that step.';
   }
+
+  static final _written = {
+    for (final status in [400, 401, 403, 404, 429, 529, 500])
+      _forStatus(status),
+  };
 }

@@ -15,11 +15,19 @@ import 'package:flutter/material.dart';
 /// the gradient's ends, and the solid accent is the point along it that stays
 /// legible as text on both grounds, which is not the midpoint.
 ///
-/// The neutrals are **warm** — this is Claude's palette, not a neutral grey
-/// one and not Apple's. Paper is a cream off-white rather than #FFF, the greys
-/// carry yellow rather than blue, and the accent is the terracotta from
-/// Anthropic's own mark. The warmth is most of the identity: swap the cream
-/// for white and the same layout stops looking like Claude immediately.
+/// **Warm paper, purple accent.** The neutrals are Claude's — cream rather than
+/// white, greys carrying yellow rather than blue — and the accent is SHIFT's
+/// own violet, derived from the app icon's magenta-to-blue gradient as the
+/// point along it that stays legible as text on both grounds.
+///
+/// The two halves come from different places on purpose. The paper is what
+/// makes the app feel like the thing it is modelled on; the accent is what
+/// makes it yours. Every accent moment — send, New chat, the current mode, a
+/// link — is violet, and nothing else is.
+///
+/// The neutrals are deliberately *not* re-tinted violet to match. An earlier
+/// palette did that, and a purple cast in every surface is what made the app
+/// read as one colour rather than as paper with something on it.
 ///
 /// Two earlier directions are recorded here because they were each right for
 /// what was asked and each replaced: a violet-tinted set (brand-derived), and
@@ -27,9 +35,10 @@ import 'package:flutter/material.dart';
 class ShiftPalette {
   const ShiftPalette._();
 
-  /// The app icon's gradient. Kept for the mark itself — the launcher icon and
-  /// the boot splash are still the magenta-to-blue plate — but deliberately
-  /// absent from the interface, which is Claude's warm set below.
+  /// The app icon's gradient, and where the accent below comes from. Used
+  /// whole for the mark — the launcher icon and the boot splash are still the
+  /// magenta-to-blue plate — and never as a background behind body text, where
+  /// a gradient makes contrast unknowable.
   static const magenta = Color(0xFFD648E8);
   static const blue = Color(0xFF4A7DFF);
 
@@ -122,7 +131,7 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
     required this.diffRemoved,
   });
 
-  /// Light: cream paper, warm greys, terracotta.
+  /// Light: cream paper, warm greys, violet accent.
   ///
   /// `ground` is the paper the whole app sits on and `surfaceRaised` is the
   /// near-white a menu or a card lifts to — the opposite way round from a
@@ -135,13 +144,13 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
     surfaceSunken: Color(0xFFEDEAE0),
     divider: Color(0xFFE5E2D9),
     border: Color(0xFFDAD6C9),
-    borderFocus: Color(0xFFC15F3C),
+    borderFocus: Color(0xFF8B3FD6),
     text: Color(0xFF141413),
     textMuted: Color(0xFF6B6961),
     textFaint: Color(0xFF91908A),
-    accent: Color(0xFFC15F3C),
+    accent: Color(0xFF8B3FD6),
     onAccent: Color(0xFFFFFFFF),
-    accentWash: Color(0xFFF6EDE7),
+    accentWash: Color(0xFFF2EAFB),
     success: Color(0xFF3F7A55),
     warning: Color(0xFF9A6410),
     danger: Color(0xFFB4362F),
@@ -152,9 +161,10 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
   /// Dark: warm charcoal, never black.
   ///
   /// The ground is a brown-grey, not a neutral one and not #000. That is the
-  /// whole trick of this dark mode — a true-black ground under the same
-  /// terracotta reads as a generic dark theme, and the accent goes muddy
-  /// against it. Text is warm off-white for the same reason.
+  /// whole trick of this dark mode — a true-black ground reads as a generic
+  /// dark theme and flattens whatever accent sits on it. Text is warm
+  /// off-white for the same reason. The accent lifts to a lighter violet here,
+  /// because #8B3FD6 on charcoal is too close in value to read as a colour.
   static const dark = ShiftColors(
     ground: Color(0xFF262624),
     surface: Color(0xFF30302E),
@@ -162,13 +172,13 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
     surfaceSunken: Color(0xFF1F1E1D),
     divider: Color(0xFF3E3E3B),
     border: Color(0xFF4A4A46),
-    borderFocus: Color(0xFFD97757),
+    borderFocus: Color(0xFFB76BFF),
     text: Color(0xFFF5F4EF),
     textMuted: Color(0xFFB0AEA5),
     textFaint: Color(0xFF8A887F),
-    accent: Color(0xFFD97757),
+    accent: Color(0xFFB76BFF),
     onAccent: Color(0xFF1F1E1D),
-    accentWash: Color(0xFF3A2E28),
+    accentWash: Color(0xFF322641),
     success: Color(0xFF6FBF8E),
     warning: Color(0xFFE0A44A),
     danger: Color(0xFFE8776B),

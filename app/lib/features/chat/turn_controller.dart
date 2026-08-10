@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/api_keys_store.dart';
 import '../../providers/access.dart';
 import '../../shell/mode.dart';
 import '../../turn/capability.dart';
@@ -53,26 +54,35 @@ class TurnController extends ChangeNotifier {
   bool _running = false;
   StreamSubscription<TurnEvent>? _sub;
 
-  TurnController({Map<Capability, StepExecutor> Function()? executors})
-      : executors = executors ?? _defaultExecutors;
+  /// Built from the keys on this device. [ApiKeysStore] is passed rather than
+  /// read from a context so the controller stays testable with no widgets, and
+  /// so "which provider, paid for how" has exactly one answer.
+  TurnController({
+    ApiKeysStore? keys,
+    Map<Capability, StepExecutor> Function()? executors,
+  }) : executors = executors ?? (() => _fromKeys(keys));
 
   bool get running => _running;
   bool get isEmpty => items.isEmpty;
 
-  /// With no key and no plan this resolves to nothing, and every step fails
-  /// with a sentence naming what is missing. That is the honest state of the
-  /// app today and it is better than a simulated answer: v1 shipped a demo
-  /// mode that answered convincingly without a model behind it, and it made
-  /// "is this working?" unanswerable.
-  static Map<Capability, StepExecutor> _defaultExecutors() {
-    Future<ProviderAccess?> noCredential(String _) async => null;
-    bool nothingUsable(String _) => false;
+  /// With no key this still resolves to nothing and every step fails with a
+  /// sentence naming what is missing — which remains better than a simulated
+  /// answer. v1 shipped a demo mode that answered convincingly with no model
+  /// behind it, and it made "is this actually working?" unanswerable.
+  ///
+  /// The membership arm of [resolveAccess] is written and dormant: it needs an
+  /// account, which lands with sign-in.
+  static Map<Capability, StepExecutor> _fromKeys(ApiKeysStore? keys) {
+    bool usable(String id) => keys?.has(id) ?? false;
+
+    Future<ProviderAccess?> access(String id) async {
+      final key = keys?.get(id);
+      return key == null ? null : DirectKey(key);
+    }
 
     return {
-      Capability.text:
-          TextExecutor(usable: nothingUsable, access: noCredential),
-      Capability.image:
-          ImageExecutor(usable: nothingUsable, access: noCredential),
+      Capability.text: TextExecutor(usable: usable, access: access),
+      Capability.image: ImageExecutor(usable: usable, access: access),
     };
   }
 

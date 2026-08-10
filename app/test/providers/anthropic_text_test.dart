@@ -210,6 +210,8 @@ void main() {
     });
   });
 
+  _statusTests();
+
   group('managed calls', () {
     test('carry no key and no version header', () async {
       // Both matter and for different reasons: the key is the custody
@@ -279,4 +281,65 @@ class _RecordingSse implements SseClient {
     onCall(uri, headers);
     return const Stream.empty();
   }
+}
+
+/// A transport that fails the way a real one does — by throwing, which is what
+/// `SseClient` does on a non-2xx.
+class _FailingSse implements SseClient {
+  final int status;
+
+  _FailingSse(this.status);
+
+  @override
+  Stream<SseEvent> postJson({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+  }) =>
+      Stream.error(SseHttpException(status, '{"error":{"message":"nope"}}'));
+}
+
+Future<String?> _failureFor(int status) async {
+  final events = await AnthropicText(sse: _FailingSse(status))
+      .stream(
+        stepId: 's',
+        access: const DirectKey('sk-ant-x'),
+        model: 'claude-opus-4-8',
+        instruction: 'hi',
+      )
+      .toList();
+  return events.whereType<StepFailed>().singleOrNull?.reason;
+}
+
+void _statusTests() {
+  group('an HTTP failure says which failure it was', () {
+    test('a rejected key is named as one', () async {
+      // Before this, every non-2xx escaped as an exception and the runner's
+      // catch-all said "that step could not be completed" — equally true of a
+      // bad key, a rate limit and an outage. Three problems, three fixes, and
+      // only one of them the user's. Found by pasting a fake key into the
+      // running app and reading what it said.
+      expect(await _failureFor(401), contains('key was rejected'));
+      expect(await _failureFor(403), contains('key was rejected'));
+    });
+
+    test('a rate limit says to wait, not to check the key', () async {
+      final reason = await _failureFor(429);
+      expect(reason, contains('Rate limited'));
+      expect(reason, isNot(contains('key')));
+    });
+
+    test('an overloaded provider is not the user\'s fault', () async {
+      expect(await _failureFor(529), contains('overloaded'));
+    });
+
+    test('an unknown status still produces a sentence', () async {
+      expect(await _failureFor(418), isNotEmpty);
+    });
+
+    test('the provider\'s own message is never shown', () async {
+      // The body carries "nope"; the reader gets a written sentence instead.
+      expect(await _failureFor(500), isNot(contains('nope')));
+    });
+  });
 }
