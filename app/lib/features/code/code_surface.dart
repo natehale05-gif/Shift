@@ -5,6 +5,7 @@ import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../data/agent.dart';
 import '../../data/agent_store.dart';
+import 'add_workspace_sheet.dart';
 import 'agent_list_screen.dart';
 import 'code_chrome.dart';
 import 'code_composer.dart';
@@ -272,21 +273,17 @@ class _AddWorkspaceRow extends StatelessWidget {
         Material(
           color: Colors.transparent,
           child: InkWell(
-            // Adding one needs a repository picker, which needs GitHub — the
-            // next wave. The row is here because its absence changes the
-            // screen's shape, and it says plainly that it is not ready rather
-            // than doing nothing when pressed.
-            onTap: null,
+            onTap: () => AddWorkspaceSheet.show(context),
             child: Container(
               constraints: const BoxConstraints(minHeight: kMinTouchTarget),
               child: Row(
                 children: [
                   Icon(Icons.create_new_folder_outlined,
-                      size: 20, color: c.textFaint),
+                      size: 20, color: c.textMuted),
                   const SizedBox(width: Space.md),
                   Expanded(
                     child: Text('Add Workspace',
-                        style: text.titleMedium?.copyWith(color: c.textFaint)),
+                        style: text.titleMedium?.copyWith(color: c.textMuted)),
                   ),
                 ],
               ),
