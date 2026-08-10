@@ -55,7 +55,7 @@ void main() {
       // including about CORS, which is per-origin and per-header and is the
       // thing most likely to be at fault.
       const access = DirectKey('sk-ant-x');
-      final request = probeRequest('anthropic', access)!;
+      final request = probeRequest(_provider('anthropic'), access)!;
       final real = AnthropicText.target(access);
 
       expect(request.uri, real.uri);
@@ -63,8 +63,9 @@ void main() {
     });
 
     test('is as small as a real generation can be', () {
-      final body = jsonDecode(probeRequest('anthropic', const DirectKey('k'))!
-          .body) as Map<String, dynamic>;
+      final body = jsonDecode(
+              probeRequest(_provider('anthropic'), const DirectKey('k'))!.body)
+          as Map<String, dynamic>;
 
       expect(body['max_tokens'], 1);
       expect(body.containsKey('thinking'), isFalse);
@@ -72,13 +73,25 @@ void main() {
           reason: 'the probe reads one status; streaming it would be theatre');
     });
 
-    test('is null for a provider with no client yet', () {
-      // Offering to test something that cannot run is the kind of button that
-      // erodes trust in every other one.
-      expect(probeRequest('groq', const DirectKey('k')), isNull);
-      expect(canProbe(kProviders.firstWhere((p) => p.id == 'groq')), isFalse);
-      expect(
-          canProbe(kProviders.firstWhere((p) => p.id == 'anthropic')), isTrue);
+    test('every provider with a text model can be tested', () {
+      // Was true of Anthropic alone while it was the only wired client. Now
+      // that Gemini and the OpenAI-compatible family are wired, a row that
+      // could be keyed but not tested would be an unexplained gap.
+      for (final provider in kProviders) {
+        expect(canProbe(provider), isTrue, reason: provider.id);
+      }
+    });
+
+    test('each family sends its own shape', () {
+      final gemini = probeRequest(_provider('gemini'), const DirectKey('k'))!;
+      expect(gemini.uri.host, 'generativelanguage.googleapis.com');
+      expect(jsonDecode(gemini.body), containsPair('generationConfig',
+          containsPair('maxOutputTokens', 1)));
+
+      final groq = probeRequest(_provider('groq'), const DirectKey('k'))!;
+      expect(groq.uri.toString(), endsWith('/chat/completions'));
+      expect(jsonDecode(groq.body), containsPair('stream', false),
+          reason: 'the probe reads one status; streaming it would be theatre');
     });
   });
 
@@ -88,7 +101,7 @@ void main() {
       Reach reach = Reach.unknown,
     }) =>
         runProbe(
-          providerId: 'anthropic',
+          provider: _provider('anthropic'),
           access: const DirectKey('sk-ant-x'),
           clientFactory: () => _FakeClient(respond),
           reach: () async => reach,
@@ -158,3 +171,6 @@ class _FakeClient extends http.BaseClient {
     );
   }
 }
+
+ProviderDescriptor _provider(String id) =>
+    kProviders.firstWhere((p) => p.id == id);

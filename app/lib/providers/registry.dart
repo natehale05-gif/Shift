@@ -37,6 +37,12 @@ class ProviderDescriptor {
   /// capability at all, which is different from being a poor one.
   final Map<Capability, int> ranks;
 
+  /// For the providers that speak OpenAI's `chat/completions`, where the only
+  /// thing that differs between them is this string. Null for the ones with
+  /// their own wire — a field that means "the OpenAI-compatible base URL"
+  /// should be absent rather than pointing somewhere plausible and wrong.
+  final String? baseUrl;
+
   const ProviderDescriptor({
     required this.id,
     required this.displayName,
@@ -44,6 +50,7 @@ class ProviderDescriptor {
     required this.models,
     required this.ranks,
     this.keyShape,
+    this.baseUrl,
   });
 
   Set<Capability> get can => {for (final m in models) ...m.can};
@@ -143,6 +150,7 @@ final _gemini = ProviderDescriptor(
 final _openai = ProviderDescriptor(
   id: 'openai',
   displayName: 'OpenAI',
+  baseUrl: 'https://api.openai.com/v1',
   keyUrl: Uri.parse('https://platform.openai.com/api-keys'),
   keyShape: RegExp(r'^sk-'),
   models: const [
@@ -163,6 +171,7 @@ final _openai = ProviderDescriptor(
 final _groq = ProviderDescriptor(
   id: 'groq',
   displayName: 'Groq',
+  baseUrl: 'https://api.groq.com/openai/v1',
   keyUrl: Uri.parse('https://console.groq.com/keys'),
   keyShape: RegExp(r'^gsk_'),
   models: const [
@@ -178,6 +187,7 @@ final _groq = ProviderDescriptor(
 final _mistral = ProviderDescriptor(
   id: 'mistral',
   displayName: 'Mistral',
+  baseUrl: 'https://api.mistral.ai/v1',
   keyUrl: Uri.parse('https://console.mistral.ai/api-keys'),
   models: const [
     ProviderModel(
@@ -192,6 +202,7 @@ final _mistral = ProviderDescriptor(
 final _openrouter = ProviderDescriptor(
   id: 'openrouter',
   displayName: 'OpenRouter',
+  baseUrl: 'https://openrouter.ai/api/v1',
   keyUrl: Uri.parse('https://openrouter.ai/keys'),
   keyShape: RegExp(r'^sk-or-'),
   models: const [

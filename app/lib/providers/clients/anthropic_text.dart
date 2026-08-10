@@ -3,9 +3,9 @@ import 'dart:convert';
 import '../../turn/job_output.dart';
 import '../../turn/turn_event.dart';
 import '../access.dart';
-import '../failure_text.dart';
 import '../streaming/reachability.dart';
 import '../streaming/sse_client.dart';
+import '../streaming/status_aware.dart';
 
 /// Talking to the Messages API.
 ///
@@ -123,7 +123,7 @@ class AnthropicText {
     // and an outage alike. Three different problems with three different
     // fixes, and only one of them is the user's.
     yield* mapEvents(
-      _statusAware(
+      statusAware(
         _sse.postJson(
           uri: resolved.uri,
           headers: resolved.headers,
@@ -133,63 +133,10 @@ class AnthropicText {
             system: system,
           )),
         ),
-        stepId,
-        _reach,
+        host: _endpoint.host,
+        reach: _reach,
       ),
       stepId: stepId,
-    );
-  }
-
-  /// Turns a transport-level failure into an `error` frame that says which
-  /// failure it was.
-  ///
-  /// Re-emitted as a frame rather than thrown, so there is exactly one place
-  /// that turns a provider problem into a sentence rather than two that can
-  /// disagree.
-  static Stream<SseEvent> _statusAware(
-    Stream<SseEvent> events,
-    String stepId,
-    Future<Reach> Function() reach,
-  ) async* {
-    String? sentence;
-    String? detail;
-
-    try {
-      // `await for`, not `yield*`. A `yield*` forwards a stream's error
-      // straight to the consumer without ever throwing inside this function,
-      // so the catch below never ran and the status was lost anyway — which
-      // is a fix that looks right, compiles, and does nothing.
-      await for (final event in events) {
-        yield event;
-      }
-      return;
-    } on SseHttpException catch (e) {
-      sentence = sentenceForStatus(e.statusCode);
-      detail = 'HTTP ${e.statusCode} from api.anthropic.com';
-    } on SseTimeoutException catch (e) {
-      sentence = sentenceForTimeout;
-      detail = '$e · api.anthropic.com';
-    } catch (e) {
-      // No status at all: the request never completed. From in here a browser
-      // refusing it looks exactly like being offline — which is why the
-      // sentence is chosen by asking whether *anything* is reachable, rather
-      // than by guessing.
-      //
-      // The exception is kept, not discarded. `catch (_)` threw away the one
-      // fact that distinguishes a blocked fetch from a stalled socket, at the
-      // only point in the program where that fact exists.
-      detail = '$e · api.anthropic.com';
-    }
-
-    // Outside the try: awaiting inside a catch and then yielding is legal but
-    // reads as if the probe were part of the failing operation, and it is not.
-    sentence ??= sentenceForUnreachable(await reach());
-
-    yield SseEvent(
-      event: 'error',
-      data: jsonEncode({
-        'error': {'message': sentence, 'shift_detail': detail}
-      }),
     );
   }
 
@@ -261,15 +208,11 @@ class AnthropicText {
                   stopReason;
 
         case 'error':
-          final error = payload['error'] as Map<String, dynamic>?;
+          final failure = readErrorFrame(payload);
           yield StepFailed(
             stepId,
-            reason: _readable(error?['message']),
-            // Only ever set by [_statusAware], which writes it from the
-            // exception it caught. A provider's own error body never reaches
-            // here — the sentence is what a person reads, and this is what
-            // they can paste into a bug report.
-            detail: error?['shift_detail'] as String?,
+            reason: failure.reason,
+            detail: failure.detail,
           );
           return;
       }
@@ -293,19 +236,5 @@ class AnthropicText {
         blocksDependents: false,
       );
     }
-  }
-
-  /// The sentence shown to a person.
-  ///
-  /// Sentences we wrote pass through; anything the provider itself said does
-  /// not, because a raw API message tells the reader nothing they can act on
-  /// and occasionally tells them something they should not see.
-  static String _readable(Object? message) {
-    final text = message is String ? message : '';
-    if (writtenSentences.contains(text)) return text;
-    if (text.contains('credit') || text.contains('billing')) {
-      return sentenceForStatus(402);
-    }
-    return sentenceForStatus(500);
   }
 }

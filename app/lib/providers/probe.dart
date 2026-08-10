@@ -4,7 +4,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'access.dart';
+import '../turn/capability.dart';
 import 'clients/anthropic_text.dart';
+import 'clients/gemini_text.dart';
+import 'clients/openai_text.dart';
 import 'failure_text.dart';
 import 'registry.dart';
 import 'streaming/reachability.dart';
@@ -89,44 +92,72 @@ String probeSentence(ProbeOutcome outcome) => switch (outcome) {
 /// Null for a provider with no wire client yet: offering to test something that
 /// cannot run is the kind of button that erodes trust in every other one.
 ({Uri uri, Map<String, String> headers, String body})? probeRequest(
-  String providerId,
+  ProviderDescriptor provider,
   ProviderAccess access,
 ) {
-  switch (providerId) {
+  // The cheapest *real* generation, in every case. A metadata endpoint would
+  // pass with a key that has no credit and cannot actually be spent, which is
+  // the failure a connection test exists to catch.
+  final model = provider.modelFor(Capability.text);
+  if (model == null) return null;
+
+  switch (provider.id) {
     case 'anthropic':
       final target = AnthropicText.target(access);
       return (
         uri: target.uri,
         headers: target.headers,
-        // One token, no thinking, no streaming. It costs a fraction of a cent
-        // and it is a genuine authenticated generation — a metadata endpoint
-        // would pass with a key that cannot actually be spent.
         body: jsonEncode(AnthropicText.buildBody(
-          model: 'claude-haiku-4-5',
+          model: model.id,
           instruction: 'hi',
           maxTokens: 1,
           thinking: false,
-        )
-          ..remove('stream')),
+        )..remove('stream')),
       );
+
+    case 'gemini':
+      final target = GeminiText.target(access, model.id);
+      return (
+        uri: target.uri,
+        headers: target.headers,
+        body: jsonEncode(GeminiText.buildBody(instruction: 'hi')
+          ..['generationConfig'] = const {'maxOutputTokens': 1}),
+      );
+
     default:
-      return null;
+      final base = provider.baseUrl;
+      if (base == null) return null;
+      final target = OpenAiText.target(access, base);
+      return (
+        uri: target.uri,
+        headers: target.headers,
+        body: jsonEncode(OpenAiText.buildBody(
+          model: model.id,
+          instruction: 'hi',
+        )
+          ..['stream'] = false
+          ..['max_tokens'] = 1),
+      );
   }
 }
 
 /// Whether Settings should offer a connection test for this provider.
+///
+/// False only for a provider with no text model or no endpoint — offering to
+/// test something that cannot run is the kind of button that erodes trust in
+/// every other one.
 bool canProbe(ProviderDescriptor provider) =>
-    probeRequest(provider.id, const DirectKey('probe')) != null;
+    probeRequest(provider, const DirectKey('probe')) != null;
 
 /// Sends the request and reports which state it hit.
 Future<ProbeOutcome> runProbe({
-  required String providerId,
+  required ProviderDescriptor provider,
   required ProviderAccess access,
   http.Client Function()? clientFactory,
   Future<Reach> Function()? reach,
   Duration timeout = const Duration(seconds: 20),
 }) async {
-  final request = probeRequest(providerId, access);
+  final request = probeRequest(provider, access);
   if (request == null) return ProbeOutcome.providerProblem;
 
   final client = (clientFactory ?? createProviderHttpClient)();

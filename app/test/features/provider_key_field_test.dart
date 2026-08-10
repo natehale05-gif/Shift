@@ -33,11 +33,13 @@ void main() {
     expect(find.text('Test connection'), findsNothing);
   });
 
-  testWidgets('a provider with no client offers no test', (t) async {
-    // Offering to test something that cannot run is the kind of button that
-    // erodes trust in every other one.
+  testWidgets('every keyed provider can be tested', (t) async {
+    // This asserted the opposite while Anthropic was the only wired client —
+    // Groq had a key field and no way to check it. Now that the Gemini and
+    // OpenAI-compatible wires exist, a row that can hold a key and cannot be
+    // tested would be an unexplained gap rather than an honest one.
     await t.pumpWidget(host(groq, saved: '••••••••9876'));
-    expect(find.text('Test connection'), findsNothing);
+    expect(find.text('Test connection'), findsOneWidget);
   });
 
   testWidgets('it reports what came back, in a sentence', (t) async {

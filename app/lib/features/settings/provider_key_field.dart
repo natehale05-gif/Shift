@@ -67,7 +67,7 @@ class _ProviderKeyFieldState extends State<ProviderKeyField> {
     });
 
     final run = widget.probe ??
-        (access) => runProbe(providerId: widget.provider.id, access: access);
+        (access) => runProbe(provider: widget.provider, access: access);
     final outcome = await run(DirectKey(key));
 
     if (!mounted) return;

@@ -1,5 +1,7 @@
 import '../../providers/access.dart';
 import '../../providers/clients/anthropic_text.dart';
+import '../../providers/clients/gemini_text.dart';
+import '../../providers/clients/openai_text.dart';
 import '../../providers/select.dart';
 import '../capability.dart';
 import '../extract_artifact.dart';
@@ -25,6 +27,8 @@ class TextExecutor implements StepExecutor {
 
   final String? pinned;
   final AnthropicText anthropic;
+  final GeminiText gemini;
+  final OpenAiText openai;
 
   /// Which conversation an artifact belongs to, read at the moment one is
   /// produced rather than held — the id is minted on the first message, so a
@@ -37,8 +41,12 @@ class TextExecutor implements StepExecutor {
     required this.access,
     this.pinned,
     AnthropicText? anthropic,
+    GeminiText? gemini,
+    OpenAiText? openai,
     String Function()? conversationId,
   })  : anthropic = anthropic ?? AnthropicText(),
+        gemini = gemini ?? GeminiText(),
+        openai = openai ?? OpenAiText(),
         conversationId = conversationId ?? _noConversation;
 
   static String _noConversation() => '';
@@ -87,6 +95,15 @@ class TextExecutor implements StepExecutor {
     // identically in a log and is not the feature.
     final context = _describe(inputs);
 
+    // Dispatch on the *wire*, not on the provider: four of these speak the
+    // same protocol and differ only in a base URL, so there is one client for
+    // them rather than four near-identical files where a fix gets applied
+    // three times.
+    //
+    // The fallthrough is a `baseUrl` missing from the registry, which is a
+    // programming error rather than a state a user can reach — so it says that
+    // rather than blaming the provider.
+    final base = choice.provider.baseUrl;
     final events = switch (choice.provider.id) {
       'anthropic' => anthropic.stream(
           stepId: step.id,
@@ -95,13 +112,26 @@ class TextExecutor implements StepExecutor {
           instruction: step.instruction,
           system: context,
         ),
-      // Gemini and the OpenAI-compatible providers land next; until then a
-      // provider that was selected and cannot be dispatched says so plainly
-      // rather than failing somewhere further down as a provider error.
+      'gemini' => gemini.stream(
+          stepId: step.id,
+          access: credential,
+          model: choice.model.id,
+          instruction: step.instruction,
+          system: context,
+        ),
+      _ when base != null => openai.stream(
+          stepId: step.id,
+          access: credential,
+          model: choice.model.id,
+          baseUrl: base,
+          instruction: step.instruction,
+          system: context,
+        ),
       _ => Stream.value(
           StepFailed(
             step.id,
-            reason: '${choice.provider.displayName} is not wired up yet.',
+            reason: '${choice.provider.displayName} has no endpoint '
+                'configured.',
           ),
         ),
     };
