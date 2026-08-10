@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shift/core/design/metrics.dart';
 import 'package:shift/core/design/theme.dart';
+import 'package:shift/data/api_keys_store.dart';
+import 'package:shift/data/kv_store.dart';
 import 'package:shift/features/chat/chat_surface.dart';
 import 'package:shift/features/chat/turn_controller.dart';
 import 'package:shift/shell/app_shell.dart';
@@ -18,6 +20,7 @@ Widget _app({
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: controller ?? ShellController()),
+        ChangeNotifierProvider(create: (_) => ApiKeysStore(KvStore())),
         ChangeNotifierProvider(create: (_) => TurnController()),
       ],
       child: MaterialApp(

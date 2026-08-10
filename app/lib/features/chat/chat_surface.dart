@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../core/design/typography.dart';
+import '../../data/api_keys_store.dart';
 import '../../shell/mode.dart';
+import '../settings/settings_screen.dart';
 import 'composer.dart';
 import 'turn_controller.dart';
 
@@ -76,12 +78,23 @@ class _EmptyConversation extends StatelessWidget {
           const SizedBox(height: Space.xl),
           Composer(onSend: (t) => turn.send(t, mode: AppMode.chat)),
           const SizedBox(height: Space.md),
-          Text(
-            'No provider is connected yet, so this will tell you what is '
-            'missing rather than pretend to answer.',
-            textAlign: TextAlign.center,
-            style: text.bodySmall?.copyWith(color: c.textFaint),
-          ),
+          // Says the state and offers the fix in the same breath. The previous
+          // version said only the state, and the way to act on it was three
+          // steps away behind a hamburger — which is exactly the question this
+          // screen prompted.
+          if (context.watch<ApiKeysStore>().keyed.isEmpty)
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => const SettingsScreen(),
+                ),
+              ),
+              icon: Icon(Icons.key_rounded, size: 16, color: c.textMuted),
+              label: Text(
+                'No provider connected — add a key',
+                style: text.bodySmall?.copyWith(color: c.textMuted),
+              ),
+            ),
         ],
       ),
     );
@@ -177,18 +190,52 @@ class _Item extends StatelessWidget {
                     border: Border.all(color: c.border),
                   ),
                   padding: const EdgeInsets.all(Space.md),
-                  child: Row(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info_outline_rounded,
-                          size: 18, color: c.textMuted),
-                      const SizedBox(width: Space.sm),
-                      Expanded(
-                        child: Text(
-                          reply.failure!,
-                          style: text.bodyMedium?.copyWith(color: c.textMuted),
-                        ),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline_rounded,
+                              size: 18, color: c.textMuted),
+                          const SizedBox(width: Space.sm),
+                          Expanded(
+                            child: Text(
+                              reply.failure!,
+                              style:
+                                  text.bodyMedium?.copyWith(color: c.textMuted),
+                            ),
+                          ),
+                        ],
                       ),
+
+                      // A message that names a destination should be able to
+                      // get you there. Without this the remedy is "open the
+                      // drawer, scroll to the bottom, find Settings" — three
+                      // steps the sentence does not mention, on a screen where
+                      // the sidebar is hidden behind a hamburger. Asked about
+                      // directly, which is how a discoverability problem
+                      // usually surfaces: as a question, not as a bug report.
+                      if (reply.failure!.contains('Settings')) ...[
+                        const SizedBox(height: Space.sm),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute<void>(
+                                builder: (_) => const SettingsScreen(),
+                              ),
+                            ),
+                            icon: Icon(Icons.key_rounded,
+                                size: 16, color: c.accent),
+                            label: Text(
+                              'Add a key',
+                              style:
+                                  text.labelLarge?.copyWith(color: c.accent),
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
