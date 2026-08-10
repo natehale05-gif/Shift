@@ -31,6 +31,8 @@ void main() {
     return store;
   }
 
+  _controlTests();
+
   test('with no key, the turn says what is missing and names Settings',
       () async {
     final turn = TurnController(keys: await keysWith({}));
@@ -89,5 +91,71 @@ void main() {
 
     turn.clear();
     expect(turn.isEmpty, isTrue);
+  });
+}
+
+void _controlTests() {
+  late Directory dir;
+
+  setUp(() async {
+    dir = await Directory.systemTemp.createTemp('shift-ctl');
+  });
+  tearDown(() async {
+    if (await dir.exists()) await dir.delete(recursive: true);
+  });
+
+  Future<TurnController> controller() async {
+    final keys = ApiKeysStore(KvStore(path: '${dir.path}/s.json'));
+    await keys.load();
+    return TurnController(keys: keys);
+  }
+
+  group('retry', () {
+    test('is unavailable until something has been asked', () async {
+      final turn = await controller();
+      addTearDown(turn.dispose);
+      expect(turn.canRetry, isFalse);
+    });
+
+    test('replaces the previous exchange rather than appending a second',
+        () async {
+      // Asking again is the same question, not a new one. Leaving the old
+      // pair in place would make a retried conversation read as if the user
+      // had repeated themselves.
+      final turn = await controller();
+      addTearDown(turn.dispose);
+
+      await turn.send('hello', mode: AppMode.chat);
+      expect(turn.items, hasLength(2));
+
+      await turn.retry();
+      expect(turn.items, hasLength(2));
+      expect(turn.items.whereType<UserSaid>().single.text, 'hello');
+    });
+  });
+
+  group('stop', () {
+    test('keeps what arrived and marks it stopped, not failed', () async {
+      // Half an answer is worth more than none, and a deliberate stop is not
+      // an error — labelling it as one makes someone doubt an action they
+      // took on purpose.
+      final turn = await controller();
+      addTearDown(turn.dispose);
+
+      final pending = turn.send('hello', mode: AppMode.chat);
+      turn.stop();
+      await pending;
+
+      final reply = turn.items.whereType<Reply>().single;
+      expect(reply.done, isTrue);
+      expect(turn.running, isFalse);
+    });
+
+    test('does nothing when nothing is running', () async {
+      final turn = await controller();
+      addTearDown(turn.dispose);
+      turn.stop();
+      expect(turn.items, isEmpty);
+    });
   });
 }

@@ -21,12 +21,19 @@ import '../../core/design/palette.dart';
 ///   hold and no way to type a second paragraph otherwise.
 class Composer extends StatefulWidget {
   final ValueChanged<String> onSend;
+
+  /// Stopping is the same button in the same place, which is where every app
+  /// that streams puts it — a separate stop control means hunting for it
+  /// while text you no longer want keeps arriving.
+  final VoidCallback? onStop;
+
   final bool busy;
   final String hint;
 
   const Composer({
     super.key,
     required this.onSend,
+    this.onStop,
     this.busy = false,
     this.hint = 'How can I help you today?',
   });
@@ -137,9 +144,9 @@ class _ComposerState extends State<Composer> {
               ),
               const Spacer(),
               _SendButton(
-                enabled: _hasText && !widget.busy,
+                enabled: widget.busy || _hasText,
                 busy: widget.busy,
-                onPressed: _send,
+                onPressed: widget.busy ? (widget.onStop ?? () {}) : _send,
               ),
             ],
           ),
@@ -208,13 +215,10 @@ class _SendButton extends StatelessWidget {
               width: 32,
               height: 32,
               child: busy
-                  ? Padding(
-                      padding: const EdgeInsets.all(9),
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: c.textMuted,
-                      ),
-                    )
+                  // A stop square, not a spinner. A spinner says "wait"; the
+                  // square says "you can end this", which is the only thing
+                  // worth offering while text is arriving.
+                  ? Icon(Icons.stop_rounded, size: 16, color: c.onAccent)
                   : Icon(
                       Icons.arrow_upward_rounded,
                       size: 18,

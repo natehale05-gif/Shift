@@ -4,14 +4,20 @@ import 'package:provider/provider.dart';
 
 import 'core/design/theme.dart';
 import 'data/api_keys_store.dart';
+import 'data/conversation_store.dart';
 import 'features/chat/turn_controller.dart';
 import 'shell/app_shell.dart';
 import 'shell/shell_controller.dart';
 
 class ShiftApp extends StatelessWidget {
   final ApiKeysStore keys;
+  final ConversationStore conversations;
 
-  const ShiftApp({super.key, required this.keys});
+  const ShiftApp({
+    super.key,
+    required this.keys,
+    required this.conversations,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +25,11 @@ class ShiftApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => ShellController()),
         ChangeNotifierProvider.value(value: keys),
-        ChangeNotifierProvider(create: (_) => TurnController(keys: keys)),
+        ChangeNotifierProvider.value(value: conversations),
+        ChangeNotifierProvider(
+          create: (_) =>
+              TurnController(keys: keys, conversations: conversations),
+        ),
       ],
       child: MaterialApp(
         title: 'SHIFT AI',

@@ -8,6 +8,8 @@ import '../../data/api_keys_store.dart';
 import '../../shell/mode.dart';
 import '../settings/settings_screen.dart';
 import 'composer.dart';
+import 'markdown_view.dart';
+import 'message_actions.dart';
 import 'turn_controller.dart';
 
 /// The conversation, laid out the way Claude's is.
@@ -125,6 +127,7 @@ class _Transcript extends StatelessWidget {
             busy: turn.running,
             hint: 'Reply to SHIFT',
             onSend: (t) => turn.send(t, mode: AppMode.chat),
+            onStop: turn.stop,
           ),
         ),
       ],
@@ -174,11 +177,11 @@ class _Item extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              if (reply.text.isNotEmpty)
-                SelectableText(
-                  reply.text,
-                  style: ShiftType.proseStyle(c.text),
-                ),
+              // Markdown, not plain text. Before this a reply containing a
+              // list rendered as literal asterisks and a code block as
+              // backticks — which is the first thing anyone sees after
+              // "hello", because it is what a model answers with.
+              if (reply.text.isNotEmpty) MarkdownView(reply.text),
               if (reply.failure != null) ...[
                 if (reply.text.isNotEmpty) const SizedBox(height: Space.md),
                 // A failure is stated in place, in the interface face, so it
@@ -243,14 +246,8 @@ class _Item extends StatelessWidget {
               if (!reply.done && reply.text.isEmpty && reply.failure == null)
                 Text('Thinking…',
                     style: text.bodyMedium?.copyWith(color: c.textFaint)),
-              if (reply.done && reply.provider != null && reply.failure == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: Space.sm),
-                  child: Text(
-                    reply.provider!,
-                    style: text.labelSmall?.copyWith(color: c.textFaint),
-                  ),
-                ),
+              if (reply.done && reply.failure == null)
+                MessageActions(reply: reply),
             ],
           ),
         ),

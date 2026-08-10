@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
+import '../data/conversation_store.dart';
 import '../features/chat/turn_controller.dart';
 import '../features/settings/settings_screen.dart';
 
@@ -27,6 +28,7 @@ class Sidebar extends StatelessWidget {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
     final turn = context.watch<TurnController>();
+    final saved = context.watch<ConversationStore>().index;
 
     return Container(
       width: width,
@@ -52,29 +54,30 @@ class Sidebar extends StatelessWidget {
                   style: text.labelSmall?.copyWith(color: c.textFaint)),
             ),
             Expanded(
-              child: turn.isEmpty
+              child: saved.isEmpty
                   // An empty list says so. A skeleton of fake rows here would
                   // be the same lie as a simulated reply.
                   ? Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: Space.lg, vertical: Space.sm),
                       child: Text(
-                        'Conversations you start will be listed here. They '
-                        'are not saved yet.',
+                        'Conversations you start will be listed here.',
                         style:
                             text.bodySmall?.copyWith(color: c.textFaint),
                       ),
                     )
-                  : ListView(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: Space.sm),
-                      children: [
-                        _Row(
-                          label: _firstLine(turn),
-                          selected: true,
-                          onTap: onDismiss,
-                        ),
-                      ],
+                  : ListView.builder(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: Space.sm),
+                      itemCount: saved.length,
+                      itemBuilder: (context, i) => _Row(
+                        label: saved[i].title,
+                        selected: saved[i].id == turn.conversationId,
+                        onTap: () {
+                          turn.open(saved[i].id);
+                          onDismiss?.call();
+                        },
+                      ),
                     ),
             ),
             // Settings lives at the foot of the list, which is where it lives
@@ -90,13 +93,6 @@ class Sidebar extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  static String _firstLine(TurnController turn) {
-    for (final item in turn.items) {
-      if (item is UserSaid) return item.text;
-    }
-    return 'New chat';
   }
 }
 
