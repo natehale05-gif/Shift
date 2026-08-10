@@ -22,7 +22,7 @@ Widget _app({
         // `debugDefaultTargetPlatformOverride`, because the global is a
         // foundation debug variable the test framework asserts is unset by the
         // time a test body ends, which `addTearDown` is too late to satisfy.
-        theme: shiftTheme(brightness).copyWith(platform: platform),
+        theme: shiftTheme(brightness, platform),
         home: const AppShell(),
       ),
     );
@@ -91,7 +91,7 @@ void main() {
       await _pumpAt(tester, logical: _desktop.$1, platform: _desktop.$2);
       await _openMenu(tester);
 
-      expect(find.text(AppMode.work.blurb), findsWidgets);
+      expect(find.text(AppMode.work.menuHint), findsWidgets);
     });
   });
 

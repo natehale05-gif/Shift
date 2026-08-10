@@ -11,7 +11,12 @@ import 'typography.dart';
 /// the default scheme will paint Material purple next to our accent and look
 /// like a mistake. So the scheme is derived from the same tokens rather than
 /// left to `ColorScheme.fromSeed`, which would invent its own values.
-ThemeData shiftTheme(Brightness brightness) {
+/// [platform] is not optional and not inferable here: on iOS and macOS the UI
+/// face is the system font (a null family), and everywhere else it is bundled
+/// Inter. A default would silently ship Inter to an iPhone, which is the exact
+/// thing this design direction exists to stop.
+ThemeData shiftTheme(Brightness brightness, TargetPlatform platform) {
+  final uiFamily = ShiftType.uiFamilyFor(platform);
   final c = brightness == Brightness.dark ? ShiftColors.dark : ShiftColors.light;
 
   final scheme = ColorScheme(
@@ -43,17 +48,22 @@ ThemeData shiftTheme(Brightness brightness) {
   // paint, a privacy disclosure both stores ask about, and a blank line of
   // text for anyone offline. Found by watching the network rather than by
   // reading the theme.
-  final text = ShiftType.textTheme(c.text, c.textMuted);
+  final text =
+      ShiftType.textTheme(c.text, c.textMuted, platform: platform);
 
   final base = ThemeData(
     useMaterial3: true,
     brightness: brightness,
+    // Set here rather than by a later copyWith, because the text theme above
+    // was already resolved against it. A theme whose `platform` disagrees with
+    // the face it carries is the subtle version of this bug.
+    platform: platform,
     colorScheme: scheme,
     scaffoldBackgroundColor: c.ground,
     canvasColor: c.ground,
     dividerColor: c.divider,
     extensions: [c],
-    fontFamily: ShiftType.ui,
+    fontFamily: uiFamily,
 
     // Every ink splash in the app, off. A ripple that travels a card's width
     // is a Material signature, and this app is not trying to look like
@@ -79,9 +89,13 @@ ThemeData shiftTheme(Brightness brightness) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.sm),
         ),
-        textStyle: const TextStyle(
-          fontFamily: ShiftType.ui,
-          fontSize: 14,
+        // Not const: the family is now resolved per platform. 17pt because a
+        // button on iOS is body-sized text, not the 14pt Material label this
+        // carried before — the single change that most makes controls stop
+        // looking undersized on a phone.
+        textStyle: TextStyle(
+          fontFamily: uiFamily,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -96,9 +110,13 @@ ThemeData shiftTheme(Brightness brightness) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(Radii.sm),
         ),
-        textStyle: const TextStyle(
-          fontFamily: ShiftType.ui,
-          fontSize: 14,
+        // Not const: the family is now resolved per platform. 17pt because a
+        // button on iOS is body-sized text, not the 14pt Material label this
+        // carried before — the single change that most makes controls stop
+        // looking undersized on a phone.
+        textStyle: TextStyle(
+          fontFamily: uiFamily,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -109,9 +127,13 @@ ThemeData shiftTheme(Brightness brightness) {
         foregroundColor: c.accent,
         minimumSize: const Size(0, kMinTouchTarget),
         padding: const EdgeInsets.symmetric(horizontal: Space.md),
-        textStyle: const TextStyle(
-          fontFamily: ShiftType.ui,
-          fontSize: 14,
+        // Not const: the family is now resolved per platform. 17pt because a
+        // button on iOS is body-sized text, not the 14pt Material label this
+        // carried before — the single change that most makes controls stop
+        // looking undersized on a phone.
+        textStyle: TextStyle(
+          fontFamily: uiFamily,
+          fontSize: 17,
           fontWeight: FontWeight.w600,
         ),
       ),
@@ -126,7 +148,7 @@ ThemeData shiftTheme(Brightness brightness) {
         horizontal: Space.lg,
         vertical: Space.md,
       ),
-      hintStyle: TextStyle(fontFamily: ShiftType.ui, color: c.textFaint),
+      hintStyle: TextStyle(fontFamily: uiFamily, color: c.textFaint),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(Radii.md),
         borderSide: BorderSide(color: c.border),
@@ -162,7 +184,7 @@ ThemeData shiftTheme(Brightness brightness) {
         border: Border.all(color: c.border),
       ),
       textStyle: TextStyle(
-        fontFamily: ShiftType.ui,
+        fontFamily: uiFamily,
         fontSize: 12,
         color: c.text,
       ),
@@ -170,7 +192,7 @@ ThemeData shiftTheme(Brightness brightness) {
 
     snackBarTheme: SnackBarThemeData(
       backgroundColor: c.surfaceRaised,
-      contentTextStyle: TextStyle(fontFamily: ShiftType.ui, color: c.text),
+      contentTextStyle: TextStyle(fontFamily: uiFamily, color: c.text),
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(Radii.sm),
@@ -184,8 +206,8 @@ ThemeData shiftTheme(Brightness brightness) {
   );
 
   return base.copyWith(
-    textTheme: base.textTheme.merge(text).apply(fontFamily: ShiftType.ui),
+    textTheme: base.textTheme.merge(text).apply(fontFamily: uiFamily),
     primaryTextTheme:
-        base.primaryTextTheme.merge(text).apply(fontFamily: ShiftType.ui),
+        base.primaryTextTheme.merge(text).apply(fontFamily: uiFamily),
   );
 }

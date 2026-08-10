@@ -4,26 +4,34 @@ import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
 import 'mode.dart';
 
-/// The mode switcher: the current mode, and a menu of the other five.
+/// The mode switcher, as an iOS pull-down menu.
 ///
-/// One control on every device, rather than a rail on desktop and a scrolling
-/// row of pills on a phone. Those were replaced deliberately and the pills'
-/// central problem is the reason: six labelled destinations do not fit across
-/// a phone, so the row scrolled, so two of six were always off-screen — and
-/// most of that widget's code existed to soften that with a fade and an
-/// auto-scroll. A menu has no such problem. Every mode is in the list, at full
-/// width, with room for the sentence that says what it is for.
+/// The shape is the platform's, not an invention: a title that is also a
+/// button, a chevron that says so, and a rounded panel of rows underneath.
+/// Details that make it read as native rather than as a menu someone drew:
 ///
-/// **Still not a bottom navigation bar**, which was the right call before and
-/// still is: Chat and Notes own the bottom of the screen for their composer,
-/// which is where a thumb rests and where the keyboard pushes everything
-/// anyway. Platform tab bars also start collapsing into "More" at five, and
-/// there are six modes, none of which is the one to hide.
+/// * **Rows are 44pt** and the label is **17pt** — body size. A 14pt row is
+///   the most common tell that a menu was styled on a desktop.
+/// * **The icon is on the trailing edge.** Apple puts it there; Material puts
+///   it on the leading edge, and following Material here is what made the
+///   first version look like an Android app in Apple colours.
+/// * **A checkmark marks the current row**, rather than a filled background.
+///   Selection in an iOS menu is stated, not highlighted.
+/// * **Hairline separators**, inset to the text, between rows.
+/// * **No stroke around the panel.** iOS menus have a shadow and no border.
+///
+/// Subtitles are a real iOS menu element (Files and Photos both use them), so
+/// the line saying what each mode is for survives the move — it is the part
+/// that answers "why would I go there", which "Work" alone does not.
 class ModeMenu extends StatelessWidget {
   final AppMode current;
   final ValueChanged<AppMode> onSelect;
 
   const ModeMenu({super.key, required this.current, required this.onSelect});
+
+  /// Apple's pull-down width. Wide enough for a two-line subtitle, and still
+  /// inside a 320pt phone once the screen's own margins are allowed for.
+  static const double panelWidth = 280;
 
   @override
   Widget build(BuildContext context) {
@@ -31,30 +39,35 @@ class ModeMenu extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     return MenuAnchor(
-      // Aligned under the trigger rather than over it, so the button stays
-      // visible while the menu is open — the open menu should look like it
-      // belongs to the thing that opened it.
       alignmentOffset: const Offset(0, Space.xs),
       style: MenuStyle(
         backgroundColor: WidgetStatePropertyAll(c.surfaceRaised),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
+        elevation: const WidgetStatePropertyAll(8),
+        shadowColor: WidgetStatePropertyAll(c.text.withValues(alpha: 0.18)),
         shape: WidgetStatePropertyAll(
-          RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(Radii.md),
-            side: BorderSide(color: c.border),
-          ),
+          // 13, which is iOS's menu radius. Not 12 and not 16 — at this size
+          // the difference is visible next to a real system menu.
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
         ),
-        padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(vertical: Space.xs),
-        ),
+        padding: const WidgetStatePropertyAll(EdgeInsets.zero),
       ),
       menuChildren: [
-        for (final mode in AppMode.values)
+        for (final (i, mode) in AppMode.values.indexed) ...[
+          if (i > 0)
+            // Inset to the text, which is how every grouped list and menu on
+            // the platform draws its separators. A full-bleed rule reads as a
+            // table.
+            Padding(
+              padding: const EdgeInsets.only(left: Space.lg),
+              child: Divider(height: 0.5, thickness: 0.5, color: c.divider),
+            ),
           _ModeItem(
             mode: mode,
             selected: mode == current,
             onSelect: onSelect,
           ),
+        ],
       ],
       builder: (context, controller, _) => Semantics(
         button: true,
@@ -66,20 +79,29 @@ class ModeMenu extends StatelessWidget {
           child: Container(
             constraints: const BoxConstraints(minHeight: kMinTouchTarget),
             padding: const EdgeInsets.symmetric(
-              horizontal: Space.md,
+              horizontal: Space.sm,
               vertical: Space.sm,
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(current.activeIcon, size: 20, color: c.accent),
-                const SizedBox(width: Space.sm),
                 Text(
                   current.label,
-                  style: text.titleMedium?.copyWith(color: c.text),
+                  // Title 3 semibold: a nav-bar title that happens to be a
+                  // button. The mode is the most important word on screen.
+                  style: text.headlineSmall?.copyWith(color: c.text),
                 ),
                 const SizedBox(width: Space.xs),
-                Icon(Icons.expand_more_rounded, size: 20, color: c.textMuted),
+                // A small plain chevron, not a filled disc.
+                //
+                // The first attempt used `expand_circle_down_rounded`, which
+                // on the reasoning that iOS pull-downs use a circled chevron
+                // sounded right and rendered as a heavy dark dot beside the
+                // title — Material's disc is solid where Apple's is a hairline
+                // ring. A bare 15pt chevron in tertiary grey is both closer to
+                // the platform and quieter, which is the point of it.
+                Icon(Icons.keyboard_arrow_down_rounded,
+                    size: 22, color: c.textFaint),
               ],
             ),
           ),
@@ -108,34 +130,18 @@ class _ModeItem extends StatelessWidget {
     return MenuItemButton(
       onPressed: () => onSelect(mode),
       style: ButtonStyle(
-        // The default menu item is 48 tall but only as wide as its label, and
-        // its padding is symmetric. Both are set explicitly here because the
-        // tap-target test has caught this exact class of thing twice already —
-        // once at 40pt, once at 22pt after an unrelated layout change.
         minimumSize: const WidgetStatePropertyAll(
-          Size(240, kMinTouchTarget),
+          Size(ModeMenu.panelWidth, kMinTouchTarget),
         ),
         padding: const WidgetStatePropertyAll(
-          EdgeInsets.symmetric(horizontal: Space.md, vertical: Space.md),
+          EdgeInsets.symmetric(horizontal: Space.lg, vertical: Space.md),
         ),
-        backgroundColor: WidgetStatePropertyAll(
-          selected ? c.accentWash : Colors.transparent,
-        ),
+        backgroundColor: const WidgetStatePropertyAll(Colors.transparent),
       ),
       child: SizedBox(
-        // Wide enough for the blurbs, narrow enough that the whole menu still
-        // fits a 320pt phone once the item and menu padding are added — which
-        // a test asserts, because a menu that clips its own entries is the
-        // same failure as the row that scrolled them off the edge.
-        width: 272,
+        width: ModeMenu.panelWidth - Space.lg * 2,
         child: Row(
           children: [
-            Icon(
-              selected ? mode.activeIcon : mode.icon,
-              size: 20,
-              color: selected ? c.accent : c.textMuted,
-            ),
-            const SizedBox(width: Space.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -143,32 +149,33 @@ class _ModeItem extends StatelessWidget {
                 children: [
                   Text(
                     mode.label,
-                    style: text.bodyMedium?.copyWith(
-                      color: selected ? c.accent : c.text,
-                      fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    // Body, 17. Semibold only when current, which with the
+                    // checkmark is the whole of the selected treatment — an
+                    // iOS menu does not tint its rows.
+                    style: text.bodyLarge?.copyWith(
+                      color: c.text,
+                      fontWeight:
+                          selected ? FontWeight.w600 : FontWeight.w400,
                     ),
                   ),
-                  const SizedBox(height: Space.xxs),
-                  // The blurb is here rather than only in the empty state
-                  // because a menu is where someone decides *where to go*, and
-                  // "Work" alone does not tell anyone why they would.
-                  //
-                  // Three lines, not two: at this width every one of the six
-                  // was cut off mid-word at two, which reads as a rendering
-                  // fault rather than a summary. Found by looking at it — the
-                  // widget test happily asserts the text is present whether or
-                  // not it is legible.
+                  const SizedBox(height: 1),
                   Text(
-                    mode.blurb,
-                    maxLines: 3,
+                    mode.menuHint,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: text.labelSmall?.copyWith(
-                      color: c.textFaint,
-                      height: 1.35,
-                    ),
+                    style: text.bodySmall?.copyWith(color: c.textMuted),
                   ),
                 ],
               ),
+            ),
+            const SizedBox(width: Space.md),
+            // Trailing, which is the side Apple uses. A checkmark replaces the
+            // mode's own icon on the current row, because the row's job then
+            // is to say "you are here" rather than to identify itself.
+            Icon(
+              selected ? Icons.check_rounded : mode.icon,
+              size: 20,
+              color: selected ? c.accent : c.textMuted,
             ),
           ],
         ),

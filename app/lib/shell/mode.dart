@@ -60,6 +60,22 @@ enum AppMode {
         AppMode.notes => Icons.mic_rounded,
       };
 
+  /// A few words, for the mode menu.
+  ///
+  /// Separate from [blurb] because the two are read in different postures. A
+  /// menu is scanned — Apple's own menu subtitles are three or four words —
+  /// and reusing the empty state's full sentence here truncated four of the
+  /// six mid-word, which reads as a layout fault rather than as a summary.
+  /// The empty state has the room to say more, so it still does.
+  String get menuHint => switch (this) {
+        AppMode.chat => 'Ask for anything',
+        AppMode.code => 'Repositories and diffs',
+        AppMode.visual => 'Images, and editing them',
+        AppMode.design => 'Pages, decks, posters',
+        AppMode.work => 'Long jobs over your files',
+        AppMode.notes => 'Dictation, cleaned up',
+      };
+
   /// One line, shown in the empty state. Says what the mode is *for*, not what
   /// it contains — someone opening Work for the first time needs to know why
   /// they would.

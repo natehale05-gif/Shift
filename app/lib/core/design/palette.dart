@@ -15,9 +15,12 @@ import 'package:flutter/material.dart';
 /// the gradient's ends, and the solid accent is the point along it that stays
 /// legible as text on both grounds, which is not the midpoint.
 ///
-/// The neutrals are deliberately **not** grey. Each carries a slight violet
-/// bias toward the accent, which is what makes a surface read as part of the
-/// brand rather than as the default Material card that happens to sit near it.
+/// The neutrals **are** grey — Apple's, exactly. They used to carry a violet
+/// bias toward the accent on the reasoning that a tinted surface reads as part
+/// of the brand; on a device it read as an app that had been colour-shifted,
+/// because every real control beside it is neutral. The accent carries the
+/// brand and the paper stays out of the way, which is what Apple's own apps
+/// do: Music is pink, Notes is yellow, and neither tints its background.
 class ShiftPalette {
   const ShiftPalette._();
 
@@ -116,51 +119,70 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
     required this.diffRemoved,
   });
 
-  /// Warm off-white rather than paper white, biased a few degrees violet so it
-  /// sits under the accent instead of beside it.
+  /// Light mode, on iOS's own greys.
+  ///
+  /// `ground` is `systemBackground` and `surface` is
+  /// `secondarySystemBackground` — the pairing a *content* screen uses. The
+  /// grouped pair (grey behind, white cards) is for Settings-style lists and
+  /// is wrong here: it made the whole app read as one flat sheet of grey, with
+  /// nothing to lift a card off. Checked by looking at it rather than by
+  /// picking the first plausible entry in the colour list.
+  ///
+  /// Separators are the real hairline values, not a light grey chosen by eye.
+  ///
+  /// **The neutrals used to carry a violet bias**, on the reasoning that a
+  /// tinted surface reads as part of the brand. It also read as *not Apple*:
+  /// the platform's greys are neutral, so a purple-cast white beside a real
+  /// system control looks like a colour-managed screenshot. The accent below
+  /// carries the brand instead, which is what Apple's own apps do — Music is
+  /// pink, Notes is yellow, and neither tints its paper.
   static const light = ShiftColors(
-    ground: Color(0xFFFBFAFD),
-    surface: Color(0xFFFFFFFF),
+    ground: Color(0xFFFFFFFF),
+    surface: Color(0xFFF2F2F7),
     surfaceRaised: Color(0xFFFFFFFF),
-    surfaceSunken: Color(0xFFF4F1F9),
-    divider: Color(0xFFEDE9F4),
-    border: Color(0xFFE0DAEC),
-    borderFocus: Color(0xFF8B3FD6),
-    text: Color(0xFF16111F),
-    textMuted: Color(0xFF6B6280),
-    textFaint: Color(0xFF9A93AB),
-    accent: Color(0xFF8B3FD6),
+    surfaceSunken: Color(0xFFE5E5EA),
+    divider: Color(0xFFC6C6C8),
+    border: Color(0xFFD1D1D6),
+    borderFocus: Color(0xFF8944D6),
+    text: Color(0xFF000000),
+    textMuted: Color(0xFF6C6C70),
+    textFaint: Color(0xFF8E8E93),
+    accent: Color(0xFF8944D6),
     onAccent: Color(0xFFFFFFFF),
-    accentWash: Color(0xFFF3EAFC),
-    success: Color(0xFF1F7A55),
-    warning: Color(0xFF9A6410),
-    danger: Color(0xFFC0332F),
-    diffAdded: Color(0xFFE6F6ED),
-    diffRemoved: Color(0xFFFCEBEA),
+    accentWash: Color(0xFFF1E9FB),
+    success: Color(0xFF248A3D),
+    warning: Color(0xFFB25000),
+    danger: Color(0xFFD70015),
+    diffAdded: Color(0xFFE8F6EC),
+    diffRemoved: Color(0xFFFDECEC),
   );
 
-  /// The ground is the icon's own plate, so the app and its icon are the same
-  /// object. Surfaces lift by lightness *and* a touch more saturation, which
-  /// reads as depth where a pure lightness step reads as haze.
+  /// Dark mode, likewise.
+  ///
+  /// True black ground rather than the icon's near-black plate: on an OLED
+  /// iPhone that is what the platform does, and it is what makes an inset card
+  /// at `#1C1C1E` read as a card at all. Text is `#FFFFFF` and the two muted
+  /// steps are `secondaryLabel` and `tertiaryLabel`, so the hierarchy matches
+  /// every other app on the device rather than approximating it.
   static const dark = ShiftColors(
-    ground: Color(0xFF0A0714),
-    surface: Color(0xFF141020),
-    surfaceRaised: Color(0xFF1D1730),
-    surfaceSunken: Color(0xFF070510),
-    divider: Color(0xFF221B36),
-    border: Color(0xFF2E2547),
-    borderFocus: Color(0xFFB76BFF),
-    text: Color(0xFFF2EFF7),
-    textMuted: Color(0xFFA79CBF),
-    textFaint: Color(0xFF6F6688),
-    accent: Color(0xFFB76BFF),
-    onAccent: Color(0xFF16111F),
-    accentWash: Color(0xFF231A38),
-    success: Color(0xFF4FC08D),
-    warning: Color(0xFFE0A44A),
-    danger: Color(0xFFF07069),
-    diffAdded: Color(0xFF122A1F),
-    diffRemoved: Color(0xFF2E1618),
+    ground: Color(0xFF000000),
+    surface: Color(0xFF1C1C1E),
+    surfaceRaised: Color(0xFF2C2C2E),
+    surfaceSunken: Color(0xFF0A0A0C),
+    divider: Color(0xFF38383A),
+    border: Color(0xFF48484A),
+    borderFocus: Color(0xFFBF5AF2),
+    text: Color(0xFFFFFFFF),
+    textMuted: Color(0xFF98989F),
+    textFaint: Color(0xFF6C6C70),
+    accent: Color(0xFFBF5AF2),
+    onAccent: Color(0xFFFFFFFF),
+    accentWash: Color(0xFF2A1B38),
+    success: Color(0xFF30D158),
+    warning: Color(0xFFFF9F0A),
+    danger: Color(0xFFFF453A),
+    diffAdded: Color(0xFF102A18),
+    diffRemoved: Color(0xFF2E1416),
   );
 
   @override

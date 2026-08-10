@@ -34,12 +34,20 @@ class AppShell extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            // A slim bar rather than an AppBar: the modes will eventually
-            // share this row with a conversation title and per-mode actions,
-            // and Material's AppBar wants to own its own layout.
+            // A nav bar at the platform's own proportions: 44pt tall, a
+            // half-pixel hairline underneath rather than a 1pt rule, and the
+            // title on the leading edge. The hairline is the detail people
+            // read without noticing — a full pixel reads as a web page.
             Container(
+              // 44 of content *plus* the hairline. Written as 44.5 because a
+              // flat 44 puts the border inside the box and leaves the tap
+              // target at 43.5 — which the tap-target test caught, for the
+              // third time in this shell's short life.
+              height: 44.5,
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: c.divider)),
+                border: Border(
+                  bottom: BorderSide(color: c.divider, width: 0.5),
+                ),
               ),
               padding: const EdgeInsets.symmetric(horizontal: Space.sm),
               child: Row(
