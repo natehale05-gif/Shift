@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shift/core/design/metrics.dart';
 import 'package:shift/core/design/theme.dart';
+import 'package:shift/features/chat/chat_surface.dart';
+import 'package:shift/features/chat/turn_controller.dart';
 import 'package:shift/shell/app_shell.dart';
 import 'package:shift/shell/mode.dart';
 import 'package:shift/shell/mode_menu.dart';
@@ -16,6 +18,7 @@ Widget _app({
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: controller ?? ShellController()),
+        ChangeNotifierProvider(create: (_) => TurnController()),
       ],
       child: MaterialApp(
         // The platform travels through the theme rather than through
@@ -105,9 +108,15 @@ void main() {
         await tester.tap(find.text(mode.label).last);
         await tester.pumpAndSettle();
 
-        // The blurb is unique per mode, so finding it in the body proves the
-        // surface actually changed rather than the label merely highlighting.
-        expect(find.text(mode.blurb), findsOneWidget, reason: mode.label);
+        if (mode == AppMode.chat) {
+          // Chat is the one mode that is built, so it has a surface rather
+          // than a placeholder.
+          expect(find.byType(ChatSurface), findsOneWidget);
+        } else {
+          // The blurb is unique per mode, so finding it in the body proves the
+          // surface changed rather than the label merely highlighting.
+          expect(find.text(mode.blurb), findsOneWidget, reason: mode.label);
+        }
       }
     });
 
@@ -115,7 +124,7 @@ void main() {
       // A product decision — ask for anything, get it back — so it is pinned
       // rather than left to enum ordering.
       await _pumpAt(tester, logical: _desktop.$1, platform: _desktop.$2);
-      expect(find.text(AppMode.chat.blurb), findsOneWidget);
+      expect(find.byType(ChatSurface), findsOneWidget);
     });
 
     testWidgets('a mode set from outside the widget tree is reflected',

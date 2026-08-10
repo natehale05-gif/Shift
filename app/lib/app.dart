@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/design/theme.dart';
+import 'features/chat/turn_controller.dart';
 import 'shell/app_shell.dart';
 import 'shell/shell_controller.dart';
 
@@ -14,6 +15,7 @@ class ShiftApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ShellController()),
+        ChangeNotifierProvider(create: (_) => TurnController()),
       ],
       child: MaterialApp(
         title: 'SHIFT AI',

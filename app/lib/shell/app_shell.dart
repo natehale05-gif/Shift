@@ -6,6 +6,8 @@ import '../core/design/palette.dart';
 import 'mode.dart';
 import 'mode_menu.dart';
 import 'mode_placeholder.dart';
+import 'sidebar.dart';
+import '../features/chat/chat_surface.dart';
 import 'shell_controller.dart';
 
 /// The frame every mode lives inside.
@@ -17,6 +19,12 @@ import 'shell_controller.dart';
 /// for: six labelled destinations do not fit across a phone, so two of six
 /// were always off-screen behind a scroll.
 ///
+/// **A sidebar beside a column**, which is the shape of the app rather than a
+/// detail of it: a conversation list on the left, one centred column of
+/// content, and the composer inside that column. Persistent on a wide window,
+/// a drawer on a phone. Without this the app was a top bar and a placeholder,
+/// which is why recolouring it never made it resemble anything.
+///
 /// The device class still decides plenty — which surface Code mode gets, most
 /// of all — so [deviceClassOf] and the override behind it stay. It just no
 /// longer decides how you change mode.
@@ -26,35 +34,69 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final shell = context.watch<ShellController>();
-
     final c = context.colors;
+
+    // Width, not device class. A sidebar is a question about how much room
+    // there is right now — unlike Code mode's workbench, which is a question
+    // about what kind of machine this is.
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+
+    final content = Column(
+      children: [
+        _TopBar(wide: wide),
+        Expanded(child: _ModeBody(mode: shell.mode)),
+      ],
+    );
 
     return Scaffold(
       backgroundColor: c.ground,
+      drawer: wide ? null : const Drawer(
+        width: Sidebar.width,
+        shape: RoundedRectangleBorder(),
+        child: Sidebar(),
+      ),
       body: SafeArea(
-        child: Column(
-          children: [
-            // Claude's top bar: taller than a platform nav bar, and with no
-            // rule under it at all. The content simply sits on the same paper,
-            // which is why the app reads as one surface rather than as a
-            // stack of bars. A divider here was the last thing making it look
-            // like a document viewer.
-            //
-            // 52 rather than 44: the extra height is what keeps a quiet
-            // control from looking cramped against the top edge, and the
-            // tap-target test still measures the control, not the bar.
-            Container(
-              height: 52,
-              padding: const EdgeInsets.symmetric(horizontal: Space.sm),
-              child: Row(
+        child: wide
+            ? Row(
                 children: [
-                  ModeMenu(current: shell.mode, onSelect: shell.openMode),
+                  const Sidebar(),
+                  Expanded(child: content),
                 ],
+              )
+            : content,
+      ),
+    );
+  }
+}
+
+class _TopBar extends StatelessWidget {
+  final bool wide;
+
+  const _TopBar({required this.wide});
+
+  @override
+  Widget build(BuildContext context) {
+    final shell = context.watch<ShellController>();
+
+    // No rule under it, on purpose: the bar sits on the same paper as the
+    // conversation, which is what keeps the app reading as one surface rather
+    // than as stacked bars.
+    return SizedBox(
+      height: 52,
+      child: Row(
+        children: [
+          if (!wide)
+            Builder(
+              builder: (context) => IconButton(
+                tooltip: 'Conversations',
+                icon: const Icon(Icons.menu_rounded, size: 20),
+                onPressed: () => Scaffold.of(context).openDrawer(),
               ),
-            ),
-            Expanded(child: _ModeBody(mode: shell.mode)),
-          ],
-        ),
+            )
+          else
+            const SizedBox(width: Space.sm),
+          ModeMenu(current: shell.mode, onSelect: shell.openMode),
+        ],
       ),
     );
   }
@@ -68,9 +110,10 @@ class _ModeBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // An exhaustive switch, so adding a seventh mode is a decision here rather
-    // than something a default answers on somebody's behalf.
+    // than something a default answers on somebody\'s behalf.
     return switch (mode) {
-      AppMode.chat => const ModePlaceholder(mode: AppMode.chat, wave: 'N2'),
+      // Chat is the one that exists. The other five still say so.
+      AppMode.chat => const ChatSurface(),
       AppMode.code => const ModePlaceholder(mode: AppMode.code, wave: 'N9'),
       AppMode.visual => const ModePlaceholder(mode: AppMode.visual, wave: 'N4'),
       AppMode.design => const ModePlaceholder(mode: AppMode.design, wave: 'N5'),
