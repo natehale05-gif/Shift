@@ -186,6 +186,43 @@ class ShiftColors extends ThemeExtension<ShiftColors> {
     diffRemoved: Color(0xFF33201E),
   );
 
+  /// Code mode: near-black, and a deliberate exception to the rule above.
+  ///
+  /// [dark] argues at length that a true-black ground reads as a generic dark
+  /// theme, and that is still true — of the *app*. Code mode is not the app; it
+  /// is a workbench, and the reference it is built to is emphatically black.
+  /// Carrying the warm charcoal in here would make the one surface that should
+  /// feel like a tool feel like a document instead.
+  ///
+  /// The exception is expressed as a **token set**, not as hexes in widgets, so
+  /// every control the app already owns works inside it unchanged and
+  /// `scan_raw_colors` keeps its teeth.
+  ///
+  /// The accent stays the lighter violet: #8B3FD6 on black is too close in
+  /// value to read as a colour, which is the same reason [dark] lifts it.
+  static const code = ShiftColors(
+    ground: Color(0xFF000000),
+    surface: Color(0xFF0C0C0D),
+    surfaceRaised: Color(0xFF1C1C1E),
+    surfaceSunken: Color(0xFF0A0A0B),
+    divider: Color(0xFF1F1F22),
+    border: Color(0xFF2A2A2E),
+    borderFocus: Color(0xFFB76BFF),
+    text: Color(0xFFF2F2F5),
+    textMuted: Color(0xFF9A9AA2),
+    textFaint: Color(0xFF6C6C74),
+    accent: Color(0xFFB76BFF),
+    onAccent: Color(0xFF0A0A0B),
+    accentWash: Color(0xFF221A2E),
+    // Brighter than the app's, because a status dot at 10px on black has to
+    // carry its meaning at a glance from across a room.
+    success: Color(0xFF32D74B),
+    warning: Color(0xFFFFD426),
+    danger: Color(0xFFFF375F),
+    diffAdded: Color(0xFF102A16),
+    diffRemoved: Color(0xFF2A1014),
+  );
+
   @override
   ShiftColors copyWith({
     Color? ground,

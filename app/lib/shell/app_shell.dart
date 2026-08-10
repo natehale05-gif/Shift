@@ -8,6 +8,7 @@ import 'mode_menu.dart';
 import 'mode_placeholder.dart';
 import 'sidebar.dart';
 import '../features/chat/chat_surface.dart';
+import '../features/code/code_surface.dart';
 import 'shell_controller.dart';
 
 /// The frame every mode lives inside.
@@ -33,6 +34,25 @@ class AppShell extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final shell = context.watch<ShellController>();
+
+    // Code mode brings its own surface, and it takes the whole frame with it.
+    //
+    // A black body under a cream top bar and a cream sidebar does not read as
+    // a mode with its own character; it reads as a rendering fault. So the
+    // theme is swapped here rather than inside the mode, which is also what
+    // keeps every shared control — the mode menu, the sidebar, the drawer —
+    // working unchanged inside it.
+    if (shell.mode == AppMode.code) {
+      return Theme(
+        data: Theme.of(context).copyWith(extensions: [ShiftColors.code]),
+        child: Builder(builder: _frame),
+      );
+    }
+    return _frame(context);
+  }
+
+  Widget _frame(BuildContext context) {
     final shell = context.watch<ShellController>();
     final c = context.colors;
 
@@ -125,7 +145,7 @@ class _ModeBody extends StatelessWidget {
     return switch (mode) {
       // Chat is the one that exists. The other five still say so.
       AppMode.chat => const ChatSurface(),
-      AppMode.code => const ModePlaceholder(mode: AppMode.code, wave: 'N9'),
+      AppMode.code => const CodeSurface(),
       AppMode.visual => const ModePlaceholder(mode: AppMode.visual, wave: 'N4'),
       AppMode.design => const ModePlaceholder(mode: AppMode.design, wave: 'N5'),
       AppMode.work => const ModePlaceholder(mode: AppMode.work, wave: 'N10'),
