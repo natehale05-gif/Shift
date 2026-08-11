@@ -3,12 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
+import '../../core/widgets/agent_composer.dart';
 import '../../data/agent.dart';
 import '../../data/agent_store.dart';
 import 'add_workspace_sheet.dart';
 import 'agent_list_screen.dart';
 import 'code_chrome.dart';
-import 'code_composer.dart';
 import 'start_agent.dart';
 
 /// Code mode's root: the Inbox.
@@ -31,7 +31,7 @@ class CodeSurface extends StatelessWidget {
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(
-                Space.lg, 0, Space.lg, CodeComposer.reservedHeight),
+                Space.lg, 0, Space.lg, AgentComposer.reservedHeight),
             children: [
               Padding(
                 padding: const EdgeInsets.only(
@@ -58,7 +58,7 @@ class CodeSurface extends StatelessWidget {
             ],
           ),
         ),
-        CodeComposer(
+        AgentComposer(
           onSend: (text) {
             final target = soleWorkspaceOf(store);
             if (target == null) return reportNoWorkspace(context);

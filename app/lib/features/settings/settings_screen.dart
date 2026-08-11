@@ -12,6 +12,7 @@ import '../../data/kv_store.dart';
 import '../../data/note_store.dart';
 import '../../providers/registry.dart';
 import '../chat/turn_controller.dart';
+import '../work/work_runner.dart';
 import 'erase_everything.dart';
 import 'provider_key_field.dart';
 
@@ -148,6 +149,7 @@ class _EraseEverything extends StatelessWidget {
               if (!await confirmErase(context)) return;
               if (!context.mounted) return;
               await eraseEverything(
+                folders: context.read<WorkAgents>(),
                 kv: context.read<KvStore>(),
                 conversations: context.read<ConversationStore>(),
                 artifacts: context.read<ArtifactStore>(),

@@ -3,12 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
+import '../../core/widgets/agent_composer.dart';
 import '../../data/agent.dart';
 import '../../data/agent_store.dart';
 import 'agent_row.dart';
 import 'agent_screen.dart';
 import 'code_chrome.dart';
-import 'code_composer.dart';
 import 'start_agent.dart';
 
 /// A filtered list of agents — All Agents, Working, Needs Attention, In Review,
@@ -82,7 +82,7 @@ class AgentListScreen extends StatelessWidget {
                         Space.lg,
                         0,
                         Space.lg,
-                        CodeComposer.reservedHeight,
+                        AgentComposer.reservedHeight,
                       ),
                       children: [
                         // A single-state list needs no state headers — they
@@ -108,7 +108,7 @@ class AgentListScreen extends StatelessWidget {
                       ],
                     ),
             ),
-            CodeComposer(
+            AgentComposer(
               onSend: (text) {
                 // Inside a workspace the target is obvious. Outside one it is
                 // only obvious when there is exactly one.

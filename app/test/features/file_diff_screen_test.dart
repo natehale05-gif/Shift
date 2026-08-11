@@ -98,10 +98,24 @@ void main() {
   /// created in the real zone. Started in the fake one they never resolve, and
   /// the button silently appears to do nothing — which is exactly what a
   /// broken Revert would look like, so the distinction matters.
-  Future<void> tapAndSettle(WidgetTester tester, Finder finder) async {
+  ///
+  /// The wait is a poll rather than a fixed delay. A fixed one is a bet on how
+  /// long a disk takes, and it is a bet this file lost the moment the suite got
+  /// wide enough to run several file-touching tests at once: the write had
+  /// landed, the re-read had not, and the screen still showed the hunk that was
+  /// gone from the file. Waiting for the *condition* cannot flake that way.
+  Future<void> tapAndSettle(
+    WidgetTester tester,
+    Finder finder, {
+    required bool Function() until,
+  }) async {
     await tester.runAsync(() async {
       await tester.tap(finder);
-      await Future<void>.delayed(const Duration(milliseconds: 50));
+      for (var i = 0; i < 200; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        await tester.pump();
+        if (until()) return;
+      }
     });
     await tester.pump();
   }
@@ -121,7 +135,8 @@ void main() {
   testWidgets('reverting one hunk changes the file and leaves the other',
       (tester) async {
     await pump(tester);
-    await tapAndSettle(tester, find.text('Revert').first);
+    await tapAndSettle(tester, find.text('Revert').first,
+        until: () => find.byType(HunkView).evaluate().length == 1);
 
     expect(onDisk(), contains('line 1\n'));
     expect(onDisk(), contains('LINE 18'));
@@ -132,7 +147,8 @@ void main() {
   testWidgets('reverting all restores the file and the screen says so',
       (tester) async {
     await pump(tester);
-    await tapAndSettle(tester, find.text('Revert all'));
+    await tapAndSettle(tester, find.text('Revert all'),
+        until: () => find.byType(HunkView).evaluate().isEmpty);
 
     expect(onDisk(), before);
     // Not an error state: this is what success looks like here.

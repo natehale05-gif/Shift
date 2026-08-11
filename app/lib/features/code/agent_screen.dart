@@ -3,13 +3,13 @@ import 'package:provider/provider.dart';
 
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
+import '../../core/widgets/agent_composer.dart';
 import '../../data/agent.dart';
 import '../../data/agent_run.dart';
 import '../../data/agent_store.dart';
 import 'agent_runner.dart';
 import 'changes_card.dart';
 import 'code_chrome.dart';
-import 'code_composer.dart';
 import 'file_diff_screen.dart';
 import 'run_changes.dart';
 import 'run_entry_view.dart';
@@ -91,7 +91,7 @@ class _AgentScreenState extends State<AgentScreen> {
                     ),
             ),
             _Actions(agent: agent, running: running, runner: runner),
-            CodeComposer(
+            AgentComposer(
               hint: 'Follow up…',
               onSend: running ? null : (text) => runner.send(agent, text),
             ),

@@ -22,6 +22,8 @@ import 'package:shift/features/visual/visual_surface.dart';
 import 'package:shift/features/visual/visual_turns.dart';
 import 'package:shift/shell/app_shell.dart';
 import 'package:shift/shell/mode.dart';
+import 'package:shift/features/work/work_runner.dart';
+import 'package:shift/features/work/work_surface.dart';
 import 'package:shift/shell/mode_menu.dart';
 import 'package:shift/shell/shell_controller.dart';
 
@@ -37,6 +39,7 @@ Widget _app({
         ChangeNotifierProvider(create: (_) => ConversationStore(KvStore())),
         ChangeNotifierProvider(create: (_) => TurnController()),
         ChangeNotifierProvider(create: (_) => AgentStore(KvStore())),
+        ChangeNotifierProvider(create: (_) => WorkAgents(KvStore())),
         ChangeNotifierProvider(create: (_) => NoteStore(KvStore())),
         ChangeNotifierProvider(create: (_) => NoteCleaner()),
         ChangeNotifierProvider(
@@ -144,23 +147,21 @@ void main() {
         await tester.tap(find.text(mode.label).last);
         await tester.pumpAndSettle();
 
-        if (mode == AppMode.chat) {
-          expect(find.byType(ChatSurface), findsOneWidget);
-        } else if (mode == AppMode.code) {
-          // Code is the second built mode. It also brings its own surface, so
-          // this is the one arm where the shell's paper changes with the mode.
-          expect(find.byType(CodeSurface), findsOneWidget);
-        } else if (mode == AppMode.notes) {
-          expect(find.byType(NotesSurface), findsOneWidget);
-        } else if (mode == AppMode.visual) {
-          expect(find.byType(VisualSurface), findsOneWidget);
-        } else if (mode == AppMode.design) {
-          expect(find.byType(DesignSurface), findsOneWidget);
-        } else {
-          // The blurb is unique per mode, so finding it in the body proves the
-          // surface changed rather than the label merely highlighting.
-          expect(find.text(mode.blurb), findsOneWidget, reason: mode.label);
-        }
+        // Every mode now has a surface of its own — there is no placeholder
+        // arm left, and a `Type` per mode is what makes that a fact the test
+        // states rather than a gap it papers over.
+        expect(
+          find.byType(switch (mode) {
+            AppMode.chat => ChatSurface,
+            AppMode.code => CodeSurface,
+            AppMode.notes => NotesSurface,
+            AppMode.visual => VisualSurface,
+            AppMode.design => DesignSurface,
+            AppMode.work => WorkSurface,
+          }),
+          findsOneWidget,
+          reason: mode.label,
+        );
       }
     });
 

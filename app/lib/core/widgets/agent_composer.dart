@@ -1,18 +1,22 @@
 import 'package:flutter/material.dart';
 
-import '../../core/design/metrics.dart';
-import '../../core/design/palette.dart';
+import '../design/metrics.dart';
+import '../design/palette.dart';
 
-/// The pill that floats over every screen in this mode.
+/// The pill that floats over every screen of an agent mode.
 ///
 /// **Permanent, and that is the point.** In the reference it is present on the
 /// lists as well as inside an agent, so starting work never means navigating
 /// somewhere first — you type where you are. Content scrolls under it rather
 /// than being pushed above it.
 ///
+/// Shared by Code and Work, and it takes its colours from [context.colors]
+/// rather than naming any — which is what lets one widget be dark chrome in
+/// one mode and paper in the other without knowing about either.
+///
 /// Only the placeholder changes: "Plan, ask, build…" out in the lists, "Follow
 /// up…" inside an agent that is already running.
-class CodeComposer extends StatefulWidget {
+class AgentComposer extends StatefulWidget {
   final String hint;
 
   /// Null while there is nothing to send to — an agent that is already working.
@@ -20,7 +24,7 @@ class CodeComposer extends StatefulWidget {
   /// comes and goes makes the screen jump under a thumb that is already there.
   final ValueChanged<String>? onSend;
 
-  const CodeComposer({
+  const AgentComposer({
     super.key,
     required this.onSend,
     this.hint = 'Plan, ask, build…',
@@ -31,10 +35,10 @@ class CodeComposer extends StatefulWidget {
   static const double reservedHeight = 96;
 
   @override
-  State<CodeComposer> createState() => _CodeComposerState();
+  State<AgentComposer> createState() => _AgentComposerState();
 }
 
-class _CodeComposerState extends State<CodeComposer> {
+class _AgentComposerState extends State<AgentComposer> {
   final _controller = TextEditingController();
 
   @override

@@ -15,6 +15,7 @@ import 'package:shift/data/kv_store.dart';
 import 'package:shift/data/note_store.dart';
 import 'package:shift/features/chat/turn_controller.dart';
 import 'package:shift/features/settings/erase_everything.dart';
+import 'package:shift/features/work/work_runner.dart';
 
 /// "Delete everything", against a real file.
 ///
@@ -28,6 +29,7 @@ void main() {
   late ArtifactStore artifacts;
   late NoteStore notes;
   late AgentStore agents;
+  late WorkAgents folders;
   late ApiKeysStore keys;
   late ImageStore images;
   late AssetStore assets;
@@ -45,6 +47,8 @@ void main() {
     await notes.load();
     agents = AgentStore(kv);
     await agents.load();
+    folders = WorkAgents(kv);
+    await folders.load();
     keys = ApiKeysStore(kv);
     await keys.load();
     assets = AssetStore(directory: '${dir.path}/assets');
@@ -80,6 +84,12 @@ void main() {
     await agents.addWorkspace(
       LocalFolder(id: 'w1', name: 'repo', path: dir.path),
     );
+    // Work's folders live under their own keys, so a version of this that
+    // reloaded only Code's store would leave the documents list on screen
+    // over an empty disk.
+    await folders.addWorkspace(
+      LocalFolder(id: 'f1', name: 'my-documents', path: dir.path),
+    );
     await keys.set('anthropic', 'sk-ant-secret');
     await images.save(
       MadeImage(
@@ -100,6 +110,7 @@ void main() {
         artifacts: artifacts,
         notes: notes,
         agents: agents,
+        folders: folders,
         keys: keys,
         images: images,
         turn: turn,
@@ -113,6 +124,7 @@ void main() {
     expect(conversations.index, isNotEmpty);
     expect(notes.index, isNotEmpty);
     expect(agents.workspaces, isNotEmpty);
+    expect(folders.workspaces, isNotEmpty);
     expect(keys.has('anthropic'), isTrue);
     expect(images.index, isNotEmpty);
     expect(await assets.get('img1'), isNotNull,
@@ -131,6 +143,7 @@ void main() {
     expect(notes.index, isEmpty);
     expect(agents.workspaces, isEmpty);
     expect(agents.agents, isEmpty);
+    expect(folders.workspaces, isEmpty);
     expect(keys.has('anthropic'), isFalse);
     expect(images.index, isEmpty);
     // The half clearing the key-value map cannot reach. Without it the app
@@ -149,6 +162,7 @@ void main() {
       'A private note',
       'sk-ant-secret',
       'repo',
+      'my-documents',
       'a private picture',
     ]) {
       expect(raw, isNot(contains(trace)), reason: trace);

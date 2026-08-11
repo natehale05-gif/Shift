@@ -7,11 +7,11 @@ import 'mode.dart';
 import 'mode_menu.dart';
 import '../features/design/design_surface.dart';
 import '../features/visual/visual_surface.dart';
-import 'mode_placeholder.dart';
 import 'sidebar.dart';
 import '../features/chat/chat_surface.dart';
 import '../features/code/code_surface.dart';
 import '../features/notes/notes_surface.dart';
+import '../features/work/work_surface.dart';
 import 'shell_controller.dart';
 
 /// The frame every mode lives inside.
@@ -151,7 +151,7 @@ class _ModeBody extends StatelessWidget {
       AppMode.code => const CodeSurface(),
       AppMode.visual => const VisualSurface(),
       AppMode.design => const DesignSurface(),
-      AppMode.work => const ModePlaceholder(mode: AppMode.work, wave: 'N10'),
+      AppMode.work => const WorkSurface(),
       AppMode.notes => const NotesSurface(),
     };
   }

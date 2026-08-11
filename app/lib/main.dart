@@ -12,6 +12,7 @@ import 'data/conversation_store.dart';
 import 'data/image_store.dart';
 import 'data/kv_store.dart';
 import 'data/note_store.dart';
+import 'features/work/work_runner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,12 +28,15 @@ Future<void> main() async {
   final artifacts = ArtifactStore(kv);
   final agents = AgentStore(kv);
   final runs = AgentRunStore(kv);
+  final folders = WorkAgents(kv);
+  final jobRuns = AgentRunStore(kv, namespace: 'work');
   final notes = NoteStore(kv);
   final images = ImageStore(kv, AssetStore());
   await keys.load();
   await conversations.load();
   await artifacts.load();
   await agents.load();
+  await folders.load();
   await notes.load();
   await images.load();
 
@@ -48,6 +52,8 @@ Future<void> main() async {
     artifacts: artifacts,
     agents: agents,
     runs: runs,
+    folders: folders,
+    jobRuns: jobRuns,
     notes: notes,
     images: images,
     kv: kv,

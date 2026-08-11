@@ -16,6 +16,7 @@ import 'features/code/agent_runner.dart';
 import 'features/notes/note_cleaner.dart';
 import 'features/design/design_turns.dart';
 import 'features/visual/visual_turns.dart';
+import 'features/work/work_runner.dart';
 import 'shell/app_shell.dart';
 import 'shell/shell_controller.dart';
 
@@ -25,6 +26,11 @@ class ShiftApp extends StatelessWidget {
   final ArtifactStore artifacts;
   final AgentStore agents;
   final AgentRunStore runs;
+
+  /// Work mode's folders and jobs, kept apart from Code's: a repository has no
+  /// business appearing in a list of somebody's documents.
+  final WorkAgents folders;
+  final AgentRunStore jobRuns;
   final NoteStore notes;
   final ImageStore images;
 
@@ -39,6 +45,8 @@ class ShiftApp extends StatelessWidget {
     required this.artifacts,
     required this.agents,
     required this.runs,
+    required this.folders,
+    required this.jobRuns,
     required this.notes,
     required this.images,
     required this.kv,
@@ -54,11 +62,16 @@ class ShiftApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: conversations),
         ChangeNotifierProvider.value(value: artifacts),
         ChangeNotifierProvider.value(value: agents),
+        ChangeNotifierProvider.value(value: folders),
         ChangeNotifierProvider.value(value: notes),
         ChangeNotifierProvider.value(value: images),
         ChangeNotifierProvider(create: (_) => NoteCleaner(keys: keys)),
         ChangeNotifierProvider(
           create: (_) => AgentRunner(agents: agents, runs: runs, keys: keys),
+        ),
+        ChangeNotifierProvider(
+          create: (_) =>
+              WorkRunner(agents: folders, runs: jobRuns, keys: keys),
         ),
         ChangeNotifierProvider(
           create: (_) => VisualTurns(keys: keys, images: images),

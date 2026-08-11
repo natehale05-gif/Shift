@@ -15,7 +15,7 @@ import 'package:shift/features/chat/turn_controller.dart';
 import 'package:shift/features/code/agent_list_screen.dart';
 import 'package:shift/features/code/agent_row.dart';
 import 'package:shift/features/code/code_chrome.dart';
-import 'package:shift/features/code/code_composer.dart';
+import 'package:shift/core/widgets/agent_composer.dart';
 import 'package:shift/features/code/code_surface.dart';
 import 'package:shift/shell/app_shell.dart';
 import 'package:shift/shell/mode.dart';
@@ -204,7 +204,7 @@ void main() {
     for (final finder in [
       find.byType(CodeCircleButton),
       find.byType(AgentRow),
-      find.byType(CodeComposer),
+      find.byType(AgentComposer),
     ]) {
       for (var i = 0; i < finder.evaluate().length; i++) {
         expect(t.getSize(finder.at(i)).height,

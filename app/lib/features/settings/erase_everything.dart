@@ -8,6 +8,7 @@ import '../../data/image_store.dart';
 import '../../data/kv_store.dart';
 import '../../data/note_store.dart';
 import '../chat/turn_controller.dart';
+import '../work/work_runner.dart';
 
 /// Removes everything this app has stored on this device.
 ///
@@ -31,6 +32,7 @@ Future<void> eraseEverything({
   required ArtifactStore artifacts,
   required NoteStore notes,
   required AgentStore agents,
+  required WorkAgents folders,
   required ApiKeysStore keys,
   required ImageStore images,
   required TurnController turn,
@@ -52,6 +54,7 @@ Future<void> eraseEverything({
   await artifacts.load();
   await notes.load();
   await agents.load();
+  await folders.load();
   await keys.load();
 }
 
