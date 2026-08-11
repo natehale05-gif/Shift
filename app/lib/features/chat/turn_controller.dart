@@ -137,6 +137,19 @@ List<ChatItem> itemsFromJson(List<dynamic> raw) => [
 class TurnController extends ChangeNotifier {
   final List<ChatItem> items = [];
 
+  /// What was asked, for a reply.
+  ///
+  /// The nearest [UserSaid] before it, which is what the person is looking at
+  /// directly above the answer. Null on a transcript that somehow starts with
+  /// a reply — restored from a partial write, say — rather than guessing.
+  String? promptFor(Reply reply) {
+    final at = items.indexOf(reply);
+    for (var i = at - 1; i >= 0; i--) {
+      if (items[i] case final UserSaid said) return said.text;
+    }
+    return null;
+  }
+
   /// How the engine is reached. Injected so a test can drive the surface with
   /// fake executors, and so the real answer to "which provider, paid for how"
   /// stays in one place rather than in a widget.

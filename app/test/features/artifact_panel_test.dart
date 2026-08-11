@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -92,10 +93,32 @@ void main() {
     // Deferred out of N2b because there was no way to save anything off-web.
     // There is now, and a page you can preview but not keep is a deliverable
     // only in the sense that you can look at it.
-    await t.pumpWidget(host(page()));
+    debugDefaultTargetPlatformOverride = TargetPlatform.linux;
+    try {
+      await t.pumpWidget(host(page()));
 
-    expect(find.byTooltip('Save'), findsOneWidget);
-    expect(find.byTooltip('Copy'), findsOneWidget);
+      expect(find.byTooltip('Save'), findsOneWidget);
+      expect(find.byTooltip('Copy'), findsOneWidget);
+    } finally {
+      // Reset inside the body: the framework asserts this global is unset by
+      // the time a test ends, and `addTearDown` runs too late for it.
+      debugDefaultTargetPlatformOverride = null;
+    }
+  });
+
+  testWidgets('and withholds it where saving cannot work', (t) async {
+    // `file_selector` has no iOS or Android implementation, so the dialog
+    // never opens and the button does nothing. Copy still works, so the page
+    // is not stranded.
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      await t.pumpWidget(host(page()));
+
+      expect(find.byTooltip('Save'), findsNothing);
+      expect(find.byTooltip('Copy'), findsOneWidget);
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   testWidgets('every control clears the tap-target minimum', (t) async {

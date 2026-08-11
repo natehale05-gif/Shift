@@ -215,11 +215,15 @@ class _Chrome extends StatelessWidget {
             tooltip: 'Copy',
             onTap: onCopy,
           ),
-          _Icon(
-            icon: Icons.download_rounded,
-            tooltip: 'Save',
-            onTap: onSave,
-          ),
+          // Absent where saving cannot work rather than present and inert:
+          // `file_selector` has no iOS or Android implementation, so the
+          // dialog never opens and the button does nothing at all.
+          if (canSaveFile)
+            _Icon(
+              icon: Icons.download_rounded,
+              tooltip: 'Save',
+              onTap: onSave,
+            ),
         ],
       ),
     );

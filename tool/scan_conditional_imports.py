@@ -51,7 +51,13 @@ DECLARATION = re.compile(
     # The return type must begin with a word character, so an indented call
     # cannot pass its own leading spaces off as one.
     rf"|^(?:[\w$<>?][\w$<>,?\[\] \t]*?{H}+)(\w+){H}*(?:<[\w\s,]+>)?{H}*\("
-    rf"|^(?:const|final|late){H}+(?:[\w$<>,?\[\] \t]+{H}+)?(\w+){H}*=",
+    rf"|^(?:const|final|late){H}+(?:[\w$<>,?\[\] \t]+{H}+)?(\w+){H}*="
+    # Top-level getters. Without this the scanner cannot see one at all — and
+    # a name it cannot see is a name it cannot report as missing, which is a
+    # false pass rather than a gap. Found when one arm of a platform facade
+    # declared a `const` and the other a getter: it flagged the getter as
+    # absent, which was the right complaint for the wrong reason.
+    rf"|^(?:[\w$<>?][\w$<>,?\[\] \t]*{H}+)?get{H}+(\w+)",
     re.MULTILINE,
 )
 

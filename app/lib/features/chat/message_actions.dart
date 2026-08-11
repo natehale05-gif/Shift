@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
+import '../../core/platform/save_file.dart';
+import 'reply_document.dart';
 import 'turn_controller.dart';
 
 /// Copy, retry, and who answered — the row under a finished reply.
@@ -38,6 +40,15 @@ class MessageActions extends StatelessWidget {
               tooltip: 'Copy',
               onTap: () => Clipboard.setData(ClipboardData(text: reply.text)),
             ),
+          // A reply worth keeping is usually one you asked for here rather
+          // than in Work mode, and Copy gets you asterisks and backticks in a
+          // Word document.
+          if (canSaveFile && reply.text.isNotEmpty && reply.failure == null)
+            _Action(
+              icon: Icons.description_outlined,
+              tooltip: 'Save as a document',
+              onTap: () => _saveDocument(context, turn, reply),
+            ),
           // Retry re-runs the same request rather than replaying anything:
           // the plan is a pure function of the input, so asking again is
           // asking the same question, not repeating an answer.
@@ -61,6 +72,33 @@ class MessageActions extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Writes the reply as a `.docx` the person chooses a home for.
+///
+/// The decision — what it is called and what is in it — is
+/// [documentForReply], so it can be asserted without answering a save dialog.
+Future<void> _saveDocument(
+  BuildContext context,
+  TurnController turn,
+  Reply reply,
+) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final document = documentForReply(
+    prompt: turn.promptFor(reply) ?? '',
+    markdown: reply.text,
+  );
+  final saved = await saveFile(
+    suggestedName: document.name,
+    bytes: document.bytes,
+    mimeType:
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  );
+  // Silent on a cancel: the person chose that, and an error there reads as a
+  // failure they caused.
+  if (saved) {
+    messenger.showSnackBar(const SnackBar(content: Text('Saved.')));
   }
 }
 

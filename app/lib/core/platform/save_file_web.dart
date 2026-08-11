@@ -3,6 +3,9 @@ import 'dart:typed_data';
 
 import 'package:web/web.dart' as web;
 
+/// Whether this platform can save a file at all. See the IO copy.
+const bool canSaveFile = true;
+
 /// The browser: an object URL and a click on an anchor nobody sees.
 ///
 /// There is no save dialog to await and no path to report — the browser takes

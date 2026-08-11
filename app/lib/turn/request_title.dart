@@ -144,3 +144,23 @@ bool _usable(String text) {
 
 String _cap(String text) =>
     text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
+
+/// A title reduced to a filename stem: lower case, hyphenated, eight words.
+///
+/// Shared rather than reimplemented per surface, because two rules for one
+/// thing is one that drifts — and this one has a defect in its history worth
+/// not repeating: v1 named every download from a raw prompt and truncated it
+/// at six words, so `build me a landing page for my bakery` saved as
+/// `build_me_a_landing_page` and dropped the only word that identified it.
+/// Run over a title from [titleFromRequest] rather than over the request, the
+/// subject survives.
+String fileStem(String title, {String fallback = 'file'}) {
+  final stem = title
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+      .split(RegExp(r'\s+'))
+      .where((w) => w.isNotEmpty)
+      .take(8)
+      .join('-');
+  return stem.isEmpty ? fallback : stem;
+}

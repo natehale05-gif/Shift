@@ -1,3 +1,5 @@
+import '../turn/request_title.dart';
+
 const _codeExtensions = {
   'dart': 'dart', 'python': 'py', 'py': 'py', 'javascript': 'js', 'js': 'js',
   'typescript': 'ts', 'ts': 'ts', 'json': 'json', 'yaml': 'yaml',
@@ -79,16 +81,8 @@ class Artifact {
   /// The extension comes from the kind rather than from the title, because the
   /// kind is what the bytes actually are — a page saved as `.txt` opens in a
   /// text editor and looks like the app produced nothing.
-  String get filename {
-    final stem = title
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
-        .split(RegExp(r'\s+'))
-        .where((w) => w.isNotEmpty)
-        .take(8)
-        .join('-');
-    return '${stem.isEmpty ? 'artifact' : stem}.$extension';
-  }
+  String get filename =>
+      '${fileStem(title, fallback: 'artifact')}.$extension';
 
   /// What the bytes are, as a file extension.
   String get extension => switch (kind) {

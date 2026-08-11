@@ -110,7 +110,7 @@ class _Row extends StatelessWidget {
               ),
             ),
           ),
-          if (workspace != null)
+          if (workspace != null && canSaveFile)
             IconButton(
               icon: const Icon(Icons.save_alt_rounded, size: 20),
               color: c.textMuted,
