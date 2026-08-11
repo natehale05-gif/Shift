@@ -1,7 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import '../../providers/access.dart';
 import '../../providers/clients/gemini_image.dart';
+import '../../providers/clients/openai_image.dart';
+import '../../providers/failure_text.dart';
 import '../../providers/select.dart';
 import '../capability.dart';
 import '../job_graph.dart';
@@ -21,6 +25,11 @@ class ImageExecutor implements StepExecutor {
   final Future<ProviderAccess?> Function(String providerId) access;
   final String? pinned;
   final GeminiImage gemini;
+  final OpenAiImage openai;
+
+  /// Whether this is running in a browser. Same reason as [TextExecutor]'s: a
+  /// branch gated on `kIsWeb` is one no test here can enter.
+  final bool onWeb;
 
   /// Resolves a stored picture the step is editing.
   ///
@@ -41,7 +50,10 @@ class ImageExecutor implements StepExecutor {
     this.pinned,
     this.sourceBytes,
     GeminiImage? gemini,
-  }) : gemini = gemini ?? GeminiImage();
+    OpenAiImage? openai,
+    this.onWeb = kIsWeb,
+  })  : gemini = gemini ?? GeminiImage(),
+        openai = openai ?? OpenAiImage();
 
   ProviderChoice? get _choice =>
       chooseProvider(Capability.image, usable: usable, pinned: pinned);
@@ -94,6 +106,10 @@ class ImageExecutor implements StepExecutor {
       }
     }
 
+    final base = choice.provider.baseUrl;
+    final blocked =
+        sentenceForBrowserBlocked(choice.provider, onWeb: onWeb);
+
     yield* switch (choice.provider.id) {
       'gemini' => gemini.generate(
           stepId: step.id,
@@ -103,9 +119,32 @@ class ImageExecutor implements StepExecutor {
           sourceMimeType: source?.mimeType ?? 'image/png',
           aspectRatio: step.aspectRatio,
         ),
-      // OpenAI images land with the rest of that client. A provider that was
-      // selected and cannot be dispatched says so, rather than failing further
-      // down where it would read as the provider's fault.
+
+      // OpenAI's endpoint makes a picture and cannot change one. Refused
+      // rather than quietly generating a new unrelated image: somebody who
+      // asked to change *this* picture and got a different one has been
+      // charged for the wrong thing and has to notice it themselves.
+      'openai' when source != null => Stream.value(
+          StepFailed(
+            step.id,
+            reason: 'OpenAI can make a new picture but not change an existing '
+                'one. Add a Gemini key to edit pictures, or describe the '
+                'whole picture you want.',
+          ),
+        ),
+      'openai' when base != null => openai.generate(
+          stepId: step.id,
+          access: credential,
+          model: choice.model.id,
+          baseUrl: base,
+          prompt: step.instruction,
+          aspectRatio: step.aspectRatio,
+          blocked: blocked,
+        ),
+
+      // A provider selected for images with no client behind it. Says so,
+      // rather than failing further down where it would read as the
+      // provider's fault.
       _ => Stream.value(
           StepFailed(
             step.id,

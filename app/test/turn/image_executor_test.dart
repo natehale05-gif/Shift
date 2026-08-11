@@ -1,10 +1,13 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shift/providers/access.dart';
 import 'package:shift/providers/clients/anthropic_text.dart';
 import 'package:shift/providers/clients/gemini_image.dart';
+import 'package:shift/providers/clients/openai_image.dart';
 import 'package:shift/providers/streaming/sse_client.dart';
 import 'package:shift/turn/capability.dart';
 import 'package:shift/turn/executors/image_executor.dart';
@@ -45,6 +48,17 @@ String textOnlyReply(String text) => jsonEncode({
       ],
     });
 
+/// What OpenAI's image endpoint answers with: one base64 PNG, never a URL.
+http.Response _drawn() => http.Response(
+      jsonEncode({
+        'data': [
+          {'b64_json': _pixel}
+        ]
+      }),
+      200,
+      headers: const {'content-type': 'application/json'},
+    );
+
 class FakeHttp extends http.BaseClient {
   final List<http.BaseRequest> calls = [];
   final int status;
@@ -62,12 +76,13 @@ class FakeHttp extends http.BaseClient {
   }
 }
 
-JobStep imageStep(String id) => JobStep(
+JobStep imageStep(String id, {String? editing}) => JobStep(
       id: id,
       needs: Capability.image,
       produces: OutputKind.image,
       instruction: 'a sourdough loaf on slate',
       label: 'Drawing',
+      editing: editing,
     );
 
 ImageExecutor executorWith(FakeHttp http, {ProviderAccess? credential}) =>
@@ -174,6 +189,53 @@ void main() {
 
       expect(events.whereType<StepFailed>(), hasLength(1));
       expect(transport.calls, isEmpty);
+    });
+  });
+
+  group('an OpenAI-only account', () {
+    // The reported symptom, exactly: an OpenAI key saved, no Gemini key,
+    // "generate an image of a pink flower" → "OpenAI images are not wired up
+    // yet." It was the only image provider available and nothing was behind it.
+
+    ImageExecutor openAiOnly({http.Client? client}) =>
+        ImageExecutor(
+          usable: (id) => id == 'openai',
+          access: (_) async => const DirectKey('sk-test'),
+          sourceBytes: (_) async =>
+              (bytes: Uint8List.fromList([1, 2, 3]), mimeType: 'image/png'),
+          openai: OpenAiImage(
+            clientFactory: () => client ?? MockClient((_) async => _drawn()),
+          ),
+        );
+
+    test('gets a picture rather than an apology', () async {
+      final events =
+          await openAiOnly().run(imageStep('i'), const {}).toList();
+
+      expect(events.whereType<StepFailed>(), isEmpty,
+          reason: 'this is the failure the report was about');
+      final output =
+          events.whereType<StepCompleted>().single.output as ImageOutput;
+      expect(output.bytes, isNotEmpty);
+    });
+
+    test('is named as OpenAI before the work starts', () async {
+      expect(openAiOnly().identify(imageStep('i')).provider, 'OpenAI');
+    });
+
+    test('and is refused an edit rather than sent one it cannot do', () async {
+      // OpenAI's endpoint makes a picture and cannot change one. Generating a
+      // new unrelated image would charge for the wrong thing while looking
+      // like it worked.
+      final events = await openAiOnly()
+          .run(imageStep('i', editing: 'img-1'), const {})
+          .toList();
+
+      final failure = events.whereType<StepFailed>().single;
+      expect(failure.reason, contains('not change an existing one'));
+      expect(failure.reason, contains('Gemini'),
+          reason: 'a refusal that names no way forward is just a wall');
+      expect(events.whereType<StepCompleted>(), isEmpty);
     });
   });
 
