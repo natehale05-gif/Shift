@@ -164,7 +164,75 @@ class RunCommand extends AgentTool {
       };
 }
 
-/// The set an agent is given.
+/// Declaring what it is about to do, and keeping that list current.
+///
+/// The difference between a task list and a transcript: a transcript says what
+/// happened, a plan says what is *going to*. Somebody watching an agent work
+/// through their documents needs the second one — the first only tells them
+/// where it got to after it got there.
+class PlanTasks extends AgentTool {
+  const PlanTasks();
+
+  @override
+  String get name => 'plan';
+
+  @override
+  String get description =>
+      'Set or update the task list for this job. Call it once at the start '
+      'with everything you intend to do, and again whenever something is '
+      'finished or the plan changes. Keep it short — these are the steps a '
+      'person would recognise, not every tool call.';
+
+  @override
+  Map<String, dynamic> get schema => const {
+        'type': 'object',
+        'properties': {
+          'tasks': {
+            'type': 'array',
+            'items': {
+              'type': 'object',
+              'properties': {
+                'title': {'type': 'string'},
+                'done': {'type': 'boolean'},
+              },
+              'required': ['title'],
+            },
+          },
+        },
+        'required': ['tasks'],
+      };
+}
+
+/// Stopping to put a decision back to the person.
+///
+/// Only for decisions that are genuinely theirs — which is why the description
+/// says so twice. An agent that asks about everything is an agent nobody
+/// leaves running, and the value of the mode is being able to walk away.
+class AskPerson extends AgentTool {
+  const AskPerson();
+
+  @override
+  String get name => 'ask';
+
+  @override
+  String get description =>
+      'Stop and ask when a decision is genuinely the person\'s — a preference '
+      'you cannot infer, a fact only they have, or a choice with consequences '
+      'they would want to make. Do not use it for anything you could find out '
+      'by reading a file, and do not use it to confirm work you have been '
+      'asked to do.';
+
+  @override
+  Map<String, dynamic> get schema => const {
+        'type': 'object',
+        'properties': {
+          'question': {'type': 'string'},
+        },
+        'required': ['question'],
+      };
+}
+
+/// The set a coding agent is given.
 const List<AgentTool> kAgentTools = [
   ReadFile(),
   WriteFile(),
@@ -172,6 +240,26 @@ const List<AgentTool> kAgentTools = [
   GlobFiles(),
   GrepFiles(),
   RunCommand(),
+];
+
+/// The set a work agent is given.
+///
+/// The same reach as the coding set — Work is pointed at a folder of somebody
+/// else's documents, and the answer to "what may it do there" is a permission
+/// mode they chose rather than a shorter tool list. See `permission.dart`.
+///
+/// Plus the two that make it a *work* agent rather than a coding agent with
+/// different words: it says what it is going to do, and it stops when the
+/// decision is not its to make.
+const List<AgentTool> kWorkTools = [
+  ReadFile(),
+  WriteFile(),
+  EditFile(),
+  GlobFiles(),
+  GrepFiles(),
+  RunCommand(),
+  PlanTasks(),
+  AskPerson(),
 ];
 
 /// What came back, as the model will read it.

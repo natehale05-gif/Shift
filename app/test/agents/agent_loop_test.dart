@@ -218,8 +218,8 @@ void main() {
 
   test('the system prompt says the two things a model gets wrong', () {
     // It cannot see the files, and it must not claim work it has not checked.
-    expect(AgentLoop.systemPrompt, contains('cannot see the files'));
-    expect(AgentLoop.systemPrompt, contains('not claim'));
+    expect(AgentLoop.codeBrief, contains('cannot see the files'));
+    expect(AgentLoop.codeBrief, contains('not claim'));
   });
 }
 

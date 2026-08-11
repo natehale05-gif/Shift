@@ -1,3 +1,5 @@
+import '../agents/agent_loop.dart';
+
 /// What an agent did, in the order it did it.
 ///
 /// The transcript is the product of this mode. A row in a list tells you an
@@ -26,6 +28,11 @@ sealed class RunEntry {
         ..result = raw['result'] as String?
         ..isError = raw['isError'] == true
         ..changedPath = raw['changedPath'] as String?,
+      'plan' => RunPlan([
+          for (final t in raw['tasks'] as List<dynamic>? ?? const [])
+            ?AgentTask.fromJson(t),
+        ]),
+      'question' => RunQuestion('${raw['text']}'),
       'ended' =>
         RunEnded(reason: raw['reason'] as String?, detail: raw['detail'] as String?),
       _ => null,
@@ -90,6 +97,34 @@ class RunTool extends RunEntry {
 }
 
 /// The run stopped.
+/// The agent's own task list, as it stood at this point in the run.
+///
+/// An entry rather than a field on the run, for the same reason everything
+/// else here is one: the list changing *is* something that happened, and a
+/// transcript that only kept the final version could not show that the third
+/// task appeared halfway through because of what the second one found.
+class RunPlan extends RunEntry {
+  final List<AgentTask> tasks;
+
+  const RunPlan(this.tasks);
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'plan',
+        'tasks': [for (final t in tasks) t.toJson()],
+      };
+}
+
+/// It stopped and put a question to the person.
+class RunQuestion extends RunEntry {
+  final String question;
+
+  const RunQuestion(this.question);
+
+  @override
+  Map<String, dynamic> toJson() => {'kind': 'question', 'text': question};
+}
+
 class RunEnded extends RunEntry {
   /// Set when it stopped for a reason worth saying — a failure, or the round
   /// limit. Null when it simply finished.

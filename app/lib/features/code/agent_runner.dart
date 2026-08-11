@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../agents/agent_loop.dart';
 import '../../agents/anthropic_agent.dart';
+import '../../agents/permission.dart';
+import '../../agents/tools.dart';
 import '../../agents/workspace.dart';
 import '../../agents/workspace_local_stub.dart'
     if (dart.library.io) '../../agents/workspace_local_io.dart';
@@ -45,6 +47,21 @@ class AgentRunner extends ChangeNotifier {
   /// wire and nothing else does yet.
   final String model;
 
+  /// What the agent is told beyond the job, and what it may call.
+  ///
+  /// Injected rather than fixed because Work mode is this runner with a
+  /// different brief and two more tools — a second runner would be two copies
+  /// of the run, fold, persist and diff logic, and they would drift.
+  final String brief;
+  final List<AgentTool> tools;
+
+  /// Whether calls are checked against the workspace's [PermissionMode].
+  ///
+  /// Off for Code mode, which is pointed at a repository under version control
+  /// and where every change is reviewable as a diff. On for Work, where the
+  /// files are the person's own and there is no `git checkout`.
+  final bool gated;
+
   final Map<String, AgentRun> _open = {};
 
   /// What each open run has changed, as of the last read.
@@ -55,6 +72,14 @@ class AgentRunner extends ChangeNotifier {
   /// A future per widget gives two answers that drift.
   final Map<String, List<FileChange>> _changes = {};
   final Map<String, StreamSubscription<AgentEvent>> _live = {};
+
+  /// A call that is waiting on the person, per agent.
+  ///
+  /// Not a transcript entry: an approval is a question about what is *about* to
+  /// happen, and a run that was stopped before it was answered should leave no
+  /// trace of having asked. What survives is the consequence — a declined call
+  /// is recorded as its tool result.
+  final Map<String, ({String question, Completer<bool> answer})> _approvals = {};
 
   /// Every write, in order, one at a time.
   ///
@@ -75,6 +100,9 @@ class AgentRunner extends ChangeNotifier {
     OpenedWorkspace Function(Workspace)? openWorkspace,
     AnthropicAgent Function()? client,
     this.model = 'claude-opus-4-8',
+    this.brief = AgentLoop.codeBrief,
+    this.tools = kAgentTools,
+    this.gated = false,
   })  : openWorkspace = openWorkspace ?? defaultOpener,
         client = client ?? AnthropicAgent.new;
 
@@ -155,6 +183,41 @@ class AgentRunner extends ChangeNotifier {
 
   bool isRunning(String agentId) => _live.containsKey(agentId);
 
+  /// What [agentId] is waiting to be allowed to do, or null.
+  String? approvalFor(String agentId) => _approvals[agentId]?.question;
+
+  /// Answers it. Everything past this point is the loop's again.
+  void answerApproval(String agentId, bool allowed) {
+    final pending = _approvals.remove(agentId);
+    if (pending == null) return;
+    if (!pending.answer.isCompleted) pending.answer.complete(allowed);
+    notifyListeners();
+  }
+
+  /// Releases an unanswered question, refusing it.
+  ///
+  /// Called on every path a run can end by, including the ones that skip the
+  /// loop entirely. A completer nobody completes is a run that hangs forever
+  /// with a card on screen that no longer belongs to anything.
+  void _clearApproval(String agentId) {
+    final pending = _approvals.remove(agentId);
+    if (pending != null && !pending.answer.isCompleted) {
+      pending.answer.complete(false);
+    }
+  }
+
+  Future<bool> _askPermission(String agentId, String question) {
+    // One at a time, because tools run sequentially: a second question while
+    // one is open would mean the loop asked twice without waiting, which it
+    // does not do. If it ever did, replacing the first would silently strand
+    // it, so the earlier one is refused rather than dropped.
+    _clearApproval(agentId);
+    final answer = Completer<bool>();
+    _approvals[agentId] = (question: question, answer: answer);
+    notifyListeners();
+    return answer.future;
+  }
+
   /// Gives [agent] something to do.
   ///
   /// A follow-up **does not replay the previous round's tool calls.** The
@@ -189,7 +252,23 @@ class AgentRunner extends ChangeNotifier {
       );
     }
 
-    final loop = AgentLoop(workspace: opened.workspace!, client: client());
+    final loop = AgentLoop(
+      workspace: opened.workspace!,
+      client: client(),
+      brief: brief,
+      tools: tools,
+      // The mode of the *workspace*, read at each call rather than captured, so
+      // changing it mid-run takes effect on the next call instead of on the
+      // next run.
+      permit: gated
+          ? (tool, input) => decide(
+              agents.workspace(agent.workspaceId)?.permission ??
+                  PermissionMode.ask,
+              tool,
+              input)
+          : null,
+      approve: gated ? (question) => _askPermission(agent.id, question) : null,
+    );
     final events = loop.run(
       instruction: _instructionFrom(run, text),
       access: DirectKey(key),
@@ -232,6 +311,7 @@ class AgentRunner extends ChangeNotifier {
   Future<void> stop(String agentId) async {
     final live = _live.remove(agentId);
     if (live == null) return;
+    _clearApproval(agentId);
     await live.cancel();
 
     final agent = agents.agent(agentId);
@@ -243,6 +323,14 @@ class AgentRunner extends ChangeNotifier {
       await _serialise(() => runs.write(run));
     }
     notifyListeners();
+  }
+
+  static bool _sameTasks(List<AgentTask> a, List<AgentTask> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].title != b[i].title || a[i].done != b[i].done) return false;
+    }
+    return true;
   }
 
   void _fold(Agent agent, AgentRun run, AgentEvent event) {
@@ -277,6 +365,17 @@ class AgentRunner extends ChangeNotifier {
           run.baseline.putIfAbsent(changedPath, () => previousContent);
         }
 
+      case AgentPlanned(:final tasks):
+        // Replaced rather than appended when the list has not moved on: a
+        // model that re-states an unchanged plan should not add a second copy
+        // of it to the transcript.
+        final last = run.entries.whereType<RunPlan>().lastOrNull;
+        if (last != null && _sameTasks(last.tasks, tasks)) break;
+        run.entries.add(RunPlan(tasks));
+
+      case AgentAsked(:final question):
+        run.entries.add(RunQuestion(question));
+
       case AgentDone(:final reason, :final detail):
         run.entries.add(RunEnded(reason: reason, detail: detail));
         _finish(
@@ -309,6 +408,7 @@ class AgentRunner extends ChangeNotifier {
     String? note,
   }) {
     _live.remove(agent.id);
+    _clearApproval(agent.id);
     return _serialise(() async {
       await runs.write(run);
       await runs.writeBaseline(run);
@@ -377,7 +477,14 @@ class AgentRunner extends ChangeNotifier {
           earlier.add('Asked: $text');
         case RunSaid(:final text):
           earlier.add('You said: $text');
-        case RunTool() || RunEnded():
+        case RunQuestion(:final question):
+          // Carried, because the next thing in the recap is the answer, and an
+          // answer without its question is a sentence with no subject.
+          earlier.add('You asked: $question');
+        // The plan is not carried: the folder is the state, the agent can call
+        // `plan` again, and a recap that repeated every version of the list
+        // would be mostly list.
+        case RunPlan() || RunTool() || RunEnded():
           break;
       }
     }

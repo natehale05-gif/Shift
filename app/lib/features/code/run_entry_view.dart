@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../agents/agent_loop.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../data/agent_run.dart';
@@ -35,6 +36,8 @@ class RunEntryView extends StatelessWidget {
         RunAsked(:final text) => _Asked(text: text),
         RunSaid(:final text) => _Said(text: text),
         final RunTool tool => _Tool(entry: tool, change: change),
+        RunPlan(:final tasks) => _Plan(tasks: tasks),
+        RunQuestion(:final question) => _Question(question: question),
         final RunEnded ended => _Ended(entry: ended),
       };
 }
@@ -231,6 +234,121 @@ class _Glyph extends StatelessWidget {
       entry.isError ? Icons.error_outline_rounded : Icons.check_rounded,
       size: 15,
       color: entry.isError ? c.danger : c.success,
+    );
+  }
+}
+
+/// The task list as it stood at this point in the run.
+///
+/// Rendered in the transcript rather than only as a live header, because the
+/// list *changing* is part of what happened: a third task appearing halfway
+/// through is the agent telling you what it found, and a view that only ever
+/// showed the final version would hide that.
+class _Plan extends StatelessWidget {
+  final List<AgentTask> tasks;
+
+  const _Plan({required this.tasks});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    // An empty plan is the agent saying nothing. Drawing an empty box for it
+    // would put a hole in the transcript.
+    if (tasks.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.sm),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: c.surfaceRaised,
+          borderRadius: BorderRadius.circular(Radii.md),
+        ),
+        padding: const EdgeInsets.all(Space.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final task in tasks)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Space.xxs),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Icon(
+                        task.done
+                            ? Icons.check_circle_rounded
+                            : Icons.circle_outlined,
+                        size: 15,
+                        color: task.done ? c.success : c.textFaint,
+                      ),
+                    ),
+                    const SizedBox(width: Space.xs),
+                    Expanded(
+                      child: Text(
+                        task.title,
+                        style: text.bodyMedium?.copyWith(
+                          // Finished work stays readable rather than being
+                          // struck through: it is the record of what was done,
+                          // not something to skip over.
+                          color: task.done ? c.textMuted : c.text,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// It stopped and put a question to the person.
+///
+/// Given the accent rather than the danger colour: being asked something is
+/// the agent working correctly, and dressing it as a failure would teach people
+/// to dread the one thing that keeps a decision theirs.
+class _Question extends StatelessWidget {
+  final String question;
+
+  const _Question({required this.question});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: Space.sm),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: c.accentWash,
+          borderRadius: BorderRadius.circular(Radii.md),
+          border: Border.all(color: c.accent.withValues(alpha: 0.5)),
+        ),
+        padding: const EdgeInsets.all(Space.md),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Icon(Icons.help_outline_rounded, size: 16, color: c.accent),
+            ),
+            const SizedBox(width: Space.xs),
+            Expanded(
+              child: SelectableText(
+                question,
+                style: text.bodyLarge?.copyWith(color: c.text),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

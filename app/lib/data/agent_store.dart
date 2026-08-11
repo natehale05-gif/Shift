@@ -12,15 +12,23 @@ import 'kv_store.dart';
 /// The line at which it gets replaced is when agents live on a server and this
 /// becomes a cache of something authoritative elsewhere.
 class AgentStore extends ChangeNotifier {
-  static const _workspacesKey = 'code.workspaces';
-  static const _agentsKey = 'code.agents';
-
   final KvStore _kv;
+
+  /// Which mode's agents these are.
+  ///
+  /// Code and Work run the same agent over different kinds of folder, so they
+  /// share every class here and must not share a list: a repository showing up
+  /// among somebody's documents would be a mode leaking into another one.
+  /// Defaulted to `code` so the keys Code mode already wrote keep resolving.
+  final String namespace;
 
   List<Workspace>? _workspaces;
   List<Agent>? _agents;
 
-  AgentStore(this._kv);
+  AgentStore(this._kv, {this.namespace = 'code'});
+
+  String get _workspacesKey => '$namespace.workspaces';
+  String get _agentsKey => '$namespace.agents';
 
   /// **Decoded on first read, not on [load].**
   ///

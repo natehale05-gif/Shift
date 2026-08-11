@@ -15,18 +15,23 @@ import 'kv_store.dart';
 /// runs live on a server and this becomes a cache of something authoritative
 /// elsewhere.
 class AgentRunStore {
-  static const _prefix = 'code.run.';
+  final KvStore _kv;
+
+  /// Which mode's runs these are — see [AgentStore.namespace]. Agent ids are
+  /// unique on their own, so this is not needed to avoid a collision; it is
+  /// here so that erasing one mode cannot take the other's transcripts with it.
+  final String namespace;
+
+  const AgentRunStore(this._kv, {this.namespace = 'code'});
+
+  String get _prefix => '$namespace.run.';
 
   /// Baselines live under their own key, not inside the transcript.
   ///
   /// They are whole files — the largest thing this app stores — and every list
   /// screen decodes transcripts to render its rows. Sharing one value would
   /// mean opening the Inbox parses every file the agent ever touched.
-  static const _baselinePrefix = 'code.baseline.';
-
-  final KvStore _kv;
-
-  const AgentRunStore(this._kv);
+  String get _baselinePrefix => '$namespace.baseline.';
 
   Future<void> load() => _kv.load();
 

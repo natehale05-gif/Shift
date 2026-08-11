@@ -1,3 +1,5 @@
+import '../agents/permission.dart';
+
 /// Where an agent's work sits.
 ///
 /// Two arms, because the answer differs by device: a desktop can point at a
@@ -8,24 +10,46 @@ sealed class Workspace {
   final String id;
   final String name;
 
-  const Workspace({required this.id, required this.name});
+  /// What may happen here without asking first.
+  ///
+  /// A property of the *place*, not of the mode or the run: "don't ask" is a
+  /// reasonable thing to say about a scratch folder and an unreasonable thing
+  /// to say about everything you own, and someone who decides it once should
+  /// not be re-deciding it per task. Defaults to [PermissionMode.ask], which is
+  /// also what an unreadable stored value reads as.
+  final PermissionMode permission;
+
+  const Workspace({
+    required this.id,
+    required this.name,
+    this.permission = PermissionMode.ask,
+  });
 
   Map<String, dynamic> toJson();
+
+  /// The same workspace, with a different standing answer.
+  Workspace withPermission(PermissionMode mode);
 
   static Workspace? fromJson(Object? raw) {
     if (raw is! Map) return null;
     final id = raw['id'];
     final name = raw['name'];
     if (id is! String || name is! String) return null;
+    final permission = PermissionMode.fromName(raw['permission'] as String?);
 
     return switch (raw['kind']) {
-      'local' when raw['path'] is String =>
-        LocalFolder(id: id, name: name, path: raw['path'] as String),
+      'local' when raw['path'] is String => LocalFolder(
+          id: id,
+          name: name,
+          path: raw['path'] as String,
+          permission: permission,
+        ),
       'github' when raw['repo'] is String => GitHubRepo(
           id: id,
           name: name,
           repo: raw['repo'] as String,
           branch: raw['branch'] as String? ?? 'main',
+          permission: permission,
         ),
       _ => null,
     };
@@ -46,11 +70,21 @@ class LocalFolder extends Workspace {
     required super.id,
     required super.name,
     required this.path,
+    super.permission,
   });
 
   @override
-  Map<String, dynamic> toJson() =>
-      {'kind': 'local', 'id': id, 'name': name, 'path': path};
+  LocalFolder withPermission(PermissionMode mode) =>
+      LocalFolder(id: id, name: name, path: path, permission: mode);
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'local',
+        'id': id,
+        'name': name,
+        'path': path,
+        'permission': permission.name,
+      };
 }
 
 /// A repository the server holds. Every device, and the phone's only option.
@@ -63,7 +97,12 @@ class GitHubRepo extends Workspace {
     required super.name,
     required this.repo,
     this.branch = 'main',
+    super.permission,
   });
+
+  @override
+  GitHubRepo withPermission(PermissionMode mode) => GitHubRepo(
+      id: id, name: name, repo: repo, branch: branch, permission: mode);
 
   @override
   Map<String, dynamic> toJson() => {
@@ -72,6 +111,7 @@ class GitHubRepo extends Workspace {
         'name': name,
         'repo': repo,
         'branch': branch,
+        'permission': permission.name,
       };
 }
 
