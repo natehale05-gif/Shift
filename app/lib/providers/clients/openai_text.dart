@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../turn/history.dart';
 import '../../turn/job_output.dart';
 import '../../turn/turn_event.dart';
 import '../access.dart';
@@ -62,12 +63,17 @@ class OpenAiText {
     required String model,
     required String instruction,
     String? system,
+    List<Exchange> history = const [],
   }) =>
       {
         'model': model,
         'messages': [
           if (system != null && system.isNotEmpty)
             {'role': 'system', 'content': system},
+          for (final past in history) ...[
+            {'role': 'user', 'content': past.asked},
+            {'role': 'assistant', 'content': past.answered},
+          ],
           {'role': 'user', 'content': instruction},
         ],
         'stream': true,
@@ -81,6 +87,7 @@ class OpenAiText {
     required String instruction,
     String? system,
     String? blocked,
+    List<Exchange> history = const [],
   }) async* {
     final resolved = target(access, baseUrl);
 
@@ -93,6 +100,7 @@ class OpenAiText {
             model: model,
             instruction: instruction,
             system: system,
+            history: history,
           )),
         ),
         host: resolved.uri.host,

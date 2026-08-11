@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../turn/history.dart';
 import '../../turn/job_output.dart';
 import '../../turn/turn_event.dart';
 import '../access.dart';
@@ -90,12 +91,30 @@ class AnthropicText {
     String? system,
     int maxTokens = 16000,
     bool thinking = true,
+    List<Exchange> history = const [],
   }) =>
       {
         'model': model,
         'max_tokens': maxTokens,
         if (system != null && system.isNotEmpty) 'system': system,
         'messages': [
+          // Roles must alternate here — two `user` messages in a row is a 400,
+          // not a warning. [Exchange] guarantees it by being a pair: a reply
+          // that failed or never arrived is not half a turn, it is no turn.
+          for (final past in history) ...[
+            {
+              'role': 'user',
+              'content': [
+                {'type': 'text', 'text': past.asked}
+              ],
+            },
+            {
+              'role': 'assistant',
+              'content': [
+                {'type': 'text', 'text': past.answered}
+              ],
+            },
+          ],
           {
             'role': 'user',
             'content': [
@@ -115,6 +134,7 @@ class AnthropicText {
     required String instruction,
     String? system,
     String? blocked,
+    List<Exchange> history = const [],
   }) async* {
     final resolved = target(access);
 
@@ -132,6 +152,7 @@ class AnthropicText {
             model: model,
             instruction: instruction,
             system: system,
+            history: history,
           )),
         ),
         host: _endpoint.host,

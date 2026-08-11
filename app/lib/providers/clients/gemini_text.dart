@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../../turn/history.dart';
 import '../../turn/job_output.dart';
 import '../../turn/turn_event.dart';
 import '../access.dart';
@@ -58,9 +59,26 @@ class GeminiText {
   static Map<String, dynamic> buildBody({
     required String instruction,
     String? system,
+    List<Exchange> history = const [],
   }) =>
       {
         'contents': [
+          // Gemini calls the assistant's turn `model`, not `assistant`. Same
+          // shape otherwise, and the same alternation guarantee.
+          for (final past in history) ...[
+            {
+              'role': 'user',
+              'parts': [
+                {'text': past.asked}
+              ],
+            },
+            {
+              'role': 'model',
+              'parts': [
+                {'text': past.answered}
+              ],
+            },
+          ],
           {
             'role': 'user',
             'parts': [
@@ -86,6 +104,7 @@ class GeminiText {
     required String instruction,
     String? system,
     String? blocked,
+    List<Exchange> history = const [],
   }) async* {
     final resolved = target(access, model);
 
@@ -94,8 +113,11 @@ class GeminiText {
         _sse.postJson(
           uri: resolved.uri,
           headers: resolved.headers,
-          body: jsonEncode(
-              buildBody(instruction: instruction, system: system)),
+          body: jsonEncode(buildBody(
+            instruction: instruction,
+            system: system,
+            history: history,
+          )),
         ),
         host: _host,
         reach: _reach,

@@ -135,6 +135,7 @@ class TextExecutor implements StepExecutor {
           instruction: step.instruction,
           system: context,
           blocked: blocked,
+          history: step.history,
         ),
       'gemini' => gemini.stream(
           stepId: step.id,
@@ -143,6 +144,7 @@ class TextExecutor implements StepExecutor {
           instruction: step.instruction,
           system: context,
           blocked: blocked,
+          history: step.history,
         ),
       _ when base != null => openai.stream(
           stepId: step.id,
@@ -152,6 +154,7 @@ class TextExecutor implements StepExecutor {
           instruction: step.instruction,
           system: context,
           blocked: blocked,
+          history: step.history,
         ),
       _ => Stream.value(
           StepFailed(

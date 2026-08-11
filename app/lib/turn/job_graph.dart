@@ -1,4 +1,5 @@
 import 'capability.dart';
+import 'history.dart';
 import 'job_output.dart';
 
 /// One unit of work.
@@ -59,6 +60,14 @@ class JobStep {
   /// answer *about* instead of follow.
   final String? brief;
 
+  /// The conversation this step is a continuation of, oldest first.
+  ///
+  /// Empty on every step that does not talk to a language model. An image step
+  /// does not get the transcript: the picture is made from [instruction], and
+  /// handing a drawing model the last twenty things that were said would
+  /// change what it draws for no reason anyone asked for.
+  final List<Exchange> history;
+
   const JobStep({
     required this.id,
     required this.needs,
@@ -69,6 +78,7 @@ class JobStep {
     this.editing,
     this.aspectRatio,
     this.brief,
+    this.history = const [],
   });
 
   @override

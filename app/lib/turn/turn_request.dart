@@ -1,4 +1,5 @@
 import '../shell/mode.dart';
+import 'history.dart';
 
 /// Everything the planner is allowed to look at.
 ///
@@ -42,6 +43,18 @@ class TurnRequest {
   /// on [input] exactly as before and carries this through untouched.
   final String? editingImage;
 
+  /// What has already been said in this conversation, oldest first.
+  ///
+  /// **Not part of routing, and that is deliberate.** "Make it bigger" after a
+  /// page is still a text turn; "another one" after a picture is still an image
+  /// turn *because the mode and the words say so*, not because the planner read
+  /// the history. Letting earlier turns influence what to make is how a
+  /// follow-up question about a photograph becomes a second photograph.
+  ///
+  /// So [planJobs] never matches on this. It only hands it to the step that
+  /// talks to a language model.
+  final List<Exchange> history;
+
   const TurnRequest({
     required this.input,
     this.mode = AppMode.chat,
@@ -50,6 +63,7 @@ class TurnRequest {
     this.pinnedModel,
     this.context = const [],
     this.editingImage,
+    this.history = const [],
   });
 
   /// What the model is given: the attachments, then the request.

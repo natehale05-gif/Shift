@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -6,8 +7,12 @@ import 'package:shift/data/api_keys_store.dart';
 import 'package:shift/data/conversation_store.dart';
 import 'package:shift/data/kv_store.dart';
 import 'package:shift/features/chat/turn_controller.dart';
+import 'package:shift/providers/access.dart';
+import 'package:shift/providers/clients/anthropic_text.dart';
+import 'package:shift/providers/streaming/sse_client.dart';
 import 'package:shift/shell/mode.dart';
 import 'package:shift/turn/capability.dart';
+import 'package:shift/turn/executors/text_executor.dart';
 import 'package:shift/turn/job_graph.dart';
 import 'package:shift/turn/job_output.dart';
 import 'package:shift/turn/job_runner.dart';
@@ -69,6 +74,44 @@ void main() {
     final reply = turn.items.whereType<Reply>().single;
     expect(reply.failure ?? '', isNot(contains('No provider is set up')),
         reason: 'a stored key must change which failure happens');
+  });
+
+  test('the second message carries the first exchange to the provider',
+      () async {
+    // The whole chain, end to end: the transcript is read before this turn's
+    // own message is appended, the planner puts it on the writing step, the
+    // executor hands it to the client, and the client puts it on the wire.
+    // Every link is tested on its own; this is the one that fails if two of
+    // them are individually correct and not connected — which is exactly the
+    // state the app shipped in.
+    final transport = _RecordingTransport();
+    final turn = TurnController(
+      executors: () => {
+        Capability.text: TextExecutor(
+          usable: (_) => true,
+          access: (_) async => const DirectKey('sk-ant-test'),
+          anthropic: AnthropicText(sse: transport),
+        ),
+      },
+    );
+    addTearDown(turn.dispose);
+
+    await turn.send('what is a sonnet', mode: AppMode.chat);
+    await turn.send('make it shorter', mode: AppMode.chat);
+
+    expect(transport.bodies, hasLength(2));
+
+    final first = jsonDecode(transport.bodies.first) as Map<String, dynamic>;
+    expect((first['messages'] as List), hasLength(1),
+        reason: 'the opening message has nothing behind it');
+
+    final second = jsonDecode(transport.bodies.last) as Map<String, dynamic>;
+    final messages = (second['messages'] as List).cast<Map<String, dynamic>>();
+    expect(messages.map((m) => m['role']), ['user', 'assistant', 'user']);
+    expect(jsonEncode(messages), contains('what is a sonnet'));
+    expect(jsonEncode(messages), contains('Fourteen lines.'),
+        reason: 'the answer it is being asked to shorten');
+    expect(jsonEncode(messages.last), contains('make it shorter'));
   });
 
   test('the user turn is in the transcript either way', () async {
@@ -358,5 +401,27 @@ class _Streaming implements StepExecutor {
     if (!_open.isCompleted) _open.complete();
     await _held.future;
     yield StepCompleted(step.id, const TextOutput('half an answer'));
+  }
+}
+
+/// Records the request bodies and answers with a fixed reply, so a second turn
+/// can be asked what the first one left behind.
+class _RecordingTransport implements SseClient {
+  final List<String> bodies = [];
+
+  @override
+  Stream<SseEvent> postJson({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+  }) {
+    bodies.add(body);
+    return Stream.fromIterable(const [
+      SseEvent(
+        event: 'content_block_delta',
+        data: '{"delta":{"type":"text_delta","text":"Fourteen lines."}}',
+      ),
+      SseEvent(event: 'message_stop', data: '{}'),
+    ]);
   }
 }

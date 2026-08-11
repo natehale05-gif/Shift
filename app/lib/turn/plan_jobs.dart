@@ -1,6 +1,7 @@
 import '../shell/mode.dart';
 import 'capability.dart';
 import 'design_brief.dart';
+import 'history.dart';
 import 'job_graph.dart';
 import 'job_output.dart';
 import 'turn_request.dart';
@@ -108,6 +109,15 @@ JobGraph planJobs(TurnRequest request) {
     // folded into the request, so what the model is *asked* stays exactly
     // what the person typed.
     brief: request.mode == AppMode.design ? kDesignBrief : null,
+    // The conversation so far, so a follow-up is a follow-up. Without it every
+    // message was its own conversation: "make it shorter" arrived with nothing
+    // to shorten, and the model answered the only way it could — as though it
+    // had been asked for the first time.
+    //
+    // Only on this step. The image branch above returns before reaching here,
+    // which is the intent: a drawing model given the last twenty things that
+    // were said would draw something nobody asked for.
+    history: trimHistory(request.history),
     after: [
       if (wantsSearch) 'search',
       if (wantsPicture && wantsBoth) 'image',

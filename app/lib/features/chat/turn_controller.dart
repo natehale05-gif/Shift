@@ -14,6 +14,7 @@ import '../../shell/mode.dart';
 import '../../turn/capability.dart';
 import '../../turn/executors/image_executor.dart';
 import '../../turn/executors/text_executor.dart';
+import '../../turn/history.dart';
 import '../../turn/job_output.dart';
 import '../../turn/job_runner.dart';
 import '../../turn/plan_jobs.dart';
@@ -128,6 +129,46 @@ List<ChatItem> itemsFromJson(List<dynamic> raw) => [
           else
             Reply.fromJson(entry),
     ];
+
+/// The transcript, as pairs a model can be given.
+///
+/// Pure, and separate from the controller, so what counts as "already said" is
+/// assertable without running a turn.
+///
+/// Three things are deliberately dropped, and each of them would otherwise be a
+/// message with no partner — which is a 400 from Anthropic rather than a
+/// warning:
+///
+/// * **A reply that failed.** "No provider is set up" is the app talking, not
+///   the assistant, and replaying it as something the model said would teach it
+///   to say the same.
+/// * **A reply with no text.** A turn that only produced a picture said
+///   nothing; the picture is not in the transcript either, so an empty
+///   assistant message would be a lie about what happened.
+/// * **An unanswered question.** The user message before it goes too. That is
+///   the cost of the pair rule and it is the right cost: a question the model
+///   never answered is one it will now see answered by the *next* reply, which
+///   is worse than not seeing it.
+///
+/// A stopped reply keeps whatever arrived. It is genuinely what was said, and
+/// a follow-up referring to it should find it there.
+List<Exchange> exchangesFrom(List<ChatItem> items) {
+  final out = <Exchange>[];
+
+  for (var i = 0; i < items.length - 1; i++) {
+    final asked = items[i];
+    final answered = items[i + 1];
+    if (asked is! UserSaid || answered is! Reply) continue;
+    if (answered.failure != null) continue;
+
+    final text = answered.text.trim();
+    if (text.isEmpty) continue;
+
+    out.add(Exchange(asked: asked.text, answered: text));
+  }
+
+  return out;
+}
 
 /// Runs a turn and exposes it as a transcript.
 ///
@@ -489,6 +530,16 @@ class TurnController extends ChangeNotifier {
     _last = (input: text, mode: mode);
     _conversationId ??=
         'c${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+
+    // Read before this turn's own message is appended. That reads as the thing
+    // stopping the model being handed the same question twice — and it is not:
+    // [exchangesFrom] drops an unanswered question anyway, so moving this line
+    // below the append changes nothing. Tried, and no test moved.
+    //
+    // The pair rule is what actually protects it, and that has its own test.
+    // This ordering is the clearer way to write it, not the guard.
+    final history = exchangesFrom(items);
+
     items.add(UserSaid(text));
     final reply = Reply();
     items.add(reply);
@@ -528,6 +579,7 @@ class TurnController extends ChangeNotifier {
       mode: mode,
       context: attached,
       editingImage: editing,
+      history: history,
     ));
     final stream = JobRunner(executors()).run(graph);
 
