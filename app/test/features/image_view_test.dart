@@ -117,6 +117,50 @@ void main() {
     }
   });
 
+  // **There is no tap-driven test for Delete, and that is a limitation rather
+  // than an oversight.** Any `tester.tap` on this widget hangs the test
+  // harness indefinitely — verified against `Copy prompt`, whose handler
+  // touches nothing but the clipboard, so it is the tap itself and not the
+  // deletion. What is covered instead: the control appears exactly when there
+  // is something to delete (below), the removal of a record and its bytes
+  // (`image_store_test`), and the whole path pressed by hand in the running
+  // Linux build with the file read back off disk afterwards.
+
+  testWidgets('a picture with no record offers neither Copy prompt nor Delete',
+      (tester) async {
+    // What a private chat produces: nothing was recorded, so there is nothing
+    // to delete and no prompt to copy. A control that silently does nothing is
+    // worse than one that is not there.
+    images.hold('p', _onePixelPng);
+
+    await pumpIn(tester, const ImageViewer(id: 'p'));
+    await tester.pump();
+
+    expect(find.text('Delete'), findsNothing);
+    expect(find.text('Save'), findsOneWidget, reason: 'the control that works');
+  });
+
+  testWidgets('a recorded picture offers Delete', (tester) async {
+    // The control. Without it the assertion above passes just as well on a
+    // viewer that never offers Delete to anyone.
+    await tester.runAsync(() => images.save(
+          MadeImage(
+            id: 'a',
+            prompt: 'a cat',
+            provider: 'gemini',
+            model: 'nano',
+            mimeType: 'image/png',
+            createdAt: DateTime(2026),
+          ),
+          _onePixelPng,
+        ));
+
+    await pumpIn(tester, const ImageViewer(id: 'a'));
+    await tester.pump();
+
+    expect(find.text('Delete'), findsOneWidget);
+  });
+
   testWidgets('a picture with no record still offers Save, not Copy prompt',
       (tester) async {
     // What a private chat produces: drawable, with nothing recorded about it.

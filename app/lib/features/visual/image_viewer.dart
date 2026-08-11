@@ -84,6 +84,19 @@ class ImageViewer extends StatelessWidget {
                     if (context.mounted) _say(context, 'Prompt copied.');
                   },
                 ),
+              // Deletable, for the same reason chats and notes are: a mode
+              // built to make things you would not want kept is not private
+              // if the only way out is erasing the whole app.
+              if (record != null)
+                _Action(
+                  icon: Icons.delete_outline_rounded,
+                  label: 'Delete',
+                  onTap: () async {
+                    if (!await confirmDeleteImage(context, prompt)) return;
+                    await store.remove(id);
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+                ),
               _Action(
                 icon: Icons.close_rounded,
                 label: 'Close',
@@ -99,6 +112,33 @@ class ImageViewer extends StatelessWidget {
   void _say(BuildContext context, String message) =>
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
+}
+
+/// Asks first. No trash and no undo, so a mis-tap is the picture.
+Future<bool> confirmDeleteImage(BuildContext context, String prompt) async {
+  final answer = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete this picture?'),
+      content: Text(
+        prompt.isEmpty
+            ? 'It will be removed from this device. This cannot be undone.'
+            : '"$prompt" will be removed from this device. This cannot be '
+                'undone.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  return answer ?? false;
 }
 
 class _Action extends StatelessWidget {
