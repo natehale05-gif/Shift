@@ -42,23 +42,15 @@ class Sidebar extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.all(Space.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _NewChat(
-                    onTap: () {
-                      turn.clear();
-                      onDismiss?.call();
-                    },
-                  ),
-                  _NewChat(
-                    private: true,
-                    onTap: () {
-                      turn.clear(private: true);
-                      onDismiss?.call();
-                    },
-                  ),
-                ],
+              // One entry, not two. Starting a *private* chat is the ghost in
+              // the top bar, where it is reachable without opening a drawer
+              // and where it also shows whether you are already in one — which
+              // a row in a list cannot do.
+              child: _NewChat(
+                onTap: () {
+                  turn.clear();
+                  onDismiss?.call();
+                },
               ),
             ),
             Padding(
@@ -126,17 +118,12 @@ class Sidebar extends StatelessWidget {
 class _NewChat extends StatelessWidget {
   final VoidCallback onTap;
 
-  /// The private variant, in the muted ink rather than the accent: it is an
-  /// alternative to the ordinary action, not a second thing competing with it.
-  final bool private;
-
-  const _NewChat({required this.onTap, this.private = false});
+  const _NewChat({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
-    final ink = private ? c.textMuted : c.accent;
 
     return Material(
       color: Colors.transparent,
@@ -149,21 +136,18 @@ class _NewChat extends StatelessWidget {
               horizontal: Space.md, vertical: Space.sm),
           child: Row(
             children: [
-              Icon(private ? Icons.visibility_off_outlined : Icons.add_rounded,
-                  size: 18, color: ink),
+              Icon(Icons.add_rounded, size: 18, color: c.accent),
               const SizedBox(width: Space.sm),
-              // Flexible, because a fixed Row here overflowed the 260pt
-              // sidebar by 54 pixels the moment a second, longer label
-              // appeared — caught by the shell tests before the build.
+              // Flexible rather than a bare Text. A fixed Row here overflowed
+              // the 260pt sidebar by 54 pixels the moment a longer label
+              // appeared, and it was the shell tests that caught it — so this
+              // stays even though the label that broke it has gone.
               Flexible(
                 child: Text(
-                  // "Private chat" rather than "New private chat": it sits
-                  // directly under "New chat", so the word is already there,
-                  // and the longer label is what did not fit.
-                  private ? 'Private chat' : 'New chat',
+                  'New chat',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: text.titleMedium?.copyWith(color: ink),
+                  style: text.titleMedium?.copyWith(color: c.accent),
                 ),
               ),
             ],

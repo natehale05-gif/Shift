@@ -218,6 +218,23 @@ void main() {
       }
     });
 
+    testWidgets('so does the drawer button', (tester) async {
+      // It did not. It measured 40 — an `IconButton` left to its own minimum —
+      // and nothing had ever looked, because the sweep above followed the mode
+      // control and stopped there. Found only because the ghost opposite it
+      // failed the same check on its first run.
+      await _pumpAt(tester, logical: _phone.$1, platform: _phone.$2);
+
+      final button = find.byTooltip('Conversations');
+      expect(button, findsOneWidget);
+
+      final size = tester.getSize(button);
+      expect(size.height, greaterThanOrEqualTo(kMinTouchTarget),
+          reason: 'the drawer button is ${size.height} tall');
+      expect(size.width, greaterThanOrEqualTo(kMinTouchTarget),
+          reason: 'the drawer button is ${size.width} wide');
+    });
+
     testWidgets('every entry in the open menu clears it too', (tester) async {
       // This has caught the mode controls twice — once at 40pt, once at 22pt
       // after an unrelated layout change — so it follows them into the menu

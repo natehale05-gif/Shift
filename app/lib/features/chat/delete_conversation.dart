@@ -29,17 +29,33 @@ Future<void> deleteConversation(
 ///
 /// A deletion with no undo gets a confirmation — the app has no trash and no
 /// history, so a mis-tap in a list is the whole conversation.
-Future<bool> confirmDelete(BuildContext context, String title) async {
+Future<bool> confirmDelete(BuildContext context, String title) => confirmLoss(
+      context,
+      question: 'Delete this chat?',
+      // Names what goes, because the pages are the part people would not
+      // expect to lose and would miss most.
+      detail: '"$title" and anything it made will be removed from this '
+          'device. This cannot be undone.',
+      action: 'Delete',
+    );
+
+/// The one dialog for "this is about to be gone".
+///
+/// Wording is a parameter rather than a second dialog beside this one: two
+/// confirmations built separately drift in shape — button order, capitalised
+/// verbs, which side Cancel sits on — and the drift is only ever noticed by
+/// somebody who has just lost something.
+Future<bool> confirmLoss(
+  BuildContext context, {
+  required String question,
+  required String detail,
+  required String action,
+}) async {
   final answer = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Delete this chat?'),
-      // Names what goes, because the pages are the part people would not
-      // expect to lose and would miss most.
-      content: Text(
-        '"$title" and anything it made will be removed from this device. '
-        'This cannot be undone.',
-      ),
+      title: Text(question),
+      content: Text(detail),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
@@ -47,7 +63,7 @@ Future<bool> confirmDelete(BuildContext context, String title) async {
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(true),
-          child: const Text('Delete'),
+          child: Text(action),
         ),
       ],
     ),

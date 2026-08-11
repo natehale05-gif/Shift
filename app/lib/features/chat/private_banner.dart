@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../core/design/ghost.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 
@@ -33,7 +34,11 @@ class PrivateBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.visibility_off_outlined, size: 16, color: c.textMuted),
+          // The same mark as the control that turned this on, so the banner
+          // reads as that button's consequence rather than as a second,
+          // unrelated notice. It was an eye-with-a-slash until the ghost
+          // existed, and two glyphs for one feature is one too many.
+          GhostIcon(size: 16, color: c.textMuted, filled: true),
           const SizedBox(width: Space.sm),
           Expanded(
             child: Text.rich(

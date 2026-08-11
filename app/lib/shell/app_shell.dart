@@ -9,6 +9,7 @@ import '../features/design/design_surface.dart';
 import '../features/visual/visual_surface.dart';
 import 'sidebar.dart';
 import '../features/chat/chat_surface.dart';
+import '../features/chat/private_toggle.dart';
 import '../features/code/code_surface.dart';
 import '../features/notes/notes_surface.dart';
 import '../features/work/work_surface.dart';
@@ -121,15 +122,29 @@ class _TopBar extends StatelessWidget {
         children: [
           if (!wide)
             Builder(
-              builder: (context) => IconButton(
-                tooltip: 'Conversations',
-                icon: const Icon(Icons.menu_rounded, size: 20),
-                onPressed: () => Scaffold.of(context).openDrawer(),
+              // Sized, for the same reason the ghost opposite it is: an
+              // `IconButton` left to its own minimum measures 40 here, and
+              // this app holds every control to 44. The ghost's own test found
+              // that; this one was under it too and nothing had checked.
+              builder: (context) => SizedBox.square(
+                dimension: kMinTouchTarget,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  tooltip: 'Conversations',
+                  icon: const Icon(Icons.menu_rounded, size: 20),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
+                ),
               ),
             )
           else
             const SizedBox(width: Space.sm),
           ModeMenu(current: shell.mode, onSelect: shell.openMode),
+          const Spacer(),
+          // Chat only. The other five have no private session to be in, and a
+          // control that is present but inert is worse than one that is
+          // absent — it invites a tap and then answers nothing.
+          if (shell.mode == AppMode.chat) const PrivateChatToggle(),
+          const SizedBox(width: Space.xs),
         ],
       ),
     );
