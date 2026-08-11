@@ -14,6 +14,7 @@ import 'data/note_store.dart';
 import 'features/chat/turn_controller.dart';
 import 'features/code/agent_runner.dart';
 import 'features/notes/note_cleaner.dart';
+import 'features/visual/visual_turns.dart';
 import 'shell/app_shell.dart';
 import 'shell/shell_controller.dart';
 
@@ -57,6 +58,9 @@ class ShiftApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => NoteCleaner(keys: keys)),
         ChangeNotifierProvider(
           create: (_) => AgentRunner(agents: agents, runs: runs, keys: keys),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => VisualTurns(keys: keys, images: images),
         ),
         ChangeNotifierProvider(
           create: (_) => TurnController(

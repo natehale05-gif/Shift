@@ -25,11 +25,22 @@ class MadeImageView extends StatefulWidget {
 
   final VoidCallback? onTap;
 
+  /// How the picture fills its box.
+  ///
+  /// [BoxFit.contain] everywhere it is the subject — the transcript, the
+  /// viewer — because a picture cut to fit is a different picture and the one
+  /// thing someone judging a generated image needs is all of it. A gallery
+  /// tile is the exception: it is an index entry rather than the picture, and
+  /// a grid of letterboxed thumbnails in fixed square frames is mostly empty
+  /// paper with a caption floating over it.
+  final BoxFit fit;
+
   const MadeImageView({
     super.key,
     required this.id,
     this.prompt = '',
     this.onTap,
+    this.fit = BoxFit.contain,
   });
 
   @override
@@ -113,10 +124,7 @@ class _MadeImageViewState extends State<MadeImageView> {
       label: widget.prompt.isEmpty ? 'A generated picture' : widget.prompt,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(Radii.md),
-        // Contained, not cropped: a picture in a square frame that has been
-        // cut to fit is a different picture, and the one thing someone judging
-        // a generated image needs is all of it.
-        child: Image.memory(bytes, fit: BoxFit.contain),
+        child: Image.memory(bytes, fit: widget.fit),
       ),
     );
 

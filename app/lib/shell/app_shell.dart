@@ -5,6 +5,7 @@ import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
 import 'mode.dart';
 import 'mode_menu.dart';
+import '../features/visual/visual_surface.dart';
 import 'mode_placeholder.dart';
 import 'sidebar.dart';
 import '../features/chat/chat_surface.dart';
@@ -147,7 +148,7 @@ class _ModeBody extends StatelessWidget {
       // Chat is the one that exists. The other five still say so.
       AppMode.chat => const ChatSurface(),
       AppMode.code => const CodeSurface(),
-      AppMode.visual => const ModePlaceholder(mode: AppMode.visual, wave: 'N4'),
+      AppMode.visual => const VisualSurface(),
       AppMode.design => const ModePlaceholder(mode: AppMode.design, wave: 'N5'),
       AppMode.work => const ModePlaceholder(mode: AppMode.work, wave: 'N10'),
       AppMode.notes => const NotesSurface(),

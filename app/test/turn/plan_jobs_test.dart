@@ -114,6 +114,24 @@ void main() {
       );
     });
 
+    test('a bare description in Visual makes a picture', () {
+      // The other half of "modes are workspaces": a mode may not remove a
+      // capability, but it does supply one when the request names no kind of
+      // output at all. Without this, standing in Visual and typing what you
+      // want gets you a paragraph about it.
+      expect(_ids('a vase of tulips', mode: AppMode.visual), ['image']);
+      expect(_ids('a vase of tulips', mode: AppMode.chat), ['main'],
+          reason: 'the same words in Chat are still a question');
+    });
+
+    test('a request that names its own output beats the mode default', () {
+      // Otherwise Visual would be a router, which is exactly what this
+      // architecture rejects.
+      expect(_ids('write me a caption for this', mode: AppMode.visual),
+          ['main']);
+      expect(_ids('build me a landing page', mode: AppMode.visual), ['main']);
+    });
+
     test('every mode has a default capability', () {
       for (final mode in AppMode.values) {
         expect(() => defaultCapabilityFor(mode), returnsNormally,

@@ -22,12 +22,27 @@ import 'turn_request.dart';
 JobGraph planJobs(TurnRequest request) {
   final text = request.input.toLowerCase();
 
-  final wantsPicture = _mentions(text, _imageWords);
   final wantsPage = _mentions(text, _pageWords);
   final wantsSpoken = _mentions(text, _speechWords);
   final wantsSearch = request.webSearch ||
       request.deepResearch ||
       _mentions(text, _searchWords);
+
+  // The mode supplies a default only when the request names no kind of output
+  // at all. "A vase of tulips" typed into Visual is a picture; "write me a
+  // caption for this" typed into the same box is not, and a mode that forced
+  // the image would be routing rather than defaulting — which is the rule
+  // [defaultCapabilityFor] exists to keep.
+  //
+  // Written first as "names no *other* kind", which is a weaker claim than it
+  // reads as: with only page, speech and search words to check against, every
+  // question typed into Visual came back as a picture of itself. Hence the
+  // prose list — a floor, like the rest of this planner, and the failure it
+  // still has is a description mistaken for a question rather than the other
+  // way round.
+  final silent = !wantsPage && !wantsSpoken && !wantsSearch && !_asksForProse(text);
+  final wantsPicture = _mentions(text, _imageWords) ||
+      (silent && defaultCapabilityFor(request.mode) == Capability.image);
 
   final steps = <JobStep>[];
 
@@ -135,6 +150,36 @@ const _imageWords = [
   'illustration', 'illustrations', 'logo', 'icon', 'artwork', 'drawing',
   'render', 'graphic', 'graphics', 'banner', 'thumbnail', 'headshot',
   'portrait',
+];
+
+/// Whether the request plainly asks for words.
+///
+/// Only consulted to stop a mode default from overriding it, so a miss costs a
+/// picture where prose was wanted rather than the reverse — and only inside a
+/// mode whose default is not text, which today is Visual and Notes.
+bool _asksForProse(String text) =>
+    text.trimRight().endsWith('?') ||
+    _startsWith(text, _questionOpeners) ||
+    _mentions(text, _proseWords);
+
+bool _startsWith(String text, List<String> words) {
+  for (final word in words) {
+    if (RegExp('^${RegExp.escape(word)}\\b').hasMatch(text.trimLeft())) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const _questionOpeners = [
+  'what', 'why', 'how', 'who', 'when', 'where', 'which', 'is', 'are', 'can',
+  'should', 'does', 'do', 'did', 'will', 'would',
+];
+
+const _proseWords = [
+  'write', 'rewrite', 'explain', 'summarise', 'summarize', 'summary',
+  'describe', 'translate', 'caption', 'captions', 'list', 'compare', 'draft',
+  'email', 'essay', 'poem', 'story', 'recipe', 'answer', 'tell me',
 ];
 
 const _pageWords = [
