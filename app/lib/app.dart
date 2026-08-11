@@ -8,6 +8,7 @@ import 'data/agent_run_store.dart';
 import 'data/agent_store.dart';
 import 'data/artifact_store.dart';
 import 'data/conversation_store.dart';
+import 'data/image_store.dart';
 import 'data/kv_store.dart';
 import 'data/note_store.dart';
 import 'features/chat/turn_controller.dart';
@@ -23,6 +24,7 @@ class ShiftApp extends StatelessWidget {
   final AgentStore agents;
   final AgentRunStore runs;
   final NoteStore notes;
+  final ImageStore images;
 
   /// The store behind every other store. Provided so Settings can offer the
   /// one action that has to reach all of them at once.
@@ -36,6 +38,7 @@ class ShiftApp extends StatelessWidget {
     required this.agents,
     required this.runs,
     required this.notes,
+    required this.images,
     required this.kv,
   });
 
@@ -50,6 +53,7 @@ class ShiftApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: artifacts),
         ChangeNotifierProvider.value(value: agents),
         ChangeNotifierProvider.value(value: notes),
+        ChangeNotifierProvider.value(value: images),
         ChangeNotifierProvider(create: (_) => NoteCleaner(keys: keys)),
         ChangeNotifierProvider(
           create: (_) => AgentRunner(agents: agents, runs: runs, keys: keys),
@@ -60,6 +64,7 @@ class ShiftApp extends StatelessWidget {
             conversations: conversations,
             artifacts: artifacts,
             notes: notes,
+            images: images,
           ),
         ),
       ],

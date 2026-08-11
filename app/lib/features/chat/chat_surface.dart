@@ -5,10 +5,13 @@ import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../core/design/typography.dart';
 import '../../data/api_keys_store.dart';
+import '../../data/image_store.dart';
 import '../../shell/mode.dart';
 import '../settings/settings_screen.dart';
 import '../artifacts/artifact_card.dart';
 import '../artifacts/artifact_panel.dart';
+import '../visual/image_viewer.dart';
+import '../visual/made_image_view.dart';
 import 'attached_notes.dart';
 import 'composer.dart';
 import 'private_banner.dart';
@@ -277,6 +280,29 @@ class _Item extends StatelessWidget {
               if (!reply.done && reply.text.isEmpty && reply.failure == null)
                 Text('Thinking…',
                     style: text.bodyMedium?.copyWith(color: c.textFaint)),
+              // Above the artifact card and below the prose, which is the
+              // order they were made in. A picture is the answer when there is
+              // one, so it is shown rather than described.
+              for (final id in reply.imageIds)
+                Padding(
+                  padding: const EdgeInsets.only(top: Space.sm),
+                  child: ConstrainedBox(
+                    // Capped rather than full-width: a portrait image given
+                    // the whole column pushes the reply and every control
+                    // under it off the screen.
+                    constraints: const BoxConstraints(maxHeight: 420),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: MadeImageView(
+                        id: id,
+                        prompt:
+                            context.read<ImageStore>().record(id)?.prompt ??
+                                '',
+                        onTap: () => showImageViewer(context, id),
+                      ),
+                    ),
+                  ),
+                ),
               if (reply.artifactId case final id?)
                 Builder(builder: (context) {
                   final made = context.read<TurnController>().byId(id);

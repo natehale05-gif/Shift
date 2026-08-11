@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift/data/agent.dart';
@@ -6,7 +7,10 @@ import 'package:shift/data/agent_store.dart';
 import 'package:shift/data/api_keys_store.dart';
 import 'package:shift/data/artifact.dart';
 import 'package:shift/data/artifact_store.dart';
+import 'package:shift/data/asset_store.dart';
 import 'package:shift/data/conversation_store.dart';
+import 'package:shift/data/image_store.dart';
+import 'package:shift/data/made_image.dart';
 import 'package:shift/data/kv_store.dart';
 import 'package:shift/data/note_store.dart';
 import 'package:shift/features/chat/turn_controller.dart';
@@ -25,6 +29,8 @@ void main() {
   late NoteStore notes;
   late AgentStore agents;
   late ApiKeysStore keys;
+  late ImageStore images;
+  late AssetStore assets;
   late TurnController turn;
 
   setUp(() async {
@@ -41,6 +47,9 @@ void main() {
     await agents.load();
     keys = ApiKeysStore(kv);
     await keys.load();
+    assets = AssetStore(directory: '${dir.path}/assets');
+    images = ImageStore(kv, assets);
+    await images.load();
     turn = TurnController(conversations: conversations, artifacts: artifacts);
   });
   tearDown(() async {
@@ -72,6 +81,17 @@ void main() {
       LocalFolder(id: 'w1', name: 'repo', path: dir.path),
     );
     await keys.set('anthropic', 'sk-ant-secret');
+    await images.save(
+      MadeImage(
+        id: 'img1',
+        prompt: 'a private picture',
+        provider: 'gemini',
+        model: 'nano',
+        mimeType: 'image/png',
+        createdAt: DateTime(2026),
+      ),
+      Uint8List.fromList([137, 80, 78, 71, 1, 2, 3]),
+    );
   }
 
   Future<void> erase() => eraseEverything(
@@ -81,6 +101,7 @@ void main() {
         notes: notes,
         agents: agents,
         keys: keys,
+        images: images,
         turn: turn,
       );
 
@@ -93,6 +114,9 @@ void main() {
     expect(notes.index, isNotEmpty);
     expect(agents.workspaces, isNotEmpty);
     expect(keys.has('anthropic'), isTrue);
+    expect(images.index, isNotEmpty);
+    expect(await assets.get('img1'), isNotNull,
+        reason: 'the bytes, not just the record');
     expect(await File('${dir.path}/kv.json').readAsString(),
         contains('a secret question'));
   });
@@ -108,6 +132,11 @@ void main() {
     expect(agents.workspaces, isEmpty);
     expect(agents.agents, isEmpty);
     expect(keys.has('anthropic'), isFalse);
+    expect(images.index, isEmpty);
+    // The half clearing the key-value map cannot reach. Without it the app
+    // looks empty and the largest thing it ever wrote is still on disk.
+    expect(await assets.get('img1'), isNull, reason: 'the bytes go too');
+    expect(await assets.ids(), isEmpty);
     expect(turn.conversationId, isNull,
         reason: 'the screen must let go of what was deleted');
 
@@ -120,6 +149,7 @@ void main() {
       'A private note',
       'sk-ant-secret',
       'repo',
+      'a private picture',
     ]) {
       expect(raw, isNot(contains(trace)), reason: trace);
     }

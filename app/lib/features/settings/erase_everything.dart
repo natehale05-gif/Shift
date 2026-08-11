@@ -4,6 +4,7 @@ import '../../data/agent_store.dart';
 import '../../data/api_keys_store.dart';
 import '../../data/artifact_store.dart';
 import '../../data/conversation_store.dart';
+import '../../data/image_store.dart';
 import '../../data/kv_store.dart';
 import '../../data/note_store.dart';
 import '../chat/turn_controller.dart';
@@ -16,6 +17,12 @@ import '../chat/turn_controller.dart';
 /// survives. Clearing the whole map is the only version of this that stays
 /// true as the app grows.
 ///
+/// **The map is not everything.** Pictures are bytes in the asset store, and
+/// clearing the key-value map would leave every one of them on disk while the
+/// index that named them vanished — the app would look empty and the largest
+/// thing it ever wrote would still be there. So the assets go too, and the
+/// claim on the button stays true.
+///
 /// The stores are reloaded afterwards, because each holds an in-memory copy:
 /// without it the disk is empty and the app still shows the list it had.
 Future<void> eraseEverything({
@@ -25,6 +32,7 @@ Future<void> eraseEverything({
   required NoteStore notes,
   required AgentStore agents,
   required ApiKeysStore keys,
+  required ImageStore images,
   required TurnController turn,
 }) async {
   // Copied before iterating: removing from the map being walked is a
@@ -33,8 +41,14 @@ Future<void> eraseEverything({
     await kv.remove(key);
   }
 
+  // Before the map is walked, because it is the half that clearing the map
+  // cannot reach: the index goes with the keys either way, and bytes with no
+  // index are invisible rather than absent.
+  await images.clearAll();
+
   turn.clear();
   await conversations.load();
+  await images.load();
   await artifacts.load();
   await notes.load();
   await agents.load();
@@ -52,8 +66,8 @@ Future<bool> confirmErase(BuildContext context) async {
     builder: (context) => AlertDialog(
       title: const Text('Delete everything?'),
       content: const Text(
-        'Every chat, page, note, agent and provider key stored on this device '
-        'will be removed. Nothing is kept, and it cannot be undone.',
+        'Every chat, page, note, picture, agent and provider key stored on this '
+        'device will be removed. Nothing is kept, and it cannot be undone.',
       ),
       actions: [
         TextButton(

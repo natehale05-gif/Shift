@@ -6,12 +6,15 @@ import '../../data/api_keys_store.dart';
 import '../../data/artifact.dart';
 import '../../data/artifact_store.dart';
 import '../../data/conversation_store.dart';
+import '../../data/image_store.dart';
+import '../../data/made_image.dart';
 import '../../data/note_store.dart';
 import '../../providers/access.dart';
 import '../../shell/mode.dart';
 import '../../turn/capability.dart';
 import '../../turn/executors/image_executor.dart';
 import '../../turn/executors/text_executor.dart';
+import '../../turn/job_output.dart';
 import '../../turn/job_runner.dart';
 import '../../turn/plan_jobs.dart';
 import '../../turn/turn_event.dart';
@@ -50,6 +53,18 @@ class Reply extends ChatItem {
   /// ordering survives a reload without anything having to reconstruct it.
   String? artifactId;
 
+  /// The pictures this reply made, in the order they arrived.
+  ///
+  /// Ids, not bytes: a transcript is written on every snapshot, and putting a
+  /// megabyte of base64 in it would make each of those writes cost more than
+  /// the whole conversation. The bytes live in the asset store, which is the
+  /// same reason the gallery's index is separate from its images.
+  ///
+  /// A list rather than one id, because "four variations" is a single reply
+  /// with four pictures, and a shape that can only hold one would quietly
+  /// keep the last.
+  final List<String> imageIds = [];
+
   bool done = false;
 
   /// Stopped by the user rather than by the model finishing. Kept separate
@@ -69,6 +84,7 @@ class Reply extends ChatItem {
         if (failure != null) 'failure': failure,
         if (failureDetail != null) 'failureDetail': failureDetail,
         if (artifactId != null) 'artifactId': artifactId,
+        if (imageIds.isNotEmpty) 'imageIds': imageIds,
         // `|| !done` is the load-bearing half. The only way a half-written
         // reply reaches disk is a snapshot taken while it was still arriving,
         // and if that snapshot is what survives — the tab was closed, the app
@@ -93,6 +109,11 @@ class Reply extends ChatItem {
       ..artifactId = json['artifactId'] as String?
       ..interrupted = json['interrupted'] == true
       ..done = true;
+    for (final id in json['imageIds'] is List
+        ? json['imageIds'] as List<dynamic>
+        : const []) {
+      if (id is String && id.isNotEmpty) reply.imageIds.add(id);
+    }
     return reply;
   }
 }
@@ -167,11 +188,16 @@ class TurnController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Where pictures are kept. Optional, like the other stores, so a test can
+  /// drive the controller with no disk at all.
+  final ImageStore? images;
+
   TurnController({
     ApiKeysStore? keys,
     this.conversations,
     this.artifacts,
     this.notes,
+    this.images,
     Map<Capability, StepExecutor> Function()? executors,
     this.snapshotEvery = const Duration(seconds: 3),
   }) {
@@ -270,6 +296,38 @@ class TurnController extends ChangeNotifier {
     if (DateTime.now().difference(last) < snapshotEvery) return;
     _snapshotting = _persist();
   }
+
+  int _imageSeq = 0;
+
+  /// Names one picture.
+  ///
+  /// Top-level and pure so the property that matters can actually be asserted.
+  /// A timestamp alone very nearly works — a stream's yields land microseconds
+  /// apart — which is why a test that only sends a real turn passes with or
+  /// without the counter, on this machine, today. But "very nearly" is not the
+  /// claim: a step that emits several variations can produce them inside one
+  /// microsecond, and two pictures sharing an id is one picture.
+  @visibleForTesting
+  static String mintImageId(String stepId, DateTime at, int sequence) =>
+      'i${at.microsecondsSinceEpoch.toRadixString(36)}-$stepId-$sequence';
+
+  /// Image writes, run one after another rather than at once.
+  ///
+  /// Each write is bytes to disk *and* an index through [KvStore.put], which
+  /// is a read-modify-write of the whole map — so three variations saving
+  /// concurrently can drop each other's index entries and leave orphaned
+  /// bytes. Serialised, and never awaited by the turn: a picture already on
+  /// screen must not wait on a disk.
+  Future<void> _imageWrites = Future.value();
+
+  /// Every image write this turn has started, once they have landed.
+  ///
+  /// Exposed only so a test can await the *write*. Pumping the event queue is
+  /// not a substitute — it passes on an idle machine and fails on a loaded
+  /// one, which makes it a check that reports the machine rather than the
+  /// code.
+  @visibleForTesting
+  Future<void> get imagesSettled => _imageWrites;
 
   /// The snapshot in flight, if there is one.
   ///
@@ -454,6 +512,37 @@ class TurnController extends ChangeNotifier {
           // broken in the least visible way.
           if (!_private) {
             unawaited(artifacts?.save(artifact) ?? Future<void>.value());
+          }
+        case StepCompleted(output: final ImageOutput image, :final stepId):
+          // Kept as it arrives, for the same reason an artifact is: a picture
+          // is what the turn was *for*, and losing it to a stop or a closed
+          // tab is the worst version of the defect N2e fixed.
+          //
+          // A private chat keeps nothing, so the picture is shown for the
+          // session and never written — the same rule the artifact save
+          // follows, and the same reason.
+          final id = mintImageId(stepId, DateTime.now(), _imageSeq++);
+          reply.imageIds.add(id);
+          if (!_private) {
+            _imageWrites = _imageWrites.then((_) => images?.save(
+                  MadeImage(
+                    id: id,
+                    prompt: image.prompt,
+                    provider: reply.provider ?? '',
+                    model: '',
+                    mimeType: image.mimeType,
+                    createdAt: DateTime.now(),
+                    conversationId: _conversationId,
+                  ),
+                  image.bytes,
+                ) ??
+                Future<void>.value());
+            unawaited(_imageWrites);
+          } else {
+            // Still needs to be drawable this session. Held in the store's own
+            // cache rather than written, so the transcript can find it by id
+            // exactly as it would a kept one.
+            images?.hold(id, image.bytes);
           }
         case StepFailed(:final reason, :final detail):
           reply.failure ??= reason;

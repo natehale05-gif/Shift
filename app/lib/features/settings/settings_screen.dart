@@ -7,6 +7,7 @@ import '../../data/agent_store.dart';
 import '../../data/api_keys_store.dart';
 import '../../data/artifact_store.dart';
 import '../../data/conversation_store.dart';
+import '../../data/image_store.dart';
 import '../../data/kv_store.dart';
 import '../../data/note_store.dart';
 import '../../providers/registry.dart';
@@ -153,6 +154,7 @@ class _EraseEverything extends StatelessWidget {
                 notes: context.read<NoteStore>(),
                 agents: context.read<AgentStore>(),
                 keys: context.read<ApiKeysStore>(),
+                images: context.read<ImageStore>(),
                 turn: context.read<TurnController>(),
               );
               if (context.mounted) {
