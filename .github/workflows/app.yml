@@ -47,7 +47,13 @@ jobs:
       # `analyze` and fails at `flutter build web`. Verified able to fail by
       # renaming an export on purpose, because a check that cannot fail is
       # worse than no check.
-      - run: python3 tool/scan_conditional_imports.py
+      #
+      # The repository's copy, not a second one under `app/`. There *was* a
+      # second one, and it silently fell behind: it scanned v2 only, could not
+      # see a top-level getter, and was the copy this job ran — so the scanner
+      # this workflow trusted and the scanner run locally were two different
+      # programs giving two different answers. One rule, one file.
+      - run: python3 ../tool/scan_conditional_imports.py
 
   web:
     needs: check

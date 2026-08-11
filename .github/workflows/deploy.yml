@@ -106,7 +106,9 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: python3 tool/scan_conditional_imports.py
+      # The repository's copy, not a second one under `app/` — see the note in
+      # `app.yml`. There was a second one and it had silently fallen behind.
+      - run: python3 ../tool/scan_conditional_imports.py
 
       # The base href has to match where the app is actually served from, or
       # every asset request 404s against the site root. Verified locally under
