@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../core/design/metrics.dart';
@@ -25,6 +26,12 @@ class ProviderKeyField extends StatefulWidget {
   /// exist off-web, and off-web is where every test runs.
   final Future<ProbeOutcome> Function(ProviderAccess access)? probe;
 
+  /// Whether this is running in a browser, where CORS applies. A parameter
+  /// rather than a read of `kIsWeb` for the same reason [probeSentence] takes
+  /// one: every test in this app runs off-web, so a branch gated on the
+  /// constant is a branch no test can enter.
+  final bool onWeb;
+
   const ProviderKeyField({
     super.key,
     required this.provider,
@@ -33,6 +40,7 @@ class ProviderKeyField extends StatefulWidget {
     required this.onRemove,
     this.readKey,
     this.probe,
+    this.onWeb = kIsWeb,
   });
 
   @override
@@ -134,6 +142,24 @@ class _ProviderKeyFieldState extends State<ProviderKeyField> {
             widget.provider.can.map((it) => it.name).join(' · '),
             style: text.labelMedium?.copyWith(color: c.textFaint),
           ),
+
+          // Said *before* the key is pasted, not after the first turn fails.
+          //
+          // On the web a provider that sends no CORS headers is refused by the
+          // browser before the key is read, so the key is irrelevant and no
+          // amount of retrying or switching browsers helps. Somebody who has
+          // just gone and made an account to get a key deserves to know that
+          // while they still have the tab open.
+          if (widget.onWeb && widget.provider.webAccess != WebAccess.verified)
+            Padding(
+              padding: const EdgeInsets.only(top: Space.xs),
+              child: Text(
+                'May not work in a browser. Some providers refuse calls from a '
+                'web page; the desktop app has no such restriction.',
+                style: text.labelMedium?.copyWith(color: c.warning),
+              ),
+            ),
+
           const SizedBox(height: Space.md),
 
           if (saved != null) ...[
@@ -163,7 +189,7 @@ class _ProviderKeyFieldState extends State<ProviderKeyField> {
             if (_outcome case final outcome?) ...[
               const SizedBox(height: Space.xs),
               Text(
-                probeSentence(outcome),
+                probeSentence(outcome, provider: widget.provider),
                 style: text.bodySmall?.copyWith(
                   color: outcome == ProbeOutcome.working ? c.accent : c.textMuted,
                 ),

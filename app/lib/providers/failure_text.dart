@@ -1,3 +1,4 @@
+import 'registry.dart';
 import 'streaming/reachability.dart';
 
 /// Every sentence a provider failure can be reported as, in one place.
@@ -37,6 +38,30 @@ String sentenceForUnreachable(Reach reach) => switch (reach) {
         'Could not reach the provider. Check your connection and try again.',
     };
 
+/// The blocked case again, when we know **who** was being called and that we
+/// were in a browser.
+///
+/// The generic [sentenceForUnreachable] blames the browser and prescribes *try
+/// another one*. Against a provider that may not allow calls from a web page at
+/// all, that is an instruction to keep doing the one thing that cannot work —
+/// and it is what a real report ("some keys are not working, I tried Chrome and
+/// Brave") acted on.
+///
+/// "May not", not "does not": whether these providers send CORS headers is not
+/// established. What *is* established, by measurement, is that Claude and
+/// Gemini do — so they keep the generic sentence, because for them a blocked
+/// request really is something local.
+String sentenceForBrowserBlocked(ProviderDescriptor? provider,
+    {required bool onWeb}) {
+  if (!onWeb || provider == null || provider.webAccess == WebAccess.verified) {
+    return sentenceForUnreachable(Reach.up);
+  }
+  return '${provider.displayName} may not allow calls from a web page. Claude '
+      'and Gemini are confirmed to work in a browser; other providers work in '
+      'the desktop app, where this restriction does not exist. A content '
+      'blocker can also cause this.';
+}
+
 /// A request that was accepted and then never answered. Distinct from
 /// unreachable on purpose: waiting longer might work, which is not true of
 /// anything above.
@@ -52,5 +77,10 @@ final Set<String> writtenSentences = {
   for (final status in [400, 401, 402, 403, 404, 429, 500, 529])
     sentenceForStatus(status),
   for (final reach in Reach.values) sentenceForUnreachable(reach),
+  // Every provider's variant, or the one sentence in this file that names a
+  // provider would be filtered out by [readErrorFrame] and replaced with the
+  // generic 500 — an allowlist quietly undoing the fix it was protecting.
+  for (final provider in kProviders)
+    sentenceForBrowserBlocked(provider, onWeb: true),
   sentenceForTimeout,
 };

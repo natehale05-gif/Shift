@@ -3,6 +3,10 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift/providers/access.dart';
 import 'package:shift/providers/clients/anthropic_text.dart';
+import 'package:shift/providers/clients/gemini_text.dart';
+import 'package:shift/providers/clients/openai_text.dart';
+import 'package:shift/providers/failure_text.dart';
+import 'package:shift/providers/streaming/reachability.dart';
 import 'package:shift/providers/streaming/sse_client.dart';
 import 'package:shift/turn/capability.dart';
 import 'package:shift/turn/executors/text_executor.dart';
@@ -185,6 +189,101 @@ void main() {
       expect(executor.identify(step('main')).provider, 'unavailable');
     });
   });
+
+  group('a request the browser never let out', () {
+    // The report: "some keys are not working in my desktop browsers, I tried
+    // chrome and brave". Both browsers were behaving correctly; the app told
+    // them to try another one, for a provider whose CORS behaviour is not
+    // established. The chat turn is where that sentence was read, so it is the
+    // path this pins — Settings' Test connection is the second surface, not
+    // the first.
+
+    Future<String> reasonFor({
+      required bool onWeb,
+      required String providerId,
+    }) async {
+      final executor = TextExecutor(
+        usable: (id) => id == providerId,
+        access: (_) async => const DirectKey('k'),
+        anthropic: AnthropicText(
+          sse: RefusingTransport(),
+          reach: () async => Reach.up,
+        ),
+        gemini: GeminiText(
+          sse: RefusingTransport(),
+          reach: () async => Reach.up,
+        ),
+        openai: OpenAiText(
+          sse: RefusingTransport(),
+          reach: () async => Reach.up,
+        ),
+        onWeb: onWeb,
+      );
+      final events = await executor.run(step('main'), const {}).toList();
+      return events.whereType<StepFailed>().single.reason;
+    }
+
+    test('an unverified provider on the web names the real possibility',
+        () async {
+      final reason = await reasonFor(onWeb: true, providerId: 'groq');
+      expect(reason, contains('Groq'));
+      expect(reason, contains('desktop app'));
+      expect(reason, isNot(contains('try another browser')));
+    });
+
+    test('Claude keeps the generic sentence, because Claude does work',
+        () async {
+      // Measured: api.anthropic.com answers `access-control-allow-origin: *`
+      // and allows the headers this client sends. So a blocked request there
+      // really is something local, and blaming the provider would be false.
+      final reason = await reasonFor(onWeb: true, providerId: 'anthropic');
+      expect(reason, sentenceForUnreachable(Reach.up));
+    });
+
+    test('and off the web nobody is blamed at all', () async {
+      // There is no CORS outside a browser. The desktop and mobile builds can
+      // call every provider here.
+      final reason = await reasonFor(onWeb: false, providerId: 'groq');
+      expect(reason, sentenceForUnreachable(Reach.up));
+      expect(reason, isNot(contains('Groq')));
+    });
+
+    test('a failure that already has a status does not spend a probe',
+        () async {
+      // Threading the sentence through meant hoisting `await reach()` out of a
+      // `??=`, which silently made every rejected key cost an extra request —
+      // for a question the 401 had already answered. Asserted directly,
+      // because a wasted round trip is invisible from the outside.
+      var probes = 0;
+      final executor = TextExecutor(
+        usable: (_) => true,
+        access: (_) async => const DirectKey('k'),
+        anthropic: AnthropicText(
+          sse: _RejectingTransport(401),
+          reach: () async {
+            probes++;
+            return Reach.up;
+          },
+        ),
+        onWeb: true,
+      );
+
+      final events = await executor.run(step('main'), const {}).toList();
+
+      expect(events.whereType<StepFailed>().single.reason,
+          contains('key was rejected'));
+      expect(probes, 0, reason: 'the status said everything already');
+    });
+
+    test('the sentence survives the error frame it travels in', () async {
+      // `readErrorFrame` filters anything it does not recognise down to a
+      // generic 500 — so a new sentence that is not in the allowlist would be
+      // silently replaced, and the whole fix would vanish one layer below
+      // where it was written.
+      final reason = await reasonFor(onWeb: true, providerId: 'groq');
+      expect(writtenSentences, contains(reason));
+    });
+  });
 }
 
 class _FakeImages implements StepExecutor {
@@ -203,4 +302,34 @@ class _FakeImages implements StepExecutor {
       ),
     );
   }
+}
+
+/// A transport that fails the way a browser refusing a cross-origin request
+/// does: no status, no response, just a thrown error.
+class RefusingTransport implements SseClient {
+  @override
+  Stream<SseEvent> postJson({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+  }) =>
+      Stream<SseEvent>.error(
+        Exception('ClientException: Failed to fetch, uri=$uri'),
+      );
+}
+
+/// A transport that fails the way a provider rejecting a key does: with a
+/// status, which is all the information the sentence needs.
+class _RejectingTransport implements SseClient {
+  final int status;
+
+  _RejectingTransport(this.status);
+
+  @override
+  Stream<SseEvent> postJson({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+  }) =>
+      Stream<SseEvent>.error(SseHttpException(status, 'nope'));
 }

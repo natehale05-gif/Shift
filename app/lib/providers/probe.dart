@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import 'access.dart';
@@ -69,14 +70,32 @@ ProbeOutcome probeOutcome({required int? status, required Reach reach}) {
 
 /// One sentence per outcome, and no two alike — asserted by a test, because
 /// two states sharing a sentence is exactly the defect this replaces.
-String probeSentence(ProbeOutcome outcome) => switch (outcome) {
+///
+/// [provider] and [onWeb] only change the [ProbeOutcome.blocked] sentence, and
+/// they change it for a reason that cost a real debugging session: the generic
+/// wording blames the browser and prescribes *try another one*. On the web,
+/// against a provider that does not allow calls from a page at all, that advice
+/// is not merely unhelpful — it is an instruction to keep doing the one thing
+/// that cannot work. The report that prompted this was "some keys are not
+/// working, I tried Chrome and Brave".
+///
+/// [onWeb] is a parameter rather than a read of `kIsWeb` so a test can drive
+/// both. A branch that can only ever be false under test is a branch nothing
+/// checks.
+String probeSentence(
+  ProbeOutcome outcome, {
+  ProviderDescriptor? provider,
+  bool onWeb = kIsWeb,
+}) =>
+    switch (outcome) {
       ProbeOutcome.working => 'Working. That key answered.',
       ProbeOutcome.keyRejected => sentenceForStatus(401),
       ProbeOutcome.modelUnavailable => sentenceForStatus(404),
       ProbeOutcome.outOfCredit => sentenceForStatus(402),
       ProbeOutcome.rateLimited => sentenceForStatus(429),
       ProbeOutcome.providerProblem => sentenceForStatus(500),
-      ProbeOutcome.blocked => sentenceForUnreachable(Reach.up),
+      ProbeOutcome.blocked =>
+        sentenceForBrowserBlocked(provider, onWeb: onWeb),
       ProbeOutcome.offline => sentenceForUnreachable(Reach.down),
       ProbeOutcome.timedOut => sentenceForTimeout,
       ProbeOutcome.unreachable => sentenceForUnreachable(Reach.unknown),

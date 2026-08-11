@@ -15,10 +15,17 @@ import 'sse_client.dart';
 /// Re-emitted as a frame rather than thrown, so there is exactly one place that
 /// turns a provider problem into a sentence rather than several that can
 /// disagree.
+///
+/// [blocked] overrides the sentence used when nothing ever came back and the
+/// device is otherwise online. It exists because *who was being called* decides
+/// the right advice there, and the wire clients do not know — one of them
+/// serves four providers. The executor knows, so it supplies the sentence and
+/// this stays the only place that emits one.
 Stream<SseEvent> statusAware(
   Stream<SseEvent> events, {
   required String host,
   required Future<Reach> Function() reach,
+  String? blocked,
 }) async* {
   String? sentence;
   String? detail;
@@ -51,7 +58,16 @@ Stream<SseEvent> statusAware(
 
   // Outside the try: awaiting inside a catch and then yielding is legal but
   // reads as if the probe were part of the failing operation, and it is not.
-  sentence ??= sentenceForUnreachable(await reach());
+  // Guarded rather than `??=`. The probe must only run when no status arrived:
+  // `??=` gave that for free by not evaluating its right side, and hoisting the
+  // await out to reuse the answer quietly cost *every* failure — a rejected key
+  // included — an extra request answering a question the status had settled.
+  if (sentence == null) {
+    final where = await reach();
+    sentence = where == Reach.up && blocked != null
+        ? blocked
+        : sentenceForUnreachable(where);
+  }
 
   yield SseEvent(
     event: 'error',

@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 import '../../providers/access.dart';
+import '../../providers/failure_text.dart';
 import '../../providers/clients/anthropic_text.dart';
 import '../../providers/clients/gemini_text.dart';
 import '../../providers/clients/openai_text.dart';
@@ -36,6 +39,12 @@ class TextExecutor implements StepExecutor {
   /// conversation's, or nothing at all.
   final String Function() conversationId;
 
+  /// Whether this is running in a browser, which is the only place a provider's
+  /// CORS policy can refuse a call. A field rather than a read of `kIsWeb`
+  /// because every test in this app runs off-web, so the branch that matters
+  /// would be one no test could enter.
+  final bool onWeb;
+
   TextExecutor({
     required this.usable,
     required this.access,
@@ -44,6 +53,7 @@ class TextExecutor implements StepExecutor {
     GeminiText? gemini,
     OpenAiText? openai,
     String Function()? conversationId,
+    this.onWeb = kIsWeb,
   })  : anthropic = anthropic ?? AnthropicText(),
         gemini = gemini ?? GeminiText(),
         openai = openai ?? OpenAiText(),
@@ -109,7 +119,14 @@ class TextExecutor implements StepExecutor {
     // The fallthrough is a `baseUrl` missing from the registry, which is a
     // programming error rather than a state a user can reach — so it says that
     // rather than blaming the provider.
+    // Composed here because this is the only layer that knows *which* provider
+    // was chosen: one of the three clients below serves four of them. On the
+    // web a provider that allows no calls from a page fails exactly like a
+    // content blocker, and the generic advice — try another browser — is then
+    // an instruction to keep doing the thing that cannot work.
     final base = choice.provider.baseUrl;
+    final blocked =
+        sentenceForBrowserBlocked(choice.provider, onWeb: onWeb);
     final events = switch (choice.provider.id) {
       'anthropic' => anthropic.stream(
           stepId: step.id,
@@ -117,6 +134,7 @@ class TextExecutor implements StepExecutor {
           model: choice.model.id,
           instruction: step.instruction,
           system: context,
+          blocked: blocked,
         ),
       'gemini' => gemini.stream(
           stepId: step.id,
@@ -124,6 +142,7 @@ class TextExecutor implements StepExecutor {
           model: choice.model.id,
           instruction: step.instruction,
           system: context,
+          blocked: blocked,
         ),
       _ when base != null => openai.stream(
           stepId: step.id,
@@ -132,6 +151,7 @@ class TextExecutor implements StepExecutor {
           baseUrl: base,
           instruction: step.instruction,
           system: context,
+          blocked: blocked,
         ),
       _ => Stream.value(
           StepFailed(

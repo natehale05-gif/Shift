@@ -114,6 +114,7 @@ class AnthropicText {
     required String model,
     required String instruction,
     String? system,
+    String? blocked,
   }) async* {
     final resolved = target(access);
 
@@ -135,6 +136,7 @@ class AnthropicText {
         ),
         host: _endpoint.host,
         reach: _reach,
+        blocked: blocked,
       ),
       stepId: stepId,
     );

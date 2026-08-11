@@ -85,6 +85,7 @@ class GeminiText {
     required String model,
     required String instruction,
     String? system,
+    String? blocked,
   }) async* {
     final resolved = target(access, model);
 
@@ -98,6 +99,7 @@ class GeminiText {
         ),
         host: _host,
         reach: _reach,
+        blocked: blocked,
       ),
       stepId: stepId,
     );

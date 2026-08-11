@@ -13,7 +13,7 @@ void main() {
   final groq = kProviders.firstWhere((p) => p.id == 'groq');
 
   Widget host(ProviderDescriptor provider,
-          {String? saved, ProbeOutcome? outcome}) =>
+          {String? saved, ProbeOutcome? outcome, bool onWeb = false}) =>
       MaterialApp(
         theme: shiftTheme(Brightness.light, TargetPlatform.iOS),
         home: Scaffold(
@@ -24,6 +24,10 @@ void main() {
             onRemove: () {},
             readKey: () => 'sk-ant-real',
             probe: (_) async => outcome ?? ProbeOutcome.working,
+            // Passed rather than read from `kIsWeb`, which is false in every
+            // test in this app — so the branch that only exists on the web
+            // would otherwise be one no test could enter.
+            onWeb: onWeb,
           ),
         ),
       );
@@ -63,6 +67,69 @@ void main() {
     await t.pumpAndSettle();
 
     expect(find.text(probeSentence(ProbeOutcome.working)), findsOneWidget);
+  });
+
+  group('what a browser can actually reach', () {
+    // The report this came from: "some keys are not working in my desktop
+    // browsers, I tried chrome and brave". Both browsers behaved correctly.
+    // The app's advice — try another browser — was the wrong advice, and it
+    // was given for a provider whose CORS behaviour is not established.
+
+    testWidgets('an unverified provider says so before a key is pasted',
+        (t) async {
+      await t.pumpWidget(host(groq, onWeb: true));
+      expect(find.textContaining('May not work in a browser'), findsOneWidget);
+    });
+
+    testWidgets('a verified one does not', (t) async {
+      // Claude and Gemini were measured: preflight and real POST both carry
+      // `access-control-allow-origin`. Warning about them would be noise, and
+      // noise is what makes the real warning ignorable.
+      await t.pumpWidget(host(anthropic, onWeb: true));
+      expect(find.textContaining('May not work in a browser'), findsNothing);
+    });
+
+    testWidgets('and nothing is said off the web at all', (t) async {
+      // There is no CORS outside a browser, so every provider works in the
+      // desktop and mobile builds. Warning there would be false.
+      await t.pumpWidget(host(groq));
+      expect(find.textContaining('May not work in a browser'), findsNothing);
+    });
+
+    test('a blocked request stops prescribing another browser', () {
+      final generic = probeSentence(ProbeOutcome.blocked, onWeb: false);
+      final specific = probeSentence(ProbeOutcome.blocked,
+          provider: groq, onWeb: true);
+
+      expect(specific, isNot(generic));
+      expect(specific, contains('Groq'));
+      expect(specific, contains('desktop app'));
+      // The sentence that sent somebody to a second browser. It may still be
+      // the cause, and it is still named — but it is no longer the whole of
+      // the advice.
+      expect(specific, contains('content blocker'));
+      expect(generic, contains('try another browser'));
+    });
+
+    test('a verified provider keeps the generic sentence', () {
+      // Claude *is* reachable from a browser, so a blocked request there
+      // really is something local — and saying "Claude may not allow calls
+      // from a web page" would be a plain falsehood.
+      expect(
+        probeSentence(ProbeOutcome.blocked, provider: anthropic, onWeb: true),
+        probeSentence(ProbeOutcome.blocked, onWeb: false),
+      );
+    });
+
+    test('every outcome still produces its own sentence', () {
+      // The invariant the whole probe exists for, re-asserted now that one of
+      // the sentences has grown a variant.
+      final sentences = [
+        for (final outcome in ProbeOutcome.values)
+          probeSentence(outcome, provider: groq, onWeb: true),
+      ];
+      expect(sentences.toSet(), hasLength(ProbeOutcome.values.length));
+    });
   });
 
   testWidgets('every control clears the tap-target minimum', (t) async {

@@ -80,6 +80,7 @@ class OpenAiText {
     required String baseUrl,
     required String instruction,
     String? system,
+    String? blocked,
   }) async* {
     final resolved = target(access, baseUrl);
 
@@ -96,6 +97,7 @@ class OpenAiText {
         ),
         host: resolved.uri.host,
         reach: _reach,
+        blocked: blocked,
       ),
       stepId: stepId,
     );

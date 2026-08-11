@@ -17,6 +17,29 @@ class ProviderModel {
   });
 }
 
+/// Whether a **browser** can call this provider at all.
+///
+/// The app talks to providers directly from wherever it is running, so on the
+/// web every request is cross-origin and the provider's own CORS headers decide
+/// whether it happens. A provider that does not send them is refused by the
+/// browser *before* the key is looked at — so no key will ever work there, the
+/// failure arrives with no HTTP status to read, and it is indistinguishable
+/// from a content blocker unless something says otherwise.
+///
+/// Off-web there is no CORS and this means nothing: every provider here is
+/// callable from the desktop and mobile builds.
+enum WebAccess {
+  /// Measured, not assumed. A preflight and a real POST were sent from an
+  /// origin, and the response carried `access-control-allow-origin`.
+  verified,
+
+  /// Not established either way. **Not a claim that it is blocked** — this
+  /// sandbox's egress proxy refuses to connect to these hosts at all
+  /// (`CONNECT tunnel failed, 403`), so there is no evidence from here, and
+  /// stating a belief as a finding is how the last three of these went wrong.
+  unverified,
+}
+
 /// A provider, and what it is good for.
 class ProviderDescriptor {
   final String id;
@@ -37,6 +60,9 @@ class ProviderDescriptor {
   /// capability at all, which is different from being a poor one.
   final Map<Capability, int> ranks;
 
+  /// Whether a browser can reach this provider. See [WebAccess].
+  final WebAccess webAccess;
+
   /// For the providers that speak OpenAI's `chat/completions`, where the only
   /// thing that differs between them is this string. Null for the ones with
   /// their own wire — a field that means "the OpenAI-compatible base URL"
@@ -51,6 +77,7 @@ class ProviderDescriptor {
     required this.ranks,
     this.keyShape,
     this.baseUrl,
+    this.webAccess = WebAccess.unverified,
   });
 
   Set<Capability> get can => {for (final m in models) ...m.can};
@@ -120,6 +147,13 @@ final _anthropic = ProviderDescriptor(
     ),
   ],
   ranks: const {Capability.text: 0, Capability.search: 0},
+  // Measured against api.anthropic.com from a page origin: the preflight
+  // answers `access-control-allow-origin: *` and explicitly allows the four
+  // headers this client sends — including
+  // `anthropic-dangerous-direct-browser-access`, which is what the header is
+  // for. The real POST carries the header too, so a rejected key comes back as
+  // a readable 401 rather than as a bare transport error.
+  webAccess: WebAccess.verified,
 );
 
 final _gemini = ProviderDescriptor(
@@ -145,6 +179,10 @@ final _gemini = ProviderDescriptor(
   ],
   // Leads on image, second on text.
   ranks: const {Capability.text: 2, Capability.image: 0, Capability.search: 1},
+  // Measured the same way: generativelanguage.googleapis.com echoes the
+  // requesting origin back in `access-control-allow-origin` on both the
+  // preflight and the real POST.
+  webAccess: WebAccess.verified,
 );
 
 final _openai = ProviderDescriptor(
