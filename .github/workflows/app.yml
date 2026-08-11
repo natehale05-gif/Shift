@@ -55,6 +55,12 @@ jobs:
       # programs giving two different answers. One rule, one file.
       - run: python3 ../tool/scan_conditional_imports.py
 
+      # v2 has a `backend/` now, so the seam that makes the host swappable has
+      # to be guarded here too. The same file checks both trees; running it in
+      # only one workflow would leave the app still being written as the one
+      # nothing watched.
+      - run: python3 ../tool/scan_backend_boundary.py
+
   web:
     needs: check
     runs-on: ubuntu-latest

@@ -20,8 +20,16 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-LIB = ROOT / "lib"
-BACKEND = LIB / "backend"
+
+# Both apps. v1 is frozen at the root and v2 is being built in app/, and the
+# seam matters more in the one still being written — a scan that only watched
+# the finished tree would be guarding the code least likely to break it.
+#
+# Written as a list rather than a parameter because it must not be possible to
+# run this and have it silently check half of what there is. That is the same
+# failure the conditional-import scanner had: it watched v1 only, and every
+# "23 pairs clean" reported during the v2 rebuild was true of the wrong tree.
+TREES = [tree for tree in (ROOT / "lib", ROOT / "app" / "lib") if tree.is_dir()]
 
 # Things only lib/backend/ is allowed to mention.
 VENDOR = [
@@ -37,34 +45,44 @@ FORBIDDEN_INBOUND = ("features/", "core/", "providers/", "turn/", "data/stores/"
 IMPORT = re.compile(r"""^\s*import\s+['"]([^'"]+)['"]""", re.MULTILINE)
 
 
-def main() -> int:
-    problems: list[str] = []
+def check(lib: pathlib.Path, problems: list[str]) -> int:
+    """Both rules, for one app's `lib/`. Returns how many backend files it saw."""
+    backend = lib / "backend"
+    if not backend.is_dir():
+        return 0
 
-    # Rule 1 — the vendor stays inside the folder. lib/app.dart is the one
+    # Rule 1 — the vendor stays inside the folder. `app.dart` is the one
     # exception: something has to choose an implementation, and doing it at the
     # composition root is the standard place. It may name them; nothing else may.
-    allowed = {LIB / "app.dart"}
-    for path in sorted(LIB.rglob("*.dart")):
-        if BACKEND in path.parents or path in allowed:
+    allowed = {lib / "app.dart"}
+    for path in sorted(lib.rglob("*.dart")):
+        if backend in path.parents or path in allowed:
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
         for pattern, label in VENDOR:
             if pattern.search(text):
                 rel = path.relative_to(ROOT)
-                problems.append(f"{rel} mentions '{label}' outside lib/backend/")
+                problems.append(f"{rel} mentions '{label}' outside backend/")
 
     # Rule 2 — the folder does not import the app.
-    for path in sorted(BACKEND.rglob("*.dart")):
+    for path in sorted(backend.rglob("*.dart")):
         text = path.read_text(encoding="utf-8", errors="replace")
         for target in IMPORT.findall(text):
             resolved = (path.parent / target).resolve()
             try:
-                rel_target = resolved.relative_to(LIB).as_posix()
+                rel_target = resolved.relative_to(lib).as_posix()
             except ValueError:
                 continue  # a package: import, not a path into lib/
             if any(rel_target.startswith(d) for d in FORBIDDEN_INBOUND):
                 rel = path.relative_to(ROOT)
                 problems.append(f"{rel} imports '{target}' — backend/ is a leaf")
+
+    return len(list(backend.rglob("*.dart")))
+
+
+def main() -> int:
+    problems: list[str] = []
+    seen = {tree: check(tree, problems) for tree in TREES}
 
     if problems:
         print("Backend boundary violations:", file=sys.stderr)
@@ -77,8 +95,13 @@ def main() -> int:
         )
         return 1
 
-    files = len(list(BACKEND.rglob("*.dart")))
-    print(f"backend boundary intact ({files} file(s) in lib/backend/)")
+    # Named per tree rather than totalled. A single number cannot be read as
+    # "and it looked at both", which is exactly the claim this needs to make.
+    where = ", ".join(
+        f"{tree.relative_to(ROOT).as_posix()}/backend: {count} file(s)"
+        for tree, count in seen.items()
+    )
+    print(f"backend boundary intact ({where})")
     return 0
 
 
