@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../core/design/typography.dart';
+import '../../core/platform/pick_image.dart';
 import '../../data/image_store.dart';
 import '../../data/made_image.dart';
 import '../chat/composer.dart';
@@ -75,6 +76,10 @@ class VisualSurface extends StatelessWidget {
                 busy: turn.running,
                 onStop: turn.stop,
                 onSend: (text) => turn.send(text, mode: AppMode.visual),
+                // The mode is an image editor, and one that can only open its
+                // own output is half an editor: most of what people want to
+                // change is a picture they already have.
+                onAttach: () => attachOwnPicture(context),
               ),
             ),
           ),
@@ -82,6 +87,41 @@ class VisualSurface extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Brings in a picture from the person's own files and selects it for
+/// changing.
+Future<void> attachOwnPicture(BuildContext context) async {
+  final images = context.read<ImageStore>();
+  final turn = context.read<VisualTurns>();
+  final messenger = ScaffoldMessenger.of(context);
+
+  final picked = await pickImage();
+  if (picked.refused case final why?) {
+    // Cancelling is silent — the person chose that. A refusal is not, or the
+    // picker simply closing reads as the app being broken.
+    messenger.showSnackBar(SnackBar(content: Text(why)));
+    return;
+  }
+  final image = picked.image;
+  if (image == null) return;
+
+  final id = 'a${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}';
+  await images.save(
+    MadeImage(
+      id: id,
+      // The filename, because that is the name this picture already has and
+      // the one the person recognises in a gallery.
+      prompt: image.name,
+      provider: '',
+      model: '',
+      mimeType: image.mimeType,
+      createdAt: DateTime.now(),
+      origin: ImageOrigin.attached,
+    ),
+    image.bytes,
+  );
+  turn.editImage(id);
 }
 
 class _NothingYet extends StatelessWidget {
@@ -188,14 +228,28 @@ class _Tile extends StatelessWidget {
                 ),
                 padding: const EdgeInsets.fromLTRB(
                     Space.sm, Space.lg, Space.sm, Space.sm),
-                child: Text(
-                  image.prompt,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.white),
+                child: Row(
+                  children: [
+                    // A small mark rather than a word: it says "you brought
+                    // this one" without spending a line of the caption, which
+                    // is the only place the picture's name fits.
+                    if (image.origin == ImageOrigin.attached) ...[
+                      const Icon(Icons.attach_file_rounded,
+                          size: 12, color: Colors.white70),
+                      const SizedBox(width: Space.xxs),
+                    ],
+                    Expanded(
+                      child: Text(
+                        image.prompt,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

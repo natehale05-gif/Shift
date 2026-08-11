@@ -28,7 +28,12 @@ class ImageExecutor implements StepExecutor {
   /// so `turn/` keeps not importing `data/`. Null when there is nothing behind
   /// the id, which is a real state — the picture may have been deleted between
   /// choosing it and sending.
-  final Future<Uint8List?> Function(String imageId)? sourceBytes;
+  ///
+  /// The type comes back with the bytes because a picture the person brought
+  /// is often a JPEG, and telling a provider a JPEG is a PNG gets a valid
+  /// picture rejected for a reason nobody can see.
+  final Future<({Uint8List bytes, String mimeType})?> Function(String imageId)?
+      sourceBytes;
 
   ImageExecutor({
     required this.usable,
@@ -76,7 +81,7 @@ class ImageExecutor implements StepExecutor {
     // comparable value. Refused rather than quietly generated: someone who
     // asked to change *this* picture and got a new unrelated one has been
     // charged for the wrong thing and has to notice it themselves.
-    Uint8List? source;
+    ({Uint8List bytes, String mimeType})? source;
     if (step.editing case final id?) {
       source = await sourceBytes?.call(id);
       if (source == null) {
@@ -94,7 +99,8 @@ class ImageExecutor implements StepExecutor {
           stepId: step.id,
           access: credential,
           prompt: step.instruction,
-          source: source,
+          source: source?.bytes,
+          sourceMimeType: source?.mimeType ?? 'image/png',
           aspectRatio: step.aspectRatio,
         ),
       // OpenAI images land with the rest of that client. A provider that was

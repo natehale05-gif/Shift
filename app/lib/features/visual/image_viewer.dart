@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../core/design/metrics.dart';
 import '../../core/platform/save_file.dart';
 import '../../data/image_store.dart';
+import '../../data/made_image.dart';
 import '../chat/turn_controller.dart';
 import 'made_image_view.dart';
 
@@ -45,6 +46,10 @@ class ImageViewer extends StatelessWidget {
     final store = context.watch<ImageStore>();
     final record = store.record(id);
     final prompt = record?.prompt ?? '';
+    // A picture the person brought has a filename here, not a description.
+    // Offering to copy it would be offering them their own filename back.
+    final describable =
+        prompt.isNotEmpty && record?.origin != ImageOrigin.attached;
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -113,7 +118,7 @@ class ImageViewer extends StatelessWidget {
                     Navigator.of(context).pop();
                   },
                 ),
-              if (prompt.isNotEmpty)
+              if (describable)
                 _Action(
                   icon: Icons.copy_rounded,
                   label: 'Copy prompt',

@@ -221,6 +221,32 @@ void main() {
     });
   });
 
+  testWidgets('a picture you brought offers no prompt to copy', (tester) async {
+    // Its "prompt" is a filename. Offering to copy it would be handing someone
+    // their own filename back, and the rest of the actions still apply.
+    await tester.runAsync(() => images.save(
+          MadeImage(
+            id: 'a',
+            prompt: 'holiday-2019.jpg',
+            provider: '',
+            model: '',
+            mimeType: 'image/jpeg',
+            createdAt: DateTime(2026),
+            origin: ImageOrigin.attached,
+          ),
+          _onePixelPng,
+        ));
+
+    await pumpIn(tester, const ImageViewer(id: 'a'));
+    await tester.pump();
+
+    expect(find.text('Copy prompt'), findsNothing);
+    expect(find.text('Delete'), findsOneWidget);
+    expect(find.text('Save'), findsOneWidget);
+    expect(find.text('holiday-2019.jpg'), findsOneWidget,
+        reason: 'the name is still shown, just not offered as a prompt');
+  });
+
   testWidgets('a recorded picture offers Delete', (tester) async {
     // The control. Without it the assertion above passes just as well on a
     // viewer that never offers Delete to anyone.

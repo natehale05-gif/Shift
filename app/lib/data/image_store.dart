@@ -143,6 +143,17 @@ class ImageStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The bytes and what kind of picture they are.
+  ///
+  /// One call rather than two, because a caller that fetched the bytes and
+  /// then looked up the type separately would have to handle the two
+  /// disagreeing — and every caller wants both.
+  Future<({Uint8List bytes, String mimeType})?> sourceFor(String id) async {
+    final data = await bytes(id);
+    if (data == null) return null;
+    return (bytes: data, mimeType: record(id)?.mimeType ?? 'image/png');
+  }
+
   /// Deletes bytes no index entry points at.
   ///
   /// An image saved by a run that was interrupted between the two writes has

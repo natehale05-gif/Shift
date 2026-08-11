@@ -10,8 +10,29 @@ import '../turn/request_title.dart';
 /// with no record of what made it cannot be regenerated, varied, or explained
 /// six months later — and those are the three things anyone wants from a
 /// picture they like.
+/// Where a picture came from.
+enum ImageOrigin {
+  /// The app made it from a prompt.
+  made,
+
+  /// The person brought it. Kept apart because the two are treated
+  /// differently by everything that reads a picture's history: an attached
+  /// photo has no prompt to copy, cannot be regenerated, and its [prompt]
+  /// field holds a filename rather than a description.
+  attached;
+
+  static ImageOrigin fromName(String? name) => ImageOrigin.values.firstWhere(
+        (e) => e.name == name,
+        orElse: () => ImageOrigin.made,
+      );
+}
+
 class MadeImage {
   final String id;
+
+  /// What it was asked to be — or, for an [ImageOrigin.attached] picture, the
+  /// name of the file it came from. One field rather than two because every
+  /// reader wants the same thing from it: a short line naming this picture.
   final String prompt;
   final String provider;
   final String model;
@@ -22,6 +43,8 @@ class MadeImage {
   /// image made straight from the gallery, which has no transcript behind it.
   final String? conversationId;
 
+  final ImageOrigin origin;
+
   const MadeImage({
     required this.id,
     required this.prompt,
@@ -30,6 +53,7 @@ class MadeImage {
     required this.mimeType,
     required this.createdAt,
     this.conversationId,
+    this.origin = ImageOrigin.made,
   });
 
   /// The name it downloads as. Derived rather than stored, so a rule change
@@ -42,6 +66,11 @@ class MadeImage {
   /// what the picture *is*. Exactly the defect v1 fixed once and this
   /// rediscovered by looking at a real save dialog.
   String get filename {
+    // An attached picture already has a name and it is the one the person
+    // recognises. Running it through the request-title rule would turn
+    // `holiday-2019.jpg` into something the app invented.
+    if (origin == ImageOrigin.attached && prompt.contains('.')) return prompt;
+
     final words = titleFromRequest(prompt, fallback: 'image')
         .toLowerCase()
         .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
@@ -61,6 +90,9 @@ class MadeImage {
         'mimeType': mimeType,
         'createdAt': createdAt.toIso8601String(),
         if (conversationId != null) 'conversationId': conversationId,
+        // Written only when it is not the default, so a picture stored by an
+        // earlier build reads back as what it was.
+        if (origin != ImageOrigin.made) 'origin': origin.name,
       };
 
   static MadeImage? fromJson(Object? raw) {
@@ -78,6 +110,7 @@ class MadeImage {
       createdAt: created,
       conversationId:
           raw['conversationId'] is String ? raw['conversationId'] as String : null,
+      origin: ImageOrigin.fromName(raw['origin'] as String?),
     );
   }
 }

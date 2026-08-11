@@ -460,7 +460,7 @@ class TurnController extends ChangeNotifier {
       Capability.image: ImageExecutor(
         usable: usable,
         access: access,
-        sourceBytes: images?.bytes,
+        sourceBytes: images?.sourceFor,
       ),
     };
   }

@@ -134,7 +134,8 @@ void main() {
 
   group('the executor', () {
     ImageExecutor executor({
-      required Future<Uint8List?> Function(String) source,
+      required Future<({Uint8List bytes, String mimeType})?> Function(String)
+          source,
       required http.Client Function() client,
     }) =>
         ImageExecutor(
@@ -155,18 +156,25 @@ void main() {
 
     test('the picture reaches the provider', () async {
       Uint8List? sent;
+      String? sentType;
       final events = await executor(
-        source: (_) async => Uint8List.fromList([9, 9, 9]),
+        source: (_) async =>
+            (bytes: Uint8List.fromList([9, 9, 9]), mimeType: 'image/jpeg'),
         client: () => _Records((body) {
           final parts = ((jsonDecode(body)['contents'] as List).first
               as Map<String, dynamic>)['parts'] as List;
           final inline = (parts.first as Map)['inline_data'] as Map?;
-          if (inline != null) sent = base64Decode('${inline['data']}');
+          if (inline != null) {
+            sent = base64Decode('${inline['data']}');
+            sentType = '${inline['mime_type']}';
+          }
         }),
       ).run(step, const {}).toList();
 
       expect(sent, [9, 9, 9],
           reason: 'an edit that silently drops its source is a new picture');
+      expect(sentType, 'image/jpeg',
+          reason: 'telling a provider a JPEG is a PNG gets it rejected');
       expect(events.whereType<StepCompleted>(), hasLength(1));
     });
 
