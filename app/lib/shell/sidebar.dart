@@ -3,7 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
+import '../data/artifact_store.dart';
 import '../data/conversation_store.dart';
+import '../features/chat/delete_conversation.dart';
 import '../features/chat/turn_controller.dart';
 import '../features/settings/settings_screen.dart';
 
@@ -89,6 +91,19 @@ class Sidebar extends StatelessWidget {
                           turn.open(saved[i].id);
                           onDismiss?.call();
                         },
+                        onDelete: () async {
+                          if (!await confirmDelete(context, saved[i].title)) {
+                            return;
+                          }
+                          if (!context.mounted) return;
+                          await deleteConversation(
+                            saved[i].id,
+                            conversations:
+                                context.read<ConversationStore>(),
+                            artifacts: context.read<ArtifactStore>(),
+                            turn: turn,
+                          );
+                        },
                       ),
                     ),
             ),
@@ -163,8 +178,14 @@ class _Row extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
 
-  const _Row({required this.label, required this.selected, this.onTap});
+  const _Row({
+    required this.label,
+    required this.selected,
+    this.onTap,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -183,13 +204,34 @@ class _Row extends StatelessWidget {
             color: selected ? c.surfaceRaised : Colors.transparent,
             borderRadius: BorderRadius.circular(Radii.sm),
           ),
-          padding: const EdgeInsets.symmetric(
-              horizontal: Space.md, vertical: Space.sm),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: text.bodyMedium?.copyWith(color: c.text),
+          padding: const EdgeInsets.only(left: Space.md),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.bodyMedium?.copyWith(color: c.text),
+                ),
+              ),
+              // Always visible rather than revealed on hover: there is no
+              // hover on a phone, and a control you can only find with a
+              // mouse is a control half the users do not have.
+              if (onDelete != null)
+                SizedBox(
+                  width: kMinTouchTarget,
+                  height: kMinTouchTarget,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    iconSize: 16,
+                    color: c.textFaint,
+                    tooltip: 'Delete',
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline_rounded),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
