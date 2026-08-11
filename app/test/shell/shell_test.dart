@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:shift/core/design/metrics.dart';
 import 'package:shift/core/design/theme.dart';
 import 'package:shift/data/api_keys_store.dart';
+import 'package:shift/data/artifact_store.dart';
 import 'package:shift/data/asset_store.dart';
 import 'package:shift/data/image_store.dart';
 import 'package:shift/data/agent_store.dart';
@@ -15,6 +16,8 @@ import 'package:shift/features/chat/chat_surface.dart';
 import 'package:shift/features/code/code_surface.dart';
 import 'package:shift/features/notes/notes_surface.dart';
 import 'package:shift/features/chat/turn_controller.dart';
+import 'package:shift/features/design/design_surface.dart';
+import 'package:shift/features/design/design_turns.dart';
 import 'package:shift/features/visual/visual_surface.dart';
 import 'package:shift/features/visual/visual_turns.dart';
 import 'package:shift/shell/app_shell.dart';
@@ -38,6 +41,13 @@ Widget _app({
         ChangeNotifierProvider(create: (_) => NoteCleaner()),
         ChangeNotifierProvider(
           create: (_) => ImageStore(KvStore(), AssetStore()),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => DesignTurns(
+            keys: ApiKeysStore(KvStore()),
+            conversations: ConversationStore(KvStore()),
+            artifacts: ArtifactStore(KvStore()),
+          ),
         ),
         ChangeNotifierProvider(
           create: (_) => VisualTurns(
@@ -144,6 +154,8 @@ void main() {
           expect(find.byType(NotesSurface), findsOneWidget);
         } else if (mode == AppMode.visual) {
           expect(find.byType(VisualSurface), findsOneWidget);
+        } else if (mode == AppMode.design) {
+          expect(find.byType(DesignSurface), findsOneWidget);
         } else {
           // The blurb is unique per mode, so finding it in the body proves the
           // surface changed rather than the label merely highlighting.

@@ -50,6 +50,15 @@ class JobStep {
   /// to decide.
   final String? aspectRatio;
 
+  /// Standing instructions for how this step's output should be made, as
+  /// opposed to what it should say.
+  ///
+  /// Decided by the planner from the mode, and merged into the system prompt
+  /// by the executor rather than into [instruction]: it is not part of the
+  /// request, and putting it there would make it something the model could
+  /// answer *about* instead of follow.
+  final String? brief;
+
   const JobStep({
     required this.id,
     required this.needs,
@@ -59,6 +68,7 @@ class JobStep {
     this.after = const [],
     this.editing,
     this.aspectRatio,
+    this.brief,
   });
 
   @override

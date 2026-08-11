@@ -5,6 +5,7 @@ import '../core/design/metrics.dart';
 import '../core/design/palette.dart';
 import 'mode.dart';
 import 'mode_menu.dart';
+import '../features/design/design_surface.dart';
 import '../features/visual/visual_surface.dart';
 import 'mode_placeholder.dart';
 import 'sidebar.dart';
@@ -149,7 +150,7 @@ class _ModeBody extends StatelessWidget {
       AppMode.chat => const ChatSurface(),
       AppMode.code => const CodeSurface(),
       AppMode.visual => const VisualSurface(),
-      AppMode.design => const ModePlaceholder(mode: AppMode.design, wave: 'N5'),
+      AppMode.design => const DesignSurface(),
       AppMode.work => const ModePlaceholder(mode: AppMode.work, wave: 'N10'),
       AppMode.notes => const NotesSurface(),
     };

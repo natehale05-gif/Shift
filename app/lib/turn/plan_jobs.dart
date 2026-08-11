@@ -1,5 +1,6 @@
 import '../shell/mode.dart';
 import 'capability.dart';
+import 'design_brief.dart';
 import 'job_graph.dart';
 import 'job_output.dart';
 import 'turn_request.dart';
@@ -103,6 +104,10 @@ JobGraph planJobs(TurnRequest request) {
     produces: OutputKind.text,
     instruction: request.prompt,
     label: wantsPage ? 'Building' : 'Thinking',
+    // Design mode's whole reason to exist. Carried on the step rather than
+    // folded into the request, so what the model is *asked* stays exactly
+    // what the person typed.
+    brief: request.mode == AppMode.design ? kDesignBrief : null,
     after: [
       if (wantsSearch) 'search',
       if (wantsPicture && wantsBoth) 'image',

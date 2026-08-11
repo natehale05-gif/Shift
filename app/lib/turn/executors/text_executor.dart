@@ -93,7 +93,13 @@ class TextExecutor implements StepExecutor {
     // makes the two-provider turn actually collaborative: without it the page
     // step would run *after* the image and know nothing about it, which reads
     // identically in a log and is not the feature.
-    final context = _describe(inputs);
+    // The brief first, then what upstream steps produced. Order matters for
+    // a long system prompt: standing instructions read as rules when they
+    // come before the material and as suggestions when they come after it.
+    final parts = [step.brief, _describe(inputs)]
+        .whereType<String>()
+        .where((part) => part.isNotEmpty);
+    final context = parts.isEmpty ? null : parts.join('\n\n');
 
     // Dispatch on the *wire*, not on the provider: four of these speak the
     // same protocol and differ only in a base URL, so there is one client for
