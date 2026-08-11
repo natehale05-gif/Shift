@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../data/agent_run.dart';
+import 'hunk_view.dart';
+import 'run_changes.dart';
 
 /// One entry of a transcript.
 ///
@@ -13,13 +15,26 @@ import '../../data/agent_run.dart';
 class RunEntryView extends StatelessWidget {
   final RunEntry entry;
 
-  const RunEntryView({super.key, required this.entry});
+  /// The diff to show under this row, when it is an edit and there is one.
+  ///
+  /// Passed in rather than computed here: the screen reads every changed file
+  /// once, and a widget that went to disk on every rebuild would read them on
+  /// every frame of a running agent.
+  ///
+  /// Attached to the **last** row that touched a given file, not to every one.
+  /// The baseline is captured once per run rather than once per edit, so what
+  /// exists is the file's whole change — showing it under all three of three
+  /// edits would print the same diff three times and imply each edit did all
+  /// of it.
+  final FileChange? change;
+
+  const RunEntryView({super.key, required this.entry, this.change});
 
   @override
   Widget build(BuildContext context) => switch (entry) {
         RunAsked(:final text) => _Asked(text: text),
         RunSaid(:final text) => _Said(text: text),
-        final RunTool tool => _Tool(entry: tool),
+        final RunTool tool => _Tool(entry: tool, change: change),
         final RunEnded ended => _Ended(entry: ended),
       };
 }
@@ -81,8 +96,9 @@ class _Said extends StatelessWidget {
 /// result is behind a tap for when following is not enough.
 class _Tool extends StatefulWidget {
   final RunTool entry;
+  final FileChange? change;
 
-  const _Tool({required this.entry});
+  const _Tool({required this.entry, this.change});
 
   @override
   State<_Tool> createState() => _ToolState();
@@ -156,6 +172,22 @@ class _ToolState extends State<_Tool> {
                       const Spacer(),
                   ],
                 ),
+                // The diff where the edit happened, in the story of the run —
+                // which is the half of a review people actually read.
+                if (widget.change case final change?)
+                  Padding(
+                    padding: const EdgeInsets.only(top: Space.xs),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final hunk in change.hunks)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: Space.xs),
+                            child: HunkView(hunk: hunk, showHeader: false),
+                          ),
+                      ],
+                    ),
+                  ),
                 if (_open && entry.result != null)
                   Padding(
                     padding: const EdgeInsets.only(top: Space.xs, left: 22),

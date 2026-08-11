@@ -115,8 +115,23 @@ class AgentRun {
   final String agentId;
   final List<RunEntry> entries;
 
-  AgentRun({required this.agentId, List<RunEntry>? entries})
-      : entries = entries ?? [];
+  /// Each touched file as it was **before this run first touched it**.
+  ///
+  /// First touch wins, deliberately. Recording the content before every write
+  /// would mean the second edit to a file diffs against the first edit's
+  /// output, and the run would appear to have done less than it did.
+  ///
+  /// Kept beside the entries rather than inside them, and stored under its own
+  /// key: these are whole files, and the list screens decode transcripts
+  /// constantly.
+  final Map<String, String> baseline;
+
+  AgentRun({
+    required this.agentId,
+    List<RunEntry>? entries,
+    Map<String, String>? baseline,
+  })  : entries = entries ?? [],
+        baseline = baseline ?? {};
 
   /// Every file the run touched, in the order it first touched them.
   ///
@@ -135,10 +150,16 @@ class AgentRun {
 
   List<Map<String, dynamic>> toJson() => [for (final e in entries) e.toJson()];
 
-  static AgentRun fromJson(String agentId, Object? raw) => AgentRun(
+  static AgentRun fromJson(
+    String agentId,
+    Object? raw, {
+    Map<String, String>? baseline,
+  }) =>
+      AgentRun(
         agentId: agentId,
         entries: [
           for (final entry in raw is List ? raw : const []) ?RunEntry.fromJson(entry),
         ],
+        baseline: baseline,
       );
 }

@@ -186,7 +186,20 @@ class ToolResult {
   /// the model never sees this.
   final String? changedPath;
 
-  const ToolResult(this.text, {this.isError = false, this.changedPath});
+  /// [changedPath]'s contents *before* this call, empty for a file that did not
+  /// exist. The other half of a diff, and the only moment it can be had —
+  /// afterwards the old version is gone.
+  ///
+  /// Never sent to the model. It is here because this is the one place in the
+  /// program that holds both versions of a file.
+  final String? previousContent;
+
+  const ToolResult(
+    this.text, {
+    this.isError = false,
+    this.changedPath,
+    this.previousContent,
+  });
 }
 
 /// Runs one tool call against a workspace.
@@ -215,9 +228,22 @@ Future<ToolResult> runTool(
                 '[truncated — file is ${text.length} characters]');
 
       case 'write_file':
+        // Read before writing, purely to keep the old version for the diff.
+        // A `try` rather than an existence check: between the check and the
+        // read the answer can change, and "it was not there" and "we could not
+        // read it" both mean the same thing here — there is no before.
+        String previous;
+        try {
+          previous = await workspace.readText(arg('path'));
+        } catch (_) {
+          previous = '';
+        }
         await workspace.writeText(arg('path'), arg('contents'));
-        return ToolResult('Wrote ${arg('path')}.',
-            changedPath: arg('path'));
+        return ToolResult(
+          'Wrote ${arg('path')}.',
+          changedPath: arg('path'),
+          previousContent: previous,
+        );
 
       case 'edit_file':
         final path = arg('path');
@@ -244,7 +270,12 @@ Future<ToolResult> runTool(
         }
 
         await workspace.writeText(path, current.replaceFirst(old, replacement));
-        return ToolResult('Edited $path.', changedPath: path);
+        return ToolResult(
+          'Edited $path.',
+          changedPath: path,
+          // Already in hand: the occurrence count needed it.
+          previousContent: current,
+        );
 
       case 'glob':
         final found = await workspace.glob(arg('pattern'));

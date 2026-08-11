@@ -17,6 +17,13 @@ import 'kv_store.dart';
 class AgentRunStore {
   static const _prefix = 'code.run.';
 
+  /// Baselines live under their own key, not inside the transcript.
+  ///
+  /// They are whole files — the largest thing this app stores — and every list
+  /// screen decodes transcripts to render its rows. Sharing one value would
+  /// mean opening the Inbox parses every file the agent ever touched.
+  static const _baselinePrefix = 'code.baseline.';
+
   final KvStore _kv;
 
   const AgentRunStore(this._kv);
@@ -24,6 +31,9 @@ class AgentRunStore {
   Future<void> load() => _kv.load();
 
   /// The transcript for [agentId], or an empty one when it has never run.
+  ///
+  /// Baselines are **not** read here. The lists want the entries; only the
+  /// review wants the file contents, and it asks for them by name.
   AgentRun read(String agentId) {
     final raw = _kv.get('$_prefix$agentId');
     if (raw == null) return AgentRun(agentId: agentId);
@@ -36,8 +46,34 @@ class AgentRunStore {
     }
   }
 
+  /// Each file as it was before this run first touched it.
+  Map<String, String> readBaseline(String agentId) {
+    final raw = _kv.get('$_baselinePrefix$agentId');
+    if (raw == null) return {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return {};
+      return {
+        for (final entry in decoded.entries)
+          if (entry.value is String) '${entry.key}': entry.value as String,
+      };
+    } catch (_) {
+      // Losing a baseline costs the diff, not the file. The agent's work is on
+      // disk either way; what goes is the ability to say what it replaced.
+      return {};
+    }
+  }
+
   Future<void> write(AgentRun run) =>
       _kv.put('$_prefix${run.agentId}', jsonEncode(run.toJson()));
 
-  Future<void> remove(String agentId) => _kv.remove('$_prefix$agentId');
+  Future<void> writeBaseline(AgentRun run) => _kv.put(
+        '$_baselinePrefix${run.agentId}',
+        jsonEncode(run.baseline),
+      );
+
+  Future<void> remove(String agentId) async {
+    await _kv.remove('$_prefix$agentId');
+    await _kv.remove('$_baselinePrefix$agentId');
+  }
 }

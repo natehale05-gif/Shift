@@ -22,6 +22,7 @@ void main() {
   late KvStore kv;
   late AgentStore agents;
   late AgentRunStore runs;
+  late AgentRunner runner;
 
   setUp(() async {
     dir = await Directory.systemTemp.createTemp('shift-screen');
@@ -29,6 +30,7 @@ void main() {
     await kv.load();
     agents = AgentStore(kv);
     runs = AgentRunStore(kv);
+    runner = AgentRunner(agents: agents, runs: runs);
     await agents.addWorkspace(
       LocalFolder(id: 'w1', name: 'repo', path: dir.path),
     );
@@ -44,15 +46,34 @@ void main() {
     if (await dir.exists()) await dir.delete(recursive: true);
   });
 
-  Future<void> pump(WidgetTester tester, {List<RunEntry> entries = const []}) async {
+  /// Seeds a transcript and, when the entries claim to have changed files, the
+  /// files themselves.
+  ///
+  /// The Changes card reads the real workspace now, so a transcript naming a
+  /// path that is not on disk produces no diff — correctly. Fixtures that
+  /// declared changes without making any were passing for the wrong reason.
+  Future<void> pump(
+    WidgetTester tester, {
+    List<RunEntry> entries = const [],
+    Map<String, (String before, String after)> files = const {},
+  }) async {
     // Real disk inside `testWidgets` deadlocks against the fake async clock
     // unless it is run outside it. This has cost this suite two hangs.
     await tester.runAsync(() async {
-      final run = AgentRun(agentId: 'a1', entries: [...entries]);
+      final run = AgentRun(
+        agentId: 'a1',
+        entries: [...entries],
+        baseline: {for (final e in files.entries) e.key: e.value.$1},
+      );
       await runs.write(run);
+      await runs.writeBaseline(run);
+      for (final entry in files.entries) {
+        final file = File('${dir.path}/${entry.key}');
+        await file.parent.create(recursive: true);
+        await file.writeAsString(entry.value.$2);
+      }
     });
 
-    final runner = AgentRunner(agents: agents, runs: runs);
     await tester.pumpWidget(MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: agents),
@@ -67,6 +88,19 @@ void main() {
     await tester.pump();
   }
 
+  /// Reads the diffs the way the screen does, then rebuilds.
+  ///
+  /// The read has to happen in [WidgetTester.runAsync] because it is real
+  /// `dart:io`, which the test clock never advances — a future started inside a
+  /// `build` would sit unresolved for the whole test and the card would render
+  /// as permanently empty. Asking the runner directly is also closer to the
+  /// truth: the runner owns the answer, and both screens only read it.
+  Future<void> settleDisk(WidgetTester tester) async {
+    await tester.runAsync(
+        () => runner.refreshChanges(agents.agent('a1')!));
+    await tester.pump();
+  }
+
   testWidgets('the title is the agent, and the transcript is what it did',
       (tester) async {
     await pump(tester, entries: [
@@ -75,7 +109,10 @@ void main() {
       RunTool(tool: 'edit_file', input: const {'path': 'lib/greeting.dart'})
         ..result = 'Edited lib/greeting.dart.'
         ..changedPath = 'lib/greeting.dart',
-    ]);
+    ], files: {
+      'lib/greeting.dart': ("const hello = 'hi';\n", "const hello = 'hey';\n"),
+    });
+    await settleDisk(tester);
 
     expect(find.text('Rename the greeting'), findsOneWidget);
     expect(find.text('rename the greeting'), findsOneWidget);
@@ -101,16 +138,25 @@ void main() {
     expect(tester.getSize(find.byType(ChangesCard)).height, 0);
   });
 
-  testWidgets('the files it touched are listed, once each', (tester) async {
+  testWidgets('the files it touched are listed with what it did to each',
+      (tester) async {
     await pump(tester, entries: [
       RunTool(tool: 'write_file', input: const {})..changedPath = 'a.dart',
       RunTool(tool: 'edit_file', input: const {})..changedPath = 'a.dart',
       RunTool(tool: 'edit_file', input: const {})..changedPath = 'b.dart',
-    ]);
+    ], files: {
+      'a.dart': ('one\n', 'ONE\ntwo\n'),
+      'b.dart': ('keep\n', 'keep\n'),
+    });
+    await settleDisk(tester);
 
     expect(find.textContaining('Changes'), findsOneWidget);
-    expect(find.textContaining('  2'), findsOneWidget);
+    // Only `a.dart`: `b.dart` is identical to its baseline, so it is not a
+    // changed file however many tools touched it.
+    expect(find.textContaining('  1'), findsOneWidget);
     expect(find.text('a.dart'), findsOneWidget);
+    expect(find.text('+2 -1'), findsWidgets);
+    expect(find.text('b.dart'), findsNothing);
   });
 
   testWidgets('a failure is shown with the fact behind it', (tester) async {

@@ -37,11 +37,16 @@ class AgentUsed extends AgentEvent {
   /// The file this touched, if any. What the diff review is built from.
   final String? changedPath;
 
+  /// [changedPath] as it was before this call. Carried through because the
+  /// moment after the write is too late to ask.
+  final String? previousContent;
+
   const AgentUsed(
     this.tool,
     this.result, {
     this.isError = false,
     this.changedPath,
+    this.previousContent,
   });
 }
 
@@ -154,6 +159,7 @@ sentences, and do not claim anything you have not verified.''';
           outcome.text,
           isError: outcome.isError,
           changedPath: outcome.changedPath,
+          previousContent: outcome.previousContent,
         );
 
         results.add({

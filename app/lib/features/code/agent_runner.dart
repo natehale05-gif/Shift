@@ -13,6 +13,7 @@ import '../../data/agent_run_store.dart';
 import '../../data/agent_store.dart';
 import '../../data/api_keys_store.dart';
 import '../../providers/access.dart';
+import 'run_changes.dart';
 
 /// Whether a workspace can be worked in here, and what to say when it cannot.
 ///
@@ -45,6 +46,14 @@ class AgentRunner extends ChangeNotifier {
   final String model;
 
   final Map<String, AgentRun> _open = {};
+
+  /// What each open run has changed, as of the last read.
+  ///
+  /// Held here rather than in a `FutureBuilder` on each screen, for two
+  /// reasons that turned out to be the same one: the transcript and the diff
+  /// screen both need it, and a revert on one has to be visible on the other.
+  /// A future per widget gives two answers that drift.
+  final Map<String, List<FileChange>> _changes = {};
   final Map<String, StreamSubscription<AgentEvent>> _live = {};
 
   /// Every write, in order, one at a time.
@@ -93,8 +102,56 @@ class AgentRunner extends ChangeNotifier {
       };
 
   /// The transcript for [agentId], read from disk on first ask.
-  AgentRun runFor(String agentId) =>
-      _open[agentId] ??= runs.read(agentId);
+  ///
+  /// Baselines come with it here, unlike in the store, because anything holding
+  /// a live run may be about to diff it.
+  AgentRun runFor(String agentId) => _open[agentId] ??= AgentRun(
+        agentId: agentId,
+        entries: runs.read(agentId).entries,
+        baseline: runs.readBaseline(agentId),
+      );
+
+  /// The working copy for [agent]'s workspace, or the reason there is none.
+  ///
+  /// Exposed so the review can open the same copy the run used without
+  /// repeating the local-versus-server arm — one place decides what a
+  /// workspace opens to.
+  OpenedWorkspace workspaceFor(Agent agent) {
+    final workspace = agents.workspace(agent.workspaceId);
+    if (workspace == null) {
+      return (workspace: null, refusal: 'That workspace has been removed.');
+    }
+    return openWorkspace(workspace);
+  }
+
+  /// What [agentId] has changed, as of the last [refreshChanges].
+  ///
+  /// Synchronous and possibly empty: a screen paints what is known now and is
+  /// rebuilt when the read lands, rather than holding a spinner over a
+  /// transcript that is perfectly readable without its diffs.
+  List<FileChange> changesOf(String agentId) =>
+      List.unmodifiable(_changes[agentId] ?? const []);
+
+  /// Re-reads what [agent] changed. Cheap enough to call after every revert,
+  /// which is exactly when the answer moves.
+  Future<void> refreshChanges(Agent agent) async {
+    final workspace = workspaceFor(agent).workspace;
+    if (workspace == null) return;
+
+    final run = runFor(agent.id);
+    try {
+      _changes[agent.id] = await changesFor(
+        workspace: workspace,
+        paths: run.changedPaths,
+        baseline: run.baseline,
+      );
+    } catch (_) {
+      // A transcript that renders without its diffs is worth more than one
+      // that does not render.
+      _changes[agent.id] = const [];
+    }
+    notifyListeners();
+  }
 
   bool isRunning(String agentId) => _live.containsKey(agentId);
 
@@ -196,7 +253,12 @@ class AgentRunner extends ChangeNotifier {
       case AgentUsing(:final tool, :final input):
         run.entries.add(RunTool(tool: tool, input: input));
 
-      case AgentUsed(:final result, :final isError, :final changedPath):
+      case AgentUsed(
+          :final result,
+          :final isError,
+          :final changedPath,
+          :final previousContent
+        ):
         // Completed in place rather than appended, so a call appears once. The
         // newest running entry is the one that just finished — tools run
         // sequentially, which is what makes that true.
@@ -208,6 +270,11 @@ class AgentRunner extends ChangeNotifier {
               ..changedPath = changedPath;
             break;
           }
+        }
+        // First touch wins. The second edit to a file must not overwrite the
+        // record of what it looked like before the first.
+        if (changedPath != null && previousContent != null) {
+          run.baseline.putIfAbsent(changedPath, () => previousContent);
         }
 
       case AgentDone(:final reason, :final detail):
@@ -244,22 +311,58 @@ class AgentRunner extends ChangeNotifier {
     _live.remove(agent.id);
     return _serialise(() async {
       await runs.write(run);
+      await runs.writeBaseline(run);
       await _mark(
         agent,
         ok ? AgentStatus.needsAttention : AgentStatus.failed,
         note: note,
+        diff: await _countLines(agent, run),
       );
       notifyListeners();
     });
   }
 
-  Future<void> _mark(Agent agent, AgentStatus status, {String? note}) =>
+  /// What the run actually changed, in lines.
+  ///
+  /// Measured once, at the end, so every list row carries a real `+N -M`
+  /// instead of the `+0 -0` that has been there since the mode was built. Not
+  /// recomputed as the review reverts hunks — the row records what the *run*
+  /// did, and the diff screen is where what is left is counted.
+  Future<DiffStat> _countLines(Agent agent, AgentRun run) async {
+    final paths = run.changedPaths;
+    if (paths.isEmpty) return const DiffStat();
+
+    final opened = workspaceFor(agent);
+    final workspace = opened.workspace;
+    if (workspace == null) return const DiffStat();
+
+    try {
+      final changes = await changesFor(
+        workspace: workspace,
+        paths: paths,
+        baseline: run.baseline,
+      );
+      _changes[agent.id] = changes;
+      return totalOf(changes);
+    } catch (_) {
+      // A number nobody can produce is better absent than wrong, and a run that
+      // finished must not be reported as failed because counting it did not.
+      return const DiffStat();
+    }
+  }
+
+  Future<void> _mark(
+    Agent agent,
+    AgentStatus status, {
+    String? note,
+    DiffStat? diff,
+  }) =>
       agents.save(Agent(
         id: agent.id,
         title: agent.title,
         workspaceId: agent.workspaceId,
         status: status,
-        diff: agent.diff,
+        diff: diff ?? agent.diff,
         checksPassed: agent.checksPassed,
         note: note,
         updatedAt: DateTime.now(),
