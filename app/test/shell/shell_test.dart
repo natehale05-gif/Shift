@@ -7,8 +7,11 @@ import 'package:shift/data/api_keys_store.dart';
 import 'package:shift/data/agent_store.dart';
 import 'package:shift/data/conversation_store.dart';
 import 'package:shift/data/kv_store.dart';
+import 'package:shift/data/note_store.dart';
+import 'package:shift/features/notes/note_cleaner.dart';
 import 'package:shift/features/chat/chat_surface.dart';
 import 'package:shift/features/code/code_surface.dart';
+import 'package:shift/features/notes/notes_surface.dart';
 import 'package:shift/features/chat/turn_controller.dart';
 import 'package:shift/shell/app_shell.dart';
 import 'package:shift/shell/mode.dart';
@@ -27,6 +30,8 @@ Widget _app({
         ChangeNotifierProvider(create: (_) => ConversationStore(KvStore())),
         ChangeNotifierProvider(create: (_) => TurnController()),
         ChangeNotifierProvider(create: (_) => AgentStore(KvStore())),
+        ChangeNotifierProvider(create: (_) => NoteStore(KvStore())),
+        ChangeNotifierProvider(create: (_) => NoteCleaner()),
       ],
       child: MaterialApp(
         // The platform travels through the theme rather than through
@@ -122,6 +127,8 @@ void main() {
           // Code is the second built mode. It also brings its own surface, so
           // this is the one arm where the shell's paper changes with the mode.
           expect(find.byType(CodeSurface), findsOneWidget);
+        } else if (mode == AppMode.notes) {
+          expect(find.byType(NotesSurface), findsOneWidget);
         } else {
           // The blurb is unique per mode, so finding it in the body proves the
           // surface changed rather than the label merely highlighting.
@@ -156,7 +163,9 @@ void main() {
         ),
         findsOneWidget,
       );
-      expect(find.text(AppMode.notes.blurb), findsOneWidget);
+      // Notes is a built mode now, so the body is its surface rather than the
+      // placeholder that used to carry the blurb.
+      expect(find.byType(NotesSurface), findsOneWidget);
     });
   });
 

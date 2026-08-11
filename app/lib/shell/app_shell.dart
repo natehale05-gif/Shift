@@ -9,6 +9,7 @@ import 'mode_placeholder.dart';
 import 'sidebar.dart';
 import '../features/chat/chat_surface.dart';
 import '../features/code/code_surface.dart';
+import '../features/notes/notes_surface.dart';
 import 'shell_controller.dart';
 
 /// The frame every mode lives inside.
@@ -149,7 +150,7 @@ class _ModeBody extends StatelessWidget {
       AppMode.visual => const ModePlaceholder(mode: AppMode.visual, wave: 'N4'),
       AppMode.design => const ModePlaceholder(mode: AppMode.design, wave: 'N5'),
       AppMode.work => const ModePlaceholder(mode: AppMode.work, wave: 'N10'),
-      AppMode.notes => const ModePlaceholder(mode: AppMode.notes, wave: 'N3'),
+      AppMode.notes => const NotesSurface(),
     };
   }
 }

@@ -9,6 +9,7 @@ import 'data/agent_store.dart';
 import 'data/artifact_store.dart';
 import 'data/conversation_store.dart';
 import 'data/kv_store.dart';
+import 'data/note_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,10 +25,12 @@ Future<void> main() async {
   final artifacts = ArtifactStore(kv);
   final agents = AgentStore(kv);
   final runs = AgentRunStore(kv);
+  final notes = NoteStore(kv);
   await keys.load();
   await conversations.load();
   await artifacts.load();
   await agents.load();
+  await notes.load();
 
   runApp(ShiftApp(
     keys: keys,
@@ -35,6 +38,7 @@ Future<void> main() async {
     artifacts: artifacts,
     agents: agents,
     runs: runs,
+    notes: notes,
   ));
 
   // After the first real frame, not before: the HTML splash is what the user
