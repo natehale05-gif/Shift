@@ -13,7 +13,9 @@ import '../../data/note_store.dart';
 import '../../providers/registry.dart';
 import '../chat/turn_controller.dart';
 import '../work/work_runner.dart';
+import 'account_card.dart';
 import 'erase_everything.dart';
+import 'platform_keys_card.dart';
 import 'provider_key_field.dart';
 
 /// Where a key goes in.
@@ -52,6 +54,14 @@ class SettingsScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(Space.lg),
               children: [
+                // Above the personal keys, and only ever visible to a
+                // signed-in admin — it renders nothing for everyone else. It
+                // sits first because for the person who has it, it is the more
+                // consequential of the two: these are the keys every member
+                // spends.
+                const AccountCard(),
+                const PlatformKeysCard(),
+
                 Text('Provider keys', style: text.titleMedium),
                 const SizedBox(height: Space.xs),
                 Text(

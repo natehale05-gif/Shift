@@ -77,9 +77,46 @@ def betas_agree() -> bool:
     return False
 
 
+def v2_subset(server: set) -> bool:
+    """v2's list may be smaller, but may not name something the server won't take.
+
+    v1 must match the server exactly — it has a client for everything the proxy
+    forwards. v2 is still being built and covers six of the eight, so equality
+    would be the wrong test: it would fail for the honest reason that a client
+    does not exist yet.
+
+    What must hold is the direction that costs money. A provider v2 offers and
+    the server refuses sends a call out with no credential and answers 401,
+    which reads as a bad key rather than as a routing mistake. The other
+    direction — the server would forward it, v2 does not ask — costs nothing but
+    a feature nobody has yet.
+    """
+    path = ROOT / 'app' / 'lib' / 'providers' / 'proxyable.dart'
+    if not path.exists():
+        return True
+
+    block = re.search(
+        r'const Set<String> proxyableProviders = \{(.*?)\};',
+        path.read_text(), re.S)
+    if not block:
+        raise SystemExit('app/lib/providers/proxyable.dart: no proxyableProviders')
+
+    v2 = set(re.findall(r"'([\w-]+)'", block.group(1)))
+    extra = v2 - server
+    if not extra:
+        print(f'v2 proxyable providers are covered ({len(v2)}): '
+              f'{", ".join(sorted(v2))}')
+        return True
+
+    print('FAIL: v2 offers providers the proxy will not forward', file=sys.stderr)
+    for name in sorted(extra):
+        print(f'  {name}', file=sys.stderr)
+    return False
+
+
 def main() -> int:
     client, server = dart_set(), js_keys()
-    ok = betas_agree()
+    ok = betas_agree() and v2_subset(server)
 
     if client == server:
         print(f'proxyable providers agree ({len(client)}): '

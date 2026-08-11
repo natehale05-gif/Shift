@@ -1,8 +1,15 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'core/design/theme.dart';
+import 'backend/backend_config.dart';
+import 'backend/no_backend.dart';
+import 'backend/shift_backend.dart';
+import 'backend/supabase_backend.dart';
+import 'data/account_store.dart';
 import 'data/api_keys_store.dart';
 import 'data/agent_run_store.dart';
 import 'data/agent_store.dart';
@@ -38,6 +45,47 @@ class ShiftApp extends StatelessWidget {
   /// one action that has to reach all of them at once.
   final KvStore kv;
 
+  /// Which host is behind the app, chosen here and nowhere else.
+  ///
+  /// The composition root is the one place `tool/scan_backend_boundary.py`
+  /// allows to name an implementation — everything above talks to
+  /// [ShiftBackend]. [NoBackend] is not a stub: signed-out on local keys is a
+  /// supported way to run, and it is how the public demo runs permanently.
+  static ShiftBackend backendFor(KvStore kv) {
+    final config = BackendConfig.fromEnvironment();
+    if (config == null) return NoBackend();
+
+    return SupabaseBackend(
+      config: config,
+      // The session is a short string like everything else this store holds,
+      // and it has to survive a reload — otherwise signing in would be a
+      // per-tab act, and on a phone that is every time the browser is
+      // reclaimed.
+      onSessionChanged: (session) async {
+        if (session == null) {
+          await kv.remove(_sessionKey);
+        } else {
+          await kv.put(_sessionKey, jsonEncode(session.toJson()));
+        }
+      },
+      loadStoredSession: () async {
+        final stored = kv.get(_sessionKey);
+        if (stored == null) return null;
+        try {
+          return ShiftSession.fromJson(
+              jsonDecode(stored) as Map<String, dynamic>);
+        } catch (_) {
+          // A session written by an older build, or a truncated write. Treated
+          // as signed out rather than as a crash: the remedy is signing in,
+          // which is one tap, and the alternative is an app that will not open.
+          return null;
+        }
+      },
+    );
+  }
+
+  static const _sessionKey = 'account.session';
+
   const ShiftApp({
     super.key,
     required this.keys,
@@ -58,6 +106,9 @@ class ShiftApp extends StatelessWidget {
       providers: [
         Provider<KvStore>.value(value: kv),
         ChangeNotifierProvider(create: (_) => ShellController()),
+        ChangeNotifierProvider(
+          create: (_) => AccountStore(backend: backendFor(kv))..restore(),
+        ),
         ChangeNotifierProvider.value(value: keys),
         ChangeNotifierProvider.value(value: conversations),
         ChangeNotifierProvider.value(value: artifacts),
