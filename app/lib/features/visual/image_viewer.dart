@@ -6,6 +6,7 @@ import '../../core/design/metrics.dart';
 import '../../core/platform/save_file.dart';
 import '../../data/image_store.dart';
 import 'made_image_view.dart';
+import 'visual_turns.dart';
 
 /// Opens one picture full-size, with the things you do to a picture.
 ///
@@ -75,6 +76,18 @@ class ImageViewer extends StatelessWidget {
                   if (saved) _say(context, 'Saved.');
                 },
               ),
+              // Editing is picked, not inferred. "Make it night" after four
+              // pictures is genuinely ambiguous, and guessing wrong spends
+              // money changing the wrong one while looking like it worked.
+              if (context.read<VisualTurns?>() != null)
+                _Action(
+                  icon: Icons.auto_fix_high_rounded,
+                  label: 'Change it',
+                  onTap: () async {
+                    context.read<VisualTurns>().editImage(id);
+                    Navigator.of(context).pop();
+                  },
+                ),
               if (prompt.isNotEmpty)
                 _Action(
                   icon: Icons.copy_rounded,

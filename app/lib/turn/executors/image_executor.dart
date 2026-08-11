@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import '../../providers/access.dart';
 import '../../providers/clients/gemini_image.dart';
 import '../../providers/select.dart';
@@ -20,10 +22,19 @@ class ImageExecutor implements StepExecutor {
   final String? pinned;
   final GeminiImage gemini;
 
+  /// Resolves a stored picture the step is editing.
+  ///
+  /// A function rather than the store, so this stays testable with no disk and
+  /// so `turn/` keeps not importing `data/`. Null when there is nothing behind
+  /// the id, which is a real state — the picture may have been deleted between
+  /// choosing it and sending.
+  final Future<Uint8List?> Function(String imageId)? sourceBytes;
+
   ImageExecutor({
     required this.usable,
     required this.access,
     this.pinned,
+    this.sourceBytes,
     GeminiImage? gemini,
   }) : gemini = gemini ?? GeminiImage();
 
@@ -61,11 +72,29 @@ class ImageExecutor implements StepExecutor {
       return;
     }
 
+    // Resolved here rather than carried on the plan, so a plan stays a small
+    // comparable value. Refused rather than quietly generated: someone who
+    // asked to change *this* picture and got a new unrelated one has been
+    // charged for the wrong thing and has to notice it themselves.
+    Uint8List? source;
+    if (step.editing case final id?) {
+      source = await sourceBytes?.call(id);
+      if (source == null) {
+        yield StepFailed(
+          step.id,
+          reason: 'That picture is no longer on this device, so there is '
+              'nothing to change. Describing it again will make a new one.',
+        );
+        return;
+      }
+    }
+
     yield* switch (choice.provider.id) {
       'gemini' => gemini.generate(
           stepId: step.id,
           access: credential,
           prompt: step.instruction,
+          source: source,
         ),
       // OpenAI images land with the rest of that client. A provider that was
       // selected and cannot be dispatched says so, rather than failing further

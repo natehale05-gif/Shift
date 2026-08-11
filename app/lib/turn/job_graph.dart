@@ -31,6 +31,17 @@ class JobStep {
   /// "Drawing the hero image", not "image_step_2".
   final String label;
 
+  /// A stored thing this step is *changing* rather than making.
+  ///
+  /// Deliberately an id and not bytes: a plan is a value that gets compared,
+  /// logged and held, and putting a megabyte of picture inside one would make
+  /// every one of those expensive. The executor resolves it.
+  ///
+  /// Distinct from [after], which names a step in *this* graph. An edit source
+  /// was made by an earlier turn, possibly weeks ago, so the graph has nothing
+  /// to point at.
+  final String? editing;
+
   const JobStep({
     required this.id,
     required this.needs,
@@ -38,6 +49,7 @@ class JobStep {
     required this.instruction,
     required this.label,
     this.after = const [],
+    this.editing,
   });
 
   @override

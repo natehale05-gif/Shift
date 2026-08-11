@@ -181,6 +181,19 @@ class TurnController extends ChangeNotifier {
   /// describe.
   final List<String> attachedNotes = [];
 
+  /// The picture the **next** message changes, if any.
+  ///
+  /// Held here rather than in the composer for the same reason attachments
+  /// are: the composer is rebuilt constantly and a selection that vanished
+  /// mid-sentence would be a bug nobody could describe.
+  String? get editingImage => _editingImage;
+  String? _editingImage;
+
+  void editImage(String? id) {
+    _editingImage = id;
+    notifyListeners();
+  }
+
   void attachNotes(List<String> ids) {
     attachedNotes
       ..clear()
@@ -202,7 +215,7 @@ class TurnController extends ChangeNotifier {
     this.snapshotEvery = const Duration(seconds: 3),
   }) {
     this.executors =
-        executors ?? () => _fromKeys(keys, () => _conversationId ?? '');
+        executors ?? () => _fromKeys(keys, () => _conversationId ?? '', images);
   }
 
   /// Where deliverables are kept. Optional, like [conversations], so a test can
@@ -429,6 +442,7 @@ class TurnController extends ChangeNotifier {
   static Map<Capability, StepExecutor> _fromKeys(
     ApiKeysStore? keys,
     String Function() conversationId,
+    ImageStore? images,
   ) {
     bool usable(String id) => keys?.has(id) ?? false;
 
@@ -443,7 +457,11 @@ class TurnController extends ChangeNotifier {
         access: access,
         conversationId: conversationId,
       ),
-      Capability.image: ImageExecutor(usable: usable, access: access),
+      Capability.image: ImageExecutor(
+        usable: usable,
+        access: access,
+        sourceBytes: images?.bytes,
+      ),
     };
   }
 
@@ -485,8 +503,19 @@ class TurnController extends ChangeNotifier {
     ];
     attachedNotes.clear();
 
-    final graph =
-        planJobs(TurnRequest(input: text, mode: mode, context: attached));
+    // Consumed by this turn and then cleared, like the attachments: the next
+    // message is a new request unless the person picks a picture again. A
+    // selection that persisted would silently turn every follow-up into
+    // another edit of the same image.
+    final editing = _editingImage;
+    _editingImage = null;
+
+    final graph = planJobs(TurnRequest(
+      input: text,
+      mode: mode,
+      context: attached,
+      editingImage: editing,
+    ));
     final stream = JobRunner(executors()).run(graph);
 
     final done = Completer<void>();

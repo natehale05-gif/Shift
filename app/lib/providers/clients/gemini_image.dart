@@ -47,11 +47,32 @@ class GeminiImage {
           ),
       };
 
-  static Map<String, dynamic> buildBody(String prompt) => {
+  /// The request body.
+  ///
+  /// [source] turns generation into editing: the same endpoint takes the
+  /// picture as an `inline_data` part beside the instruction, and the reply is
+  /// a new picture rather than a description of the change. **The image goes
+  /// first.** The order of parts is not cosmetic here — an instruction ahead
+  /// of its subject reads as a request for something new, and the difference
+  /// between "make it night" over a photo and "make it night" alone is which
+  /// one the model is looking at.
+  static Map<String, dynamic> buildBody(
+    String prompt, {
+    Uint8List? source,
+    String sourceMimeType = 'image/png',
+  }) =>
+      {
         'contents': [
           {
             'role': 'user',
             'parts': [
+              if (source != null)
+                {
+                  'inline_data': {
+                    'mime_type': sourceMimeType,
+                    'data': base64Encode(source),
+                  }
+                },
               {'text': prompt}
             ],
           }
@@ -65,6 +86,8 @@ class GeminiImage {
     required String stepId,
     required ProviderAccess access,
     required String prompt,
+    Uint8List? source,
+    String sourceMimeType = 'image/png',
   }) async* {
     final target = _target(access);
     final client = _clientFactory();
@@ -74,7 +97,8 @@ class GeminiImage {
       response = await client.post(
         target.uri,
         headers: target.headers,
-        body: jsonEncode(buildBody(prompt)),
+        body: jsonEncode(buildBody(prompt,
+            source: source, sourceMimeType: sourceMimeType)),
       );
     } catch (_) {
       yield StepFailed(stepId, reason: 'Could not reach the image provider.');

@@ -29,6 +29,19 @@ class TurnRequest {
   /// [planJobs] matches on [input] and sends [prompt].
   final List<TurnContext> context;
 
+  /// A picture this turn is changing rather than making.
+  ///
+  /// Set by the surface — you pick the picture, then say what to change —
+  /// rather than inferred from the words. Inferring it was the other option
+  /// and it is the worse one: "make it night" after four pictures is genuinely
+  /// ambiguous, and guessing wrong spends money to edit the wrong thing while
+  /// looking like it worked.
+  ///
+  /// **Not part of routing.** An edit is still an image job because the words
+  /// or the mode say so; this only says which picture. So [planJobs] matches
+  /// on [input] exactly as before and carries this through untouched.
+  final String? editingImage;
+
   const TurnRequest({
     required this.input,
     this.mode = AppMode.chat,
@@ -36,6 +49,7 @@ class TurnRequest {
     this.deepResearch = false,
     this.pinnedModel,
     this.context = const [],
+    this.editingImage,
   });
 
   /// What the model is given: the attachments, then the request.

@@ -68,7 +68,8 @@ JobGraph planJobs(TurnRequest request) {
       needs: Capability.image,
       produces: OutputKind.image,
       instruction: request.prompt,
-      label: 'Drawing',
+      label: request.editingImage == null ? 'Drawing' : 'Changing it',
+      editing: request.editingImage,
     ));
   }
 
@@ -79,7 +80,8 @@ JobGraph planJobs(TurnRequest request) {
       needs: Capability.image,
       produces: OutputKind.image,
       instruction: request.prompt,
-      label: 'Drawing',
+      label: request.editingImage == null ? 'Drawing' : 'Changing it',
+      editing: request.editingImage,
     ));
     return JobGraph.build(steps).graph!;
   }
