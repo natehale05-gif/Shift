@@ -57,6 +57,11 @@ class ConversationStore extends ChangeNotifier {
   Future<void> load() async {
     await _kv.load();
     final raw = _kv.get(_indexKey);
+    // Cleared first, so this is a *reload* and not a merge. Returning early on
+    // an empty store used to leave the previous list in memory, which meant
+    // erasing everything left the sidebar showing conversations that were no
+    // longer on disk — and the next write would have put them back.
+    _index = [];
     if (raw == null) return;
     try {
       final list = jsonDecode(raw);

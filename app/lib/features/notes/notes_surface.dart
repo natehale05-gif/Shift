@@ -7,6 +7,29 @@ import '../../data/note.dart';
 import '../../data/note_store.dart';
 import 'note_screen.dart';
 
+/// Asks before removing a note. No trash, no undo — a mis-tap in a list is
+/// the whole note.
+Future<bool> confirmDeleteNote(BuildContext context, String title) async {
+  final answer = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Delete this note?'),
+      content: Text('"$title" will be removed. This cannot be undone.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('Delete'),
+        ),
+      ],
+    ),
+  );
+  return answer ?? false;
+}
+
 /// Notes mode: everything you have said, and a way to say more.
 ///
 /// The list is the mode's whole surface. There is no folder tree and no tag
@@ -43,6 +66,12 @@ class NotesSurface extends StatelessWidget {
               itemBuilder: (context, i) => _Row(
                 note: notes.index[i],
                 onOpen: () => _open(context, notes.index[i].id),
+                onDelete: () async {
+                  if (!await confirmDeleteNote(context, notes.index[i].title)) {
+                    return;
+                  }
+                  await notes.remove(notes.index[i].id);
+                },
               ),
             ),
     );
@@ -60,8 +89,13 @@ class NotesSurface extends StatelessWidget {
 class _Row extends StatelessWidget {
   final NoteSummary note;
   final VoidCallback onOpen;
+  final VoidCallback onDelete;
 
-  const _Row({required this.note, required this.onOpen});
+  const _Row({
+    required this.note,
+    required this.onOpen,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -75,25 +109,47 @@ class _Row extends StatelessWidget {
         child: Container(
           constraints: const BoxConstraints(minHeight: kMinTouchTarget),
           padding: const EdgeInsets.symmetric(vertical: Space.md),
-          child: Column(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                note.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: text.titleMedium?.copyWith(color: c.text),
-              ),
-              if (note.preview.isNotEmpty) ...[
-                const SizedBox(height: Space.xxs),
-                Text(
-                  note.preview,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: text.bodyMedium?.copyWith(color: c.textMuted),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      note.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: text.titleMedium?.copyWith(color: c.text),
+                    ),
+                    if (note.preview.isNotEmpty) ...[
+                      const SizedBox(height: Space.xxs),
+                      Text(
+                        note.preview,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.bodyMedium?.copyWith(color: c.textMuted),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
+              // Emptying a note also removes it, and that works — but it is
+              // not something anybody would guess. A list you can delete from
+              // needs a control that says so.
+              SizedBox(
+                width: kMinTouchTarget,
+                height: kMinTouchTarget,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  iconSize: 18,
+                  color: c.textFaint,
+                  tooltip: 'Delete',
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded),
+                ),
+              ),
             ],
           ),
         ),

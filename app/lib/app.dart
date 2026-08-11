@@ -8,6 +8,7 @@ import 'data/agent_run_store.dart';
 import 'data/agent_store.dart';
 import 'data/artifact_store.dart';
 import 'data/conversation_store.dart';
+import 'data/kv_store.dart';
 import 'data/note_store.dart';
 import 'features/chat/turn_controller.dart';
 import 'features/code/agent_runner.dart';
@@ -23,6 +24,10 @@ class ShiftApp extends StatelessWidget {
   final AgentRunStore runs;
   final NoteStore notes;
 
+  /// The store behind every other store. Provided so Settings can offer the
+  /// one action that has to reach all of them at once.
+  final KvStore kv;
+
   const ShiftApp({
     super.key,
     required this.keys,
@@ -31,12 +36,14 @@ class ShiftApp extends StatelessWidget {
     required this.agents,
     required this.runs,
     required this.notes,
+    required this.kv,
   });
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        Provider<KvStore>.value(value: kv),
         ChangeNotifierProvider(create: (_) => ShellController()),
         ChangeNotifierProvider.value(value: keys),
         ChangeNotifierProvider.value(value: conversations),

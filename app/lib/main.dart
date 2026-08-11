@@ -39,6 +39,7 @@ Future<void> main() async {
     agents: agents,
     runs: runs,
     notes: notes,
+    kv: kv,
   ));
 
   // After the first real frame, not before: the HTML splash is what the user

@@ -27,7 +27,13 @@ class ArtifactStore extends ChangeNotifier {
 
   ArtifactStore(this._kv);
 
-  Future<void> load() => _kv.load();
+  Future<void> load() async {
+    await _kv.load();
+    // The cache is dropped, so this is a *reload*. Without it a store whose
+    // underlying data was cleared keeps answering from memory — which is how
+    // "delete everything" left the pages on screen.
+    _byConversation.clear();
+  }
 
   /// Everything made in [conversationId], oldest first.
   List<Artifact> forConversation(String conversationId) {

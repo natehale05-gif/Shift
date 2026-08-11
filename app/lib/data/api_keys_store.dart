@@ -26,6 +26,9 @@ class ApiKeysStore extends ChangeNotifier {
 
   Future<void> load() async {
     await _kv.load();
+    // Same reason as the sibling stores: a reload has to forget, or a key
+    // removed underneath this store stays usable for the rest of the session.
+    _keys.clear();
     for (final name in _kv.keys()) {
       if (!name.startsWith(_prefix)) continue;
       final value = _kv.get(name);
