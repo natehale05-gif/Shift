@@ -5,23 +5,40 @@ import 'package:provider/provider.dart';
 import '../../core/design/metrics.dart';
 import '../../core/platform/save_file.dart';
 import '../../data/image_store.dart';
+import '../chat/turn_controller.dart';
 import 'made_image_view.dart';
-import 'visual_turns.dart';
 
 /// Opens one picture full-size, with the things you do to a picture.
 ///
 /// A dialog rather than a route, so it works identically from the transcript
 /// and from the gallery without either having to own a navigator entry.
-Future<void> showImageViewer(BuildContext context, String id) => showDialog(
+///
+/// [turns] is which conversation a "Change it" belongs to, and it is passed
+/// rather than looked up because a lookup cannot answer it: both controllers
+/// are provided for the whole app, so any precedence rule — Visual first, chat
+/// first — is wrong in one of the two places. Written as a lookup first, and
+/// the running app showed it immediately: pressing Change it in Chat handed
+/// the picture to Visual's composer, where nobody was looking.
+Future<void> showImageViewer(
+  BuildContext context,
+  String id, {
+  TurnController? turns,
+}) =>
+    showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.82),
-      builder: (_) => ImageViewer(id: id),
+      builder: (_) => ImageViewer(id: id, turns: turns),
     );
 
 class ImageViewer extends StatelessWidget {
   final String id;
 
-  const ImageViewer({super.key, required this.id});
+  /// Where a "Change it" goes. Null means the surface that opened this has no
+  /// composer to send it to, and the action is not offered rather than being
+  /// offered and doing nothing.
+  final TurnController? turns;
+
+  const ImageViewer({super.key, required this.id, this.turns});
 
   @override
   Widget build(BuildContext context) {
@@ -52,8 +69,15 @@ class ImageViewer extends StatelessWidget {
             ),
             const SizedBox(height: Space.md),
           ],
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // A Wrap, not a Row. Five actions do not fit one line on a phone —
+          // they overflowed by 27 pixels in an 800pt test window, so on a
+          // 393pt screen the last two would simply have been unreachable.
+          // The tap-target check could not see this: every control was the
+          // right size and two of them were off the edge.
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: Space.sm,
+            runSpacing: Space.sm,
             children: [
               _Action(
                 icon: Icons.download_rounded,
@@ -79,12 +103,13 @@ class ImageViewer extends StatelessWidget {
               // Editing is picked, not inferred. "Make it night" after four
               // pictures is genuinely ambiguous, and guessing wrong spends
               // money changing the wrong one while looking like it worked.
-              if (context.read<VisualTurns?>() != null)
+              //
+              if (turns != null)
                 _Action(
                   icon: Icons.auto_fix_high_rounded,
                   label: 'Change it',
                   onTap: () async {
-                    context.read<VisualTurns>().editImage(id);
+                    turns!.editImage(id);
                     Navigator.of(context).pop();
                   },
                 ),
@@ -163,9 +188,7 @@ class _Action extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: Space.xs),
-      child: Material(
+    return Material(
         color: Colors.white.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(Radii.md),
         child: InkWell(
@@ -196,7 +219,6 @@ class _Action extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

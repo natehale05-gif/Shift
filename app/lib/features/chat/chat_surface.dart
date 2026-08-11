@@ -10,6 +10,7 @@ import '../../shell/mode.dart';
 import '../settings/settings_screen.dart';
 import '../artifacts/artifact_card.dart';
 import '../artifacts/artifact_panel.dart';
+import '../visual/editing_image.dart';
 import '../visual/image_viewer.dart';
 import '../visual/made_image_view.dart';
 import 'attached_notes.dart';
@@ -129,9 +130,20 @@ class _ChatComposer extends StatelessWidget {
       busy: withStop && turn.running,
       onStop: withStop ? turn.stop : null,
       onSend: (t) => turn.send(t, mode: AppMode.chat),
-      attachments: AttachedNotes(
-        ids: turn.attachedNotes,
-        onChanged: turn.attachNotes,
+      // Both, and in this order: the picture being changed is the more
+      // consequential of the two, so it sits nearest the text being typed
+      // about it.
+      attachments: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (turn.editingImage case final id?)
+            EditingImage(id: id, onCancel: () => turn.editImage(null)),
+          AttachedNotes(
+            ids: turn.attachedNotes,
+            onChanged: turn.attachNotes,
+          ),
+        ],
       ),
       onAttach: () async {
         final picked = await NotePicker.show(context,
@@ -298,7 +310,11 @@ class _Item extends StatelessWidget {
                         prompt:
                             context.read<ImageStore>().record(id)?.prompt ??
                                 '',
-                        onTap: () => showImageViewer(context, id),
+                        onTap: () => showImageViewer(
+                          context,
+                          id,
+                          turns: context.read<TurnController>(),
+                        ),
                       ),
                     ),
                   ),
