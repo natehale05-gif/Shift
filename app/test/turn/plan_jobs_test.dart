@@ -140,6 +140,67 @@ void main() {
     });
   });
 
+  group('several pictures', () {
+    test('a plural noun still names a picture', () {
+      // Whole-word matching, so `logo` does not match "logos" — and the half
+      // that was missing was exactly the half people use when they want more
+      // than one.
+      for (final word in ['logos', 'icons', 'banners', 'portraits',
+          'thumbnails', 'renders', 'drawings']) {
+        expect(_ids('make me some $word'), ['image'], reason: word);
+      }
+    });
+
+    test('a count before the pictures makes that many', () {
+      expect(_ids('three pictures of a cat'), ['image', 'image-2', 'image-3']);
+      expect(_ids('4 logos for a bakery'),
+          ['image', 'image-2', 'image-3', 'image-4']);
+    });
+
+    test('a count before the subject makes one', () {
+      // "A picture of three cats" is one picture. Reading it as three would
+      // spend three times the money on a misparse, which is the expensive
+      // direction of this mistake.
+      expect(_ids('a picture of three cats'), ['image']);
+      expect(_ids('an illustration of 6 planets'), ['image']);
+    });
+
+    test('a vague plural makes one', () {
+      // Same rule as the rest of the planner: ambiguity resolves to the cheap
+      // answer, and someone who wanted several can say how many.
+      expect(_ids('a few variations of a logo'), ['image']);
+      expect(_ids('some pictures of a cat'), ['image']);
+    });
+
+    test('more than the cap makes the cap', () {
+      expect(requestedCopies('ten pictures of a cat'), kMaxCopies);
+      expect(requestedCopies('20 images'), kMaxCopies);
+    });
+
+    test('the steps have no edges, so they run at once', () {
+      // The whole reason for the shape: four pictures in series is four times
+      // the wait for no reason.
+      final graph = planJobs(const TurnRequest(
+          input: 'three pictures of a cat', mode: AppMode.chat));
+      for (final step in graph.steps) {
+        expect(step.after, isEmpty, reason: step.id);
+      }
+      expect(graph.ready(const {}), hasLength(3));
+    });
+
+    test('variations of a picture all edit the same one', () {
+      final graph = planJobs(const TurnRequest(
+        input: 'three variations',
+        mode: AppMode.visual,
+        editingImage: 'img-7',
+      ));
+      expect(graph.steps, hasLength(3));
+      for (final step in graph.steps) {
+        expect(step.editing, 'img-7');
+      }
+    });
+  });
+
   group('every plan is runnable', () {
     test('a wide sample of requests all build valid graphs', () {
       // The planner constructs its own steps, so an invalid graph here would

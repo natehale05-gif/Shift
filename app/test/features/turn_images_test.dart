@@ -105,13 +105,35 @@ void main() {
     expect(await assets.ids(), isEmpty);
   });
 
-  test('two pictures in one reply are both kept', () async {
-    // A reply that holds one id would quietly keep the last of a set of
-    // variations, which is the shape this is built to survive.
+  test('one step that yields several pictures keeps all of them', () async {
+    // A reply that holds one id would quietly keep the last. Driven with a
+    // *singular* request so the graph has one step: this is the provider
+    // answering with several, which is a different case from the planner
+    // asking for several and is the one a reply shape could silently lose.
     final turn = TurnController(
       conversations: conversations,
       images: images,
       executors: () => {Capability.image: _Draws(count: 3)},
+    );
+    addTearDown(turn.dispose);
+
+    await turn.send('a picture of a cat', mode: AppMode.chat);
+    await turn.imagesSettled;
+
+    final reply = turn.items.whereType<Reply>().single;
+    expect(reply.imageIds, hasLength(3));
+    expect(images.index, hasLength(3));
+  });
+
+  test('three asked for is three made, three kept, and three on the reply',
+      () async {
+    // The whole path, not just the plan: three steps with no edges between
+    // them, three ImageOutputs folded onto one reply, three records and three
+    // files. A reply that held one id would keep the last of them.
+    final turn = TurnController(
+      conversations: conversations,
+      images: images,
+      executors: () => {Capability.image: _Draws()},
     );
     addTearDown(turn.dispose);
 
@@ -121,6 +143,9 @@ void main() {
     final reply = turn.items.whereType<Reply>().single;
     expect(reply.imageIds, hasLength(3));
     expect(images.index, hasLength(3));
+    for (final id in reply.imageIds) {
+      expect(await images.bytes(id), isNotNull, reason: id);
+    }
   });
 
   test('two pictures minted in the same microsecond are different pictures',

@@ -74,15 +74,22 @@ JobGraph planJobs(TurnRequest request) {
   }
 
   if (wantsPicture && !wantsBoth) {
-    // A picture, and only a picture.
-    steps.add(JobStep(
-      id: 'image',
-      needs: Capability.image,
-      produces: OutputKind.image,
-      instruction: request.prompt,
-      label: request.editingImage == null ? 'Drawing' : 'Changing it',
-      editing: request.editingImage,
-    ));
+    // Pictures, and only pictures. Several when the request plainly asked for
+    // several — they have no edges between them, so the runner starts them all
+    // at once and the wait is one picture's rather than four.
+    final copies = requestedCopies(text);
+    for (var i = 0; i < copies; i++) {
+      steps.add(JobStep(
+        id: i == 0 ? 'image' : 'image-${i + 1}',
+        needs: Capability.image,
+        produces: OutputKind.image,
+        instruction: request.prompt,
+        label: request.editingImage == null
+            ? (copies == 1 ? 'Drawing' : 'Drawing ${i + 1} of $copies')
+            : 'Changing it',
+        editing: request.editingImage,
+      ));
+    }
     return JobGraph.build(steps).graph!;
   }
 
@@ -147,11 +154,58 @@ bool _mentions(String text, List<String> words) {
   return false;
 }
 
+/// The most this will make from one request.
+///
+/// Four rather than none and four rather than ten: every extra step is another
+/// picture paid for, so this is the number where "a set to choose from" stops
+/// and "a bill you did not expect" starts. A request for more makes four —
+/// silently, which is the one dishonest edge here and is preferred to either
+/// spending ten pictures' worth or ignoring a plain instruction entirely.
+const kMaxCopies = 4;
+
+/// How many pictures a request asked for.
+///
+/// **The number has to modify the pictures, not the subject.** "Three pictures
+/// of a cat" is three; "a picture of three cats" is one, and reading the
+/// second as three would spend three times the money on a misparse. So the
+/// pattern requires a count immediately before a plural word that names the
+/// output.
+///
+/// A vague plural — "a few", "some variations" — makes one. That is the same
+/// rule the rest of this planner follows: ambiguity resolves to the cheap
+/// answer, and someone who wanted several can say how many.
+int requestedCopies(String text) {
+  final match = _countPattern.firstMatch(text.toLowerCase());
+  if (match == null) return 1;
+  final word = match.group(1)!;
+  final n = int.tryParse(word) ?? _numberWords[word] ?? 1;
+  return n < 1 ? 1 : (n > kMaxCopies ? kMaxCopies : n);
+}
+
+const _numberWords = {
+  'two': 2, 'three': 3, 'four': 4, 'five': 5, 'six': 6, 'seven': 7,
+  'eight': 8, 'nine': 9, 'ten': 10,
+};
+
+final _countPattern = RegExp(
+  r'\b(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+'
+  r'(?:different\s+|separate\s+|more\s+)?'
+  r'(?:pictures|images|photos|illustrations|logos|icons|renders|graphics|'
+  r'banners|thumbnails|portraits|variations|versions|options|takes)\b',
+);
+
+/// Words that name a picture.
+///
+/// **Both numbers of every noun.** Matching is whole-word, so `logo` does not
+/// match "logos" — which meant "make me some logos" was answered with prose
+/// while "make me a logo" drew one. The half that was missing was exactly the
+/// half people use when they want more than one.
 const _imageWords = [
   'image', 'images', 'picture', 'pictures', 'photo', 'photos',
-  'illustration', 'illustrations', 'logo', 'icon', 'artwork', 'drawing',
-  'render', 'graphic', 'graphics', 'banner', 'thumbnail', 'headshot',
-  'portrait',
+  'illustration', 'illustrations', 'logo', 'logos', 'icon', 'icons',
+  'artwork', 'drawing', 'drawings', 'render', 'renders',
+  'graphic', 'graphics', 'banner', 'banners', 'thumbnail', 'thumbnails',
+  'headshot', 'headshots', 'portrait', 'portraits',
 ];
 
 /// Whether the request plainly asks for words.
