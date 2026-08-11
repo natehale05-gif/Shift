@@ -76,6 +76,62 @@ void main() {
     });
   });
 
+  group('the shape', () {
+    test('an explicit ratio is carried through', () {
+      expect(requestedAspectRatio('a banner, 21:9'), '21:9');
+      expect(requestedAspectRatio('make it 9:16'), '9:16');
+      expect(requestedAspectRatio('16 : 9 please'), '16:9');
+    });
+
+    test('a ratio the provider does not take is not sent', () {
+      // A rejected request is a failed turn; a model-chosen shape is a
+      // picture. So an unknown ratio reads as "nobody asked".
+      expect(requestedAspectRatio('make it 7:3'), isNull);
+      expect(requestedAspectRatio('make it 100:1'), isNull);
+    });
+
+    test('words that only ever mean shape are read as shape', () {
+      expect(requestedAspectRatio('a square logo'), '1:1');
+      expect(requestedAspectRatio('a widescreen still'), '16:9');
+      expect(requestedAspectRatio('a vertical poster'), '9:16');
+      expect(requestedAspectRatio('a phone wallpaper of a forest'), '9:16');
+    });
+
+    test('a landscape is a genre, not an orientation', () {
+      // The same class of mistake as reading "a picture of three cats" as
+      // three pictures: the word is doing subject work, not shape work.
+      expect(requestedAspectRatio('paint me a landscape'), isNull);
+      expect(requestedAspectRatio('a portrait of my dog'), isNull);
+      expect(requestedAspectRatio('in landscape orientation'), '16:9');
+      expect(requestedAspectRatio('in portrait format'), '9:16');
+    });
+
+    test('nothing asked is nothing sent', () {
+      expect(requestedAspectRatio('a vase of tulips'), isNull);
+      final body = GeminiImage.buildBody('a vase of tulips');
+      expect(
+        (body['generationConfig'] as Map).containsKey('imageConfig'),
+        isFalse,
+        reason: 'a default square would be the app choosing, not the model',
+      );
+    });
+
+    test('a shape reaches the request body', () {
+      final body = GeminiImage.buildBody('a banner', aspectRatio: '16:9');
+      expect(((body['generationConfig'] as Map)['imageConfig'] as Map),
+          containsPair('aspectRatio', '16:9'));
+    });
+
+    test('the plan carries it, and every copy gets it', () {
+      final graph = planJobs(const TurnRequest(
+          input: 'three widescreen pictures of a cat', mode: AppMode.chat));
+      expect(graph.steps, hasLength(3));
+      for (final step in graph.steps) {
+        expect(step.aspectRatio, '16:9', reason: step.id);
+      }
+    });
+  });
+
   group('the executor', () {
     ImageExecutor executor({
       required Future<Uint8List?> Function(String) source,

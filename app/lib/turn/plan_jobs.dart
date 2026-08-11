@@ -78,6 +78,7 @@ JobGraph planJobs(TurnRequest request) {
     // several — they have no edges between them, so the runner starts them all
     // at once and the wait is one picture's rather than four.
     final copies = requestedCopies(text);
+    final shape = requestedAspectRatio(text);
     for (var i = 0; i < copies; i++) {
       steps.add(JobStep(
         id: i == 0 ? 'image' : 'image-${i + 1}',
@@ -88,6 +89,7 @@ JobGraph planJobs(TurnRequest request) {
             ? (copies == 1 ? 'Drawing' : 'Drawing ${i + 1} of $copies')
             : 'Changing it',
         editing: request.editingImage,
+        aspectRatio: shape,
       ));
     }
     return JobGraph.build(steps).graph!;
@@ -154,6 +156,58 @@ bool _mentions(String text, List<String> words) {
   return false;
 }
 
+/// The shape a request asked a picture to be, or null when it did not.
+///
+/// **"Landscape" and "portrait" alone are deliberately not orientation
+/// words.** A landscape is a genre of picture and a portrait is a genre of
+/// picture, and "paint me a landscape" asking for a 16:9 crop of a person's
+/// face would be the same class of mistake as reading "a picture of three
+/// cats" as three pictures. The orientation reading needs the word to be
+/// doing orientation work — "landscape orientation", "portrait format" — or a
+/// word that only ever means shape.
+///
+/// An explicit ratio the provider does not accept reads as null rather than
+/// being passed through, because a rejected request is a failed turn where a
+/// model-chosen shape would have been a picture.
+String? requestedAspectRatio(String text) {
+  final lower = text.toLowerCase();
+
+  final explicit = RegExp(r'\b(\d{1,2}\s*:\s*\d{1,2})\b').firstMatch(lower);
+  if (explicit != null) {
+    final ratio = explicit.group(1)!.replaceAll(RegExp(r'\s+'), '');
+    return kAspectRatios.contains(ratio) ? ratio : null;
+  }
+
+  for (final entry in _shapeWords.entries) {
+    if (_mentions(lower, [entry.key])) return entry.value;
+  }
+  return null;
+}
+
+/// What the provider accepts. Anything else is not sent.
+const kAspectRatios = {
+  '1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9',
+};
+
+/// Ordered: the longer phrases are checked before the bare words they contain,
+/// so "portrait orientation" is not read as "portrait".
+const _shapeWords = {
+  'landscape orientation': '16:9',
+  'landscape format': '16:9',
+  'portrait orientation': '9:16',
+  'portrait format': '9:16',
+  'phone wallpaper': '9:16',
+  'desktop wallpaper': '16:9',
+  'square': '1:1',
+  'widescreen': '16:9',
+  'cinematic': '21:9',
+  'ultrawide': '21:9',
+  'banner': '16:9',
+  'vertical': '9:16',
+  'tall': '9:16',
+  'wide': '16:9',
+};
+
 /// The most this will make from one request.
 ///
 /// Four rather than none and four rather than ten: every extra step is another
@@ -187,9 +241,27 @@ const _numberWords = {
   'eight': 8, 'nine': 9, 'ten': 10,
 };
 
+/// A count, then the thing being counted.
+///
+/// Up to two words may sit between them, so "three widescreen pictures" and
+/// "four detailed logos" count — an adjective is the normal case, and a
+/// pattern that only matched the bare noun quietly made one picture out of
+/// most real requests.
+///
+/// **But no linking word may sit between them** — a preposition or a
+/// conjunction, never an adjective. Those are the words that change what is
+/// being counted: "three cats in pictures" is one picture of three cats, and
+/// the preposition is the whole signal that the number belongs to the subject.
+/// A category rather than a list of the examples that happened to fail, which
+/// is how a keyword table turns into a pile of patches.
+///
+/// It errs one way on purpose. "Three black and white photos" makes one,
+/// because `and` stops the match — a false negative that costs a second ask,
+/// against a false positive that costs three pictures. That is the same trade
+/// the rest of this planner makes.
 final _countPattern = RegExp(
   r'\b(\d{1,2}|two|three|four|five|six|seven|eight|nine|ten)\s+'
-  r'(?:different\s+|separate\s+|more\s+)?'
+  r'(?:(?!(?:of|in|on|at|to|as|for|from|with|and|or|by)\b)\w+\s+){0,2}'
   r'(?:pictures|images|photos|illustrations|logos|icons|renders|graphics|'
   r'banners|thumbnails|portraits|variations|versions|options|takes)\b',
 );

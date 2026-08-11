@@ -157,6 +157,28 @@ void main() {
           ['image', 'image-2', 'image-3', 'image-4']);
     });
 
+    test('an adjective between the count and the noun is fine', () {
+      expect(_ids('three widescreen pictures of a cat'),
+          ['image', 'image-2', 'image-3']);
+      expect(_ids('two simple flat icons'), ['image', 'image-2']);
+    });
+
+    test('a linking word between them is not', () {
+      // "Three cats in pictures" is one picture of three cats. The preposition
+      // is the signal that the number belongs to the subject, which is what
+      // keeps the loosened pattern from reintroducing the expensive misparse.
+      expect(_ids('three cats in pictures'), ['image']);
+      expect(_ids('two dogs and three cats as illustrations'), ['image']);
+    });
+
+    test('and it errs toward one, on purpose', () {
+      // "Three black and white photos" is three, and this makes one — `and`
+      // stops the match. Recorded rather than fixed: a false negative costs a
+      // second ask, a false positive costs three pictures, and the planner
+      // resolves ambiguity to the cheap answer everywhere else too.
+      expect(_ids('three black and white photos'), ['image']);
+    });
+
     test('a count before the subject makes one', () {
       // "A picture of three cats" is one picture. Reading it as three would
       // spend three times the money on a misparse, which is the expensive

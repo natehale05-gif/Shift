@@ -60,6 +60,7 @@ class GeminiImage {
     String prompt, {
     Uint8List? source,
     String sourceMimeType = 'image/png',
+    String? aspectRatio,
   }) =>
       {
         'contents': [
@@ -79,6 +80,11 @@ class GeminiImage {
         ],
         'generationConfig': {
           'responseModalities': ['TEXT', 'IMAGE'],
+          // Omitted entirely when nothing asked for a shape, rather than sent
+          // as a default. The model picks one it thinks suits the subject, and
+          // forcing a square on every unspecified request would be this app
+          // deciding something it was not asked to decide.
+          if (aspectRatio != null) 'imageConfig': {'aspectRatio': aspectRatio},
         },
       };
 
@@ -88,6 +94,7 @@ class GeminiImage {
     required String prompt,
     Uint8List? source,
     String sourceMimeType = 'image/png',
+    String? aspectRatio,
   }) async* {
     final target = _target(access);
     final client = _clientFactory();
@@ -97,8 +104,12 @@ class GeminiImage {
       response = await client.post(
         target.uri,
         headers: target.headers,
-        body: jsonEncode(buildBody(prompt,
-            source: source, sourceMimeType: sourceMimeType)),
+        body: jsonEncode(buildBody(
+          prompt,
+          source: source,
+          sourceMimeType: sourceMimeType,
+          aspectRatio: aspectRatio,
+        )),
       );
     } catch (_) {
       yield StepFailed(stepId, reason: 'Could not reach the image provider.');

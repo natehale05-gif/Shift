@@ -95,6 +95,7 @@ class ImageExecutor implements StepExecutor {
           access: credential,
           prompt: step.instruction,
           source: source,
+          aspectRatio: step.aspectRatio,
         ),
       // OpenAI images land with the rest of that client. A provider that was
       // selected and cannot be dispatched says so, rather than failing further

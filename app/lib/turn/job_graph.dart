@@ -42,6 +42,14 @@ class JobStep {
   /// to point at.
   final String? editing;
 
+  /// The shape a picture should be, as a provider-neutral `w:h` string.
+  ///
+  /// Null means nobody asked, and that travels as *nothing* rather than as a
+  /// default: the model picks a shape suited to the subject, and forcing a
+  /// square every time would be the app deciding something it was not asked
+  /// to decide.
+  final String? aspectRatio;
+
   const JobStep({
     required this.id,
     required this.needs,
@@ -50,6 +58,7 @@ class JobStep {
     required this.label,
     this.after = const [],
     this.editing,
+    this.aspectRatio,
   });
 
   @override
