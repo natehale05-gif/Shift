@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import '../documents/documents.dart';
 import 'workspace.dart';
 
 /// Everything an agent can do, as a closed set.
@@ -232,6 +233,45 @@ class AskPerson extends AgentTool {
       };
 }
 
+/// Writing a real Word document, spreadsheet or deck.
+///
+/// **The model supplies Markdown or CSV and the app builds the container.**
+/// There is no tool here that hands a model a byte array and there should not
+/// be one: OOXML from a language model is long, expensive and wrong in ways
+/// nobody sees until Word refuses the file, where Markdown is the thing it is
+/// best at and the conversion is deterministic and testable.
+///
+/// The format comes from the extension rather than from an argument, because
+/// the path already says it — and two sources for one fact is one that can
+/// disagree.
+class WriteDocument extends AgentTool {
+  const WriteDocument();
+
+  @override
+  String get name => 'write_document';
+
+  @override
+  String get description =>
+      'Write a real .docx, .xlsx or .pptx into the folder. Give the content as '
+      'Markdown for .docx (headings, bullets, numbered lists, quotes, bold and '
+      'italic all carry over), as CSV for .xlsx (numbers stay numbers, so they '
+      'can be summed), and as Markdown for .pptx where each top-level heading '
+      'starts a slide. The format follows the extension you give in the path.';
+
+  @override
+  Map<String, dynamic> get schema => const {
+        'type': 'object',
+        'properties': {
+          'path': {
+            'type': 'string',
+            'description': 'Ending in .docx, .xlsx or .pptx',
+          },
+          'content': {'type': 'string'},
+        },
+        'required': ['path', 'content'],
+      };
+}
+
 /// The set a coding agent is given.
 const List<AgentTool> kAgentTools = [
   ReadFile(),
@@ -258,6 +298,7 @@ const List<AgentTool> kWorkTools = [
   GlobFiles(),
   GrepFiles(),
   RunCommand(),
+  WriteDocument(),
   PlanTasks(),
   AskPerson(),
 ];
@@ -377,6 +418,22 @@ Future<ToolResult> runTool(
         return ToolResult(hits.isEmpty
             ? 'No matches.'
             : hits.map((h) => '${h.path}:${h.line}: ${h.text}').join('\n'));
+
+      case 'write_document':
+        final path = arg('path');
+        final bytes = buildDocument(path, arg('content'));
+        if (bytes == null) {
+          return ToolResult(
+            'write_document only writes .docx, .xlsx and .pptx. For anything '
+            'else, use write_file.',
+            isError: true,
+          );
+        }
+        await workspace.writeBytes(path, bytes);
+        // No `previousContent`: the diff review is a text diff, and a Word
+        // document rendered as one would be noise where a file's whole history
+        // should be. It is still listed as a file the run produced.
+        return ToolResult('Wrote $path.', changedPath: path);
 
       case 'run':
         final args = [

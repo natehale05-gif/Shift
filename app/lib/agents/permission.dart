@@ -138,10 +138,14 @@ Decision decide(
   return NeedsApproval(
     // The path, not the tool. "Allow write_file?" is not a question anybody
     // can answer, and the file is the whole of what is at stake.
+    //
+    // Everything that is not an edit is a write, including `write_document`
+    // and anything added later: naming the tools that mean "write" would make
+    // a new one fall through to whichever wording came last.
     path.isEmpty
         ? 'Change a file?'
-        : tool == 'write_file'
-            ? 'Write $path?'
-            : 'Edit $path?',
+        : tool == 'edit_file'
+            ? 'Edit $path?'
+            : 'Write $path?',
   );
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shift/agents/agent_loop.dart';
 import 'package:shift/agents/anthropic_agent.dart';
@@ -202,12 +203,75 @@ void main() {
     });
   });
 
+  group('a real document', () {
+    test('a .docx the agent asked for is on disk, and opens as a package',
+        () async {
+      final events = await run([
+        _calls('write_document', {
+          'path': 'brief.docx',
+          'content': '# Q3 Brief\n\n- Revenue up\n- Churn flat\n',
+        }),
+        [_stopEvent('end_turn')],
+      ], mode: PermissionMode.dontAsk).toList();
+
+      final used = events.whereType<AgentUsed>().single;
+      expect(used.isError, isFalse);
+      expect(used.changedPath, 'brief.docx');
+
+      // Read back off disk as bytes, not through the app's own view of it.
+      final bytes = File('${dir.path}/brief.docx').readAsBytesSync();
+      final names = ZipDecoder().decodeBytes(bytes).files.map((f) => f.name);
+      expect(names, contains('word/document.xml'));
+      expect(names, contains('[Content_Types].xml'));
+    });
+
+    test('a format it cannot write is refused, and no file appears', () async {
+      // The alternative is a `.pdf` full of WordprocessingML, which is worse
+      // than saying no.
+      final events = await run([
+        _calls('write_document', {'path': 'brief.pdf', 'content': '# Hi'}),
+        [_stopEvent('end_turn')],
+      ], mode: PermissionMode.dontAsk).toList();
+
+      final used = events.whereType<AgentUsed>().single;
+      expect(used.isError, isTrue);
+      expect(used.result, contains('write_file'));
+      expect(File('${dir.path}/brief.pdf').existsSync(), isFalse);
+    });
+
+    test('it is gated like any other write', () async {
+      // A document is a file. A permission model where one tool that writes to
+      // the folder is checked and another is not is not a permission model.
+      var asked = 0;
+      await run(
+        [
+          _calls('write_document', {'path': 'brief.docx', 'content': '# Hi'}),
+        ],
+        approve: (question) async {
+          asked++;
+          expect(question, contains('brief.docx'));
+          return false;
+        },
+      ).toList();
+
+      expect(asked, 1);
+      expect(File('${dir.path}/brief.docx').existsSync(), isFalse);
+    });
+  });
+
   group('the brief', () {
     test('carries the two things a model gets wrong', () {
       // Learned expensively enough in v1 to be worth pinning: it cannot see a
       // file it has not read, and it must not claim what it has not verified.
       expect(kWorkBrief, contains('cannot see a file'));
       expect(kWorkBrief.toLowerCase(), contains('not claim'));
+    });
+
+    test('names the tool that writes a real document', () {
+      // Without this the agent writes Markdown and calls it a Word document,
+      // which is the exact dishonesty the rest of the brief rules out.
+      expect(kWorkBrief, contains('write_document'));
+      expect(kWorkBrief, contains('.docx'));
     });
 
     test('says what a document folder is missing', () {
@@ -244,13 +308,16 @@ List<SseEvent> _calls(String tool, Map<String, dynamic> input) => [
           },
         }),
       ),
-      SseEvent(
-        event: 'message_delta',
-        data: jsonEncode({
-          'delta': {'stop_reason': 'tool_use'}
-        }),
-      ),
+      _stopEvent('tool_use'),
     ];
+
+/// A round that only ends — used to let the loop finish after a tool call.
+SseEvent _stopEvent(String reason) => SseEvent(
+      event: 'message_delta',
+      data: jsonEncode({
+        'delta': {'stop_reason': reason}
+      }),
+    );
 
 /// Answers each request with the next scripted round.
 class _Scripted implements SseClient {

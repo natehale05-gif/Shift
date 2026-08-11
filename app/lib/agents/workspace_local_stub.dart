@@ -36,6 +36,9 @@ class LocalWorkspace implements AgentWorkspace {
   Future<void> writeText(String path, String contents) => _unavailable();
 
   @override
+  Future<void> writeBytes(String path, Uint8List bytes) => _unavailable();
+
+  @override
   Future<void> delete(String path) => _unavailable();
 
   @override

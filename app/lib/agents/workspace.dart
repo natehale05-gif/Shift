@@ -80,6 +80,15 @@ abstract class AgentWorkspace {
 
   Future<void> writeText(String path, String contents);
 
+  /// Writes bytes, for the formats that are not text.
+  ///
+  /// Separate from [writeText] rather than a flag on it, because the two have
+  /// different callers: a model writes text, and only the app writes bytes —
+  /// there is no tool that hands a model a byte array, and there should not be
+  /// one. What the model supplies is Markdown or CSV; the container is built
+  /// here.
+  Future<void> writeBytes(String path, Uint8List bytes);
+
   Future<void> delete(String path);
 
   /// Paths matching a glob, relative to the root.

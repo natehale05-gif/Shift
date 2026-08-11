@@ -97,6 +97,13 @@ class LocalWorkspace implements AgentWorkspace {
   }
 
   @override
+  Future<void> writeBytes(String path, Uint8List bytes) async {
+    final file = File(_within(path));
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(bytes, flush: true);
+  }
+
+  @override
   Future<void> delete(String path) async {
     final resolved = _within(path);
     // Refusing to delete the root itself is not paranoia: `delete('.')` is a

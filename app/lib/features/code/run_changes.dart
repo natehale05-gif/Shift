@@ -43,6 +43,12 @@ Future<List<FileChange>> changesFor({
       after = '';
     }
 
+    // A document written by `write_document` is not text, and a line diff of
+    // one is pages of mojibake where a review should be. Most decode as
+    // invalid UTF-8 and land in the branch above; the ones that happen to
+    // decode are caught here.
+    if (after.contains('\u0000')) continue;
+
     final hunks = diffHunks(before, after);
     if (hunks.isEmpty) continue;
     changes.add(FileChange(path: path, hunks: hunks));

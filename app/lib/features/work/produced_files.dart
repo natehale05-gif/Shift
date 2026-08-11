@@ -4,6 +4,7 @@ import '../../agents/workspace.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../core/platform/save_file.dart';
+import '../../documents/documents.dart';
 
 /// What the job wrote, and a way to take it somewhere else.
 ///
@@ -95,7 +96,7 @@ class _Row extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: kMinTouchTarget),
       child: Row(
         children: [
-          Icon(Icons.description_outlined, size: 18, color: c.textMuted),
+          Icon(_glyphFor(path), size: 18, color: c.textMuted),
           const SizedBox(width: Space.sm),
           Expanded(
             child: Text(
@@ -125,3 +126,14 @@ class _Row extends StatelessWidget {
     );
   }
 }
+
+/// What kind of file this is, at a glance.
+///
+/// A list of a dozen identical page icons is a list you have to read; the deck
+/// and the spreadsheet are the two somebody scans for.
+IconData _glyphFor(String path) => switch (extensionOf(path)) {
+      'xlsx' || 'csv' => Icons.table_chart_outlined,
+      'pptx' => Icons.slideshow_outlined,
+      'docx' || 'md' || 'txt' => Icons.description_outlined,
+      _ => Icons.insert_drive_file_outlined,
+    };
