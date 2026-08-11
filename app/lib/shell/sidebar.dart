@@ -40,11 +40,23 @@ class Sidebar extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.all(Space.md),
-              child: _NewChat(
-                onTap: () {
-                  turn.clear();
-                  onDismiss?.call();
-                },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _NewChat(
+                    onTap: () {
+                      turn.clear();
+                      onDismiss?.call();
+                    },
+                  ),
+                  _NewChat(
+                    private: true,
+                    onTap: () {
+                      turn.clear(private: true);
+                      onDismiss?.call();
+                    },
+                  ),
+                ],
               ),
             ),
             Padding(
@@ -99,12 +111,17 @@ class Sidebar extends StatelessWidget {
 class _NewChat extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _NewChat({required this.onTap});
+  /// The private variant, in the muted ink rather than the accent: it is an
+  /// alternative to the ordinary action, not a second thing competing with it.
+  final bool private;
+
+  const _NewChat({required this.onTap, this.private = false});
 
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
+    final ink = private ? c.textMuted : c.accent;
 
     return Material(
       color: Colors.transparent,
@@ -117,10 +134,23 @@ class _NewChat extends StatelessWidget {
               horizontal: Space.md, vertical: Space.sm),
           child: Row(
             children: [
-              Icon(Icons.add_rounded, size: 18, color: c.accent),
+              Icon(private ? Icons.visibility_off_outlined : Icons.add_rounded,
+                  size: 18, color: ink),
               const SizedBox(width: Space.sm),
-              Text('New chat',
-                  style: text.titleMedium?.copyWith(color: c.accent)),
+              // Flexible, because a fixed Row here overflowed the 260pt
+              // sidebar by 54 pixels the moment a second, longer label
+              // appeared — caught by the shell tests before the build.
+              Flexible(
+                child: Text(
+                  // "Private chat" rather than "New private chat": it sits
+                  // directly under "New chat", so the word is already there,
+                  // and the longer label is what did not fit.
+                  private ? 'Private chat' : 'New chat',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: text.titleMedium?.copyWith(color: ink),
+                ),
+              ),
             ],
           ),
         ),

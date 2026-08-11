@@ -11,6 +11,7 @@ import '../artifacts/artifact_card.dart';
 import '../artifacts/artifact_panel.dart';
 import 'attached_notes.dart';
 import 'composer.dart';
+import 'private_banner.dart';
 import 'failure_card.dart';
 import 'markdown_view.dart';
 import 'message_actions.dart';
@@ -112,7 +113,15 @@ class _ChatComposer extends StatelessWidget {
   Widget build(BuildContext context) {
     final turn = context.watch<TurnController>();
 
-    return Composer(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Above the composer rather than at the top of the screen, so it stays
+        // in view as a long conversation scrolls — a private chat is private
+        // for its whole length, not just at the beginning.
+        if (turn.private) const PrivateBanner(),
+        Composer(
       hint: hint,
       busy: withStop && turn.running,
       onStop: withStop ? turn.stop : null,
@@ -126,6 +135,8 @@ class _ChatComposer extends StatelessWidget {
             attached: List.of(turn.attachedNotes));
         if (picked != null) turn.attachNotes(picked);
       },
+        ),
+      ],
     );
   }
 }

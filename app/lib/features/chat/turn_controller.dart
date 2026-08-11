@@ -230,6 +230,10 @@ class TurnController extends ChangeNotifier {
   bool _writing = false;
 
   Future<void> _persist() async {
+    // The one line that makes a chat private. Checked here rather than at each
+    // of the four call sites, so a new caller cannot forget it.
+    if (_private) return;
+
     final store = conversations;
     final id = _conversationId;
     if (store == null || id == null || items.isEmpty || _writing) return;
@@ -278,8 +282,10 @@ class TurnController extends ChangeNotifier {
 
   Future<void>? _snapshotting;
 
-  /// Opens a stored conversation.
+  /// Opens a stored conversation. Never private: it came off disk, so it is
+  /// already kept.
   void open(String id) {
+    _private = false;
     _sub?.cancel();
     _sub = null;
     _running = false;
@@ -443,7 +449,12 @@ class TurnController extends ChangeNotifier {
           // Opened on arrival, which is what every app shaped like this does —
           // the page is the answer, so showing it is not an interruption.
           _openArtifactId = artifact.id;
-          unawaited(artifacts?.save(artifact) ?? Future<void>.value());
+          // Not in a private chat: a page left in the artifact store would
+          // outlive the conversation that made it, which is the promise
+          // broken in the least visible way.
+          if (!_private) {
+            unawaited(artifacts?.save(artifact) ?? Future<void>.value());
+          }
         case StepFailed(:final reason, :final detail):
           reply.failure ??= reason;
           reply.failureDetail ??= detail;
@@ -482,17 +493,34 @@ class TurnController extends ChangeNotifier {
     await done.future;
   }
 
+  /// Whether this conversation is kept.
+  ///
+  /// A private chat is never written: no body, no row in the index, nothing to
+  /// find afterwards. Leaving it is losing it, which is the whole point, and
+  /// the surface says so rather than letting someone discover it.
+  ///
+  /// **What it does not do**, and the UI says this too: the request still goes
+  /// to whichever provider answers it, under whatever terms that provider has.
+  /// This is about what *this app* keeps. Claiming more would be the kind of
+  /// privacy promise that is worse than none.
+  bool get private => _private;
+  bool _private = false;
+
   /// Starts a new conversation. The old one stays on disk — "New chat" means
   /// begin another, not discard the last.
-  void clear() {
+  ///
+  /// A private one is discarded on leaving, because it was never anywhere else.
+  void clear({bool private = false}) {
     _sub?.cancel();
     _sub = null;
     _running = false;
     _conversationId = null;
     _last = null;
+    _private = private;
     items.clear();
     produced.clear();
     _openArtifactId = null;
+    attachedNotes.clear();
     notifyListeners();
   }
 
