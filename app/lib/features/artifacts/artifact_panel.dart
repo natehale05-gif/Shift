@@ -1,8 +1,11 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
+import '../../core/platform/save_file.dart';
 import '../../data/artifact.dart';
 import 'artifact_code_view.dart';
 import 'sandbox_view_stub.dart'
@@ -60,6 +63,29 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
     }
   }
 
+  /// Writes the version being shown to a file the person chooses.
+  ///
+  /// Deferred out of N2b because there was no way to save anything off-web;
+  /// there is now, and a page you can preview but not keep is a deliverable
+  /// only in the sense that you can look at it.
+  Future<void> _save(
+    BuildContext context,
+    Artifact artifact,
+    ArtifactVersion version,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final saved = await saveFile(
+      suggestedName: artifact.filename,
+      bytes: Uint8List.fromList(utf8.encode(version.content)),
+      mimeType: artifact.mimeType,
+    );
+    // Silent on a cancel: the person chose that, and an error there reads as
+    // a failure they caused.
+    if (saved) {
+      messenger.showSnackBar(const SnackBar(content: Text('Saved.')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final c = context.colors;
@@ -81,6 +107,9 @@ class _ArtifactPanelState extends State<ArtifactPanel> {
               onVersion: (i) => setState(() => _version = i),
               onCopy: () =>
                   Clipboard.setData(ClipboardData(text: version.content)),
+              // The version on screen, not the newest: someone looking at v1
+              // and pressing Save expects v1.
+              onSave: () => _save(context, artifact, version),
               onClose: widget.onClose,
             ),
             Divider(height: 1, thickness: 1, color: c.divider),
@@ -111,6 +140,7 @@ class _Chrome extends StatelessWidget {
   final VoidCallback onToggleCode;
   final ValueChanged<int> onVersion;
   final VoidCallback onCopy;
+  final VoidCallback onSave;
   final VoidCallback? onClose;
 
   const _Chrome({
@@ -120,6 +150,7 @@ class _Chrome extends StatelessWidget {
     required this.onToggleCode,
     required this.onVersion,
     required this.onCopy,
+    required this.onSave,
     this.onClose,
   });
 
@@ -183,6 +214,11 @@ class _Chrome extends StatelessWidget {
             icon: Icons.content_copy_rounded,
             tooltip: 'Copy',
             onTap: onCopy,
+          ),
+          _Icon(
+            icon: Icons.download_rounded,
+            tooltip: 'Save',
+            onTap: onSave,
           ),
         ],
       ),

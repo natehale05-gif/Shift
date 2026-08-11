@@ -1,3 +1,12 @@
+const _codeExtensions = {
+  'dart': 'dart', 'python': 'py', 'py': 'py', 'javascript': 'js', 'js': 'js',
+  'typescript': 'ts', 'ts': 'ts', 'json': 'json', 'yaml': 'yaml',
+  'yml': 'yml', 'css': 'css', 'sql': 'sql', 'sh': 'sh', 'bash': 'sh',
+  'java': 'java', 'kotlin': 'kt', 'swift': 'swift', 'go': 'go',
+  'rust': 'rs', 'rs': 'rs', 'ruby': 'rb', 'rb': 'rb', 'c': 'c',
+  'cpp': 'cpp', 'csharp': 'cs', 'php': 'php', 'xml': 'xml',
+};
+
 /// What kind of thing was made, which decides how it is shown.
 enum ArtifactKind {
   html,
@@ -64,6 +73,40 @@ class Artifact {
   /// only worth reading as source.
   bool get previewable =>
       kind == ArtifactKind.html || kind == ArtifactKind.svg;
+
+  /// The name this downloads as.
+  ///
+  /// The extension comes from the kind rather than from the title, because the
+  /// kind is what the bytes actually are — a page saved as `.txt` opens in a
+  /// text editor and looks like the app produced nothing.
+  String get filename {
+    final stem = title
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+        .split(RegExp(r'\s+'))
+        .where((w) => w.isNotEmpty)
+        .take(8)
+        .join('-');
+    return '${stem.isEmpty ? 'artifact' : stem}.$extension';
+  }
+
+  /// What the bytes are, as a file extension.
+  String get extension => switch (kind) {
+        ArtifactKind.html => 'html',
+        ArtifactKind.svg => 'svg',
+        ArtifactKind.markdown => 'md',
+        // A code artifact's own language is the better answer when there is
+        // one; `.txt` for a Python file would be the app forgetting what it
+        // just wrote.
+        ArtifactKind.code => _codeExtensions[language] ?? 'txt',
+      };
+
+  String get mimeType => switch (kind) {
+        ArtifactKind.html => 'text/html',
+        ArtifactKind.svg => 'image/svg+xml',
+        ArtifactKind.markdown => 'text/markdown',
+        ArtifactKind.code => 'text/plain',
+      };
 
   Artifact withNewVersion(String content, DateTime createdAt) => Artifact(
         id: id,

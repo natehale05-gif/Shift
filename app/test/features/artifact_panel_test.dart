@@ -87,6 +87,17 @@ void main() {
     expect(find.textContaining('def go()'), findsOneWidget);
   });
 
+  testWidgets('the panel offers a way to keep the thing it is showing',
+      (t) async {
+    // Deferred out of N2b because there was no way to save anything off-web.
+    // There is now, and a page you can preview but not keep is a deliverable
+    // only in the sense that you can look at it.
+    await t.pumpWidget(host(page()));
+
+    expect(find.byTooltip('Save'), findsOneWidget);
+    expect(find.byTooltip('Copy'), findsOneWidget);
+  });
+
   testWidgets('every control clears the tap-target minimum', (t) async {
     await t.pumpWidget(host(page(versions: 2)));
 
