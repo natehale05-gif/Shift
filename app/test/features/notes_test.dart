@@ -6,7 +6,11 @@ import 'package:shift/data/note.dart';
 import 'package:shift/data/note_store.dart';
 import 'package:shift/features/notes/clean_transcript.dart';
 import 'package:shift/features/notes/note_cleaner.dart';
+import 'package:shift/features/chat/turn_controller.dart';
+import 'package:shift/shell/mode.dart';
 import 'package:shift/turn/capability.dart';
+import 'package:shift/turn/plan_jobs.dart';
+import 'package:shift/turn/turn_request.dart';
 import 'package:shift/turn/job_graph.dart';
 import 'package:shift/turn/job_output.dart';
 import 'package:shift/turn/job_runner.dart';
@@ -196,6 +200,98 @@ void main() {
       await cleaner.clean('   ');
 
       expect(executor.ran, isFalse);
+    });
+  });
+
+  _contextTests();
+}
+
+void _contextTests() {
+  group('a note attached to a turn', () {
+    test('goes to the model, fenced and labelled', () {
+      const request = TurnRequest(
+        input: 'what should I do first?',
+        context: [TurnContext(title: 'Sprint planning', body: 'ship notes')],
+      );
+
+      expect(request.prompt, contains('Sprint planning'));
+      expect(request.prompt, contains('ship notes'));
+      expect(request.prompt, contains('<attached'));
+      // The request comes last, so the attachment reads as material rather
+      // than as a second instruction.
+      expect(request.prompt.indexOf('ship notes'),
+          lessThan(request.prompt.indexOf('what should I do first?')));
+    });
+
+    test('nothing attached sends exactly what was typed', () {
+      const request = TurnRequest(input: 'hello');
+      expect(request.prompt, 'hello');
+    });
+
+    test('it does not change what gets made', () {
+      // The note mentions a photograph; the question is a question. What to
+      // make is what they asked for — the attachment is what to make it from.
+      final asked = planJobs(const TurnRequest(input: 'what should I do?'));
+      final withNote = planJobs(const TurnRequest(
+        input: 'what should I do?',
+        context: [
+          TurnContext(title: 'Ideas', body: 'draw a picture of the shop'),
+        ],
+      ));
+
+      expect(withNote.steps.map((s) => s.needs),
+          asked.steps.map((s) => s.needs));
+    });
+
+    test('the attachment still reaches the step it plans', () {
+      final graph = planJobs(const TurnRequest(
+        input: 'summarise this',
+        context: [TurnContext(title: 'Notes', body: 'the important part')],
+      ));
+
+      expect(graph.steps.single.instruction, contains('the important part'));
+    });
+  });
+
+  group('attaching from the composer', () {
+    late Directory dir;
+    late NoteStore notes;
+    late TurnController turn;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('shift-attach');
+      final kv = KvStore(path: '${dir.path}/kv.json');
+      await kv.load();
+      notes = NoteStore(kv);
+      await notes.load();
+      await notes.save('n1', 'Sprint planning\nship the notes mode');
+
+      turn = TurnController(
+        notes: notes,
+        executors: () => {Capability.text: _Says('ok')},
+      );
+    });
+    tearDown(() async {
+      turn.dispose();
+      if (await dir.exists()) await dir.delete(recursive: true);
+    });
+
+    test('the note goes with the message and is then let go', () async {
+      turn.attachNotes(['n1']);
+      await turn.send('what next?', mode: AppMode.chat);
+
+      expect(turn.attachedNotes, isEmpty,
+          reason: 'an attachment that stuck would silently ride along with '
+              'every later message');
+    });
+
+    test('a note deleted before sending is skipped, not sent empty', () async {
+      turn.attachNotes(['n1']);
+      await notes.remove('n1');
+      await turn.send('what next?', mode: AppMode.chat);
+
+      // Nothing thrown, and the turn still ran.
+      expect(turn.items.whereType<Reply>().single.failure, isNull);
     });
   });
 }

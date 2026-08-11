@@ -6,6 +6,7 @@ import '../../data/api_keys_store.dart';
 import '../../data/artifact.dart';
 import '../../data/artifact_store.dart';
 import '../../data/conversation_store.dart';
+import '../../data/note_store.dart';
 import '../../providers/access.dart';
 import '../../shell/mode.dart';
 import '../../turn/capability.dart';
@@ -147,10 +148,30 @@ class TurnController extends ChangeNotifier {
   /// sidebar that nobody asked for.
   String? _conversationId;
 
+  /// Where notes live, so an attached one can be resolved at send time.
+  /// Optional, like the other stores, so a test can drive this with no disk.
+  final NoteStore? notes;
+
+  /// Notes going with the **next** message.
+  ///
+  /// Held here rather than in the composer because the composer is built twice
+  /// — once on the empty state, once under a conversation — and an attachment
+  /// that vanished when the first reply arrived would be a bug nobody could
+  /// describe.
+  final List<String> attachedNotes = [];
+
+  void attachNotes(List<String> ids) {
+    attachedNotes
+      ..clear()
+      ..addAll(ids);
+    notifyListeners();
+  }
+
   TurnController({
     ApiKeysStore? keys,
     this.conversations,
     this.artifacts,
+    this.notes,
     Map<Capability, StepExecutor> Function()? executors,
     this.snapshotEvery = const Duration(seconds: 3),
   }) {
@@ -362,7 +383,11 @@ class TurnController extends ChangeNotifier {
     };
   }
 
-  Future<void> send(String input, {required AppMode mode}) async {
+  Future<void> send(
+    String input, {
+    required AppMode mode,
+    List<TurnContext> context = const [],
+  }) async {
     final text = input.trim();
     if (text.isEmpty || _running) return;
 
@@ -379,7 +404,25 @@ class TurnController extends ChangeNotifier {
     _lastSnapshot = DateTime.now();
     notifyListeners();
 
-    final graph = planJobs(TurnRequest(input: text, mode: mode));
+    // Resolved now rather than when it was attached: a note edited in between
+    // goes as it is *now*, because what was attached is the note, not a copy.
+    final attached = [
+      ...context,
+      for (final id in attachedNotes)
+        if (notes?.body(id).trim().isNotEmpty ?? false)
+          TurnContext(
+            title: notes!.index
+                    .where((n) => n.id == id)
+                    .map((n) => n.title)
+                    .firstOrNull ??
+                'Note',
+            body: notes!.body(id),
+          ),
+    ];
+    attachedNotes.clear();
+
+    final graph =
+        planJobs(TurnRequest(input: text, mode: mode, context: attached));
     final stream = JobRunner(executors()).run(graph);
 
     final done = Completer<void>();

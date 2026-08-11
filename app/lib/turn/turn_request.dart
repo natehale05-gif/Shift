@@ -21,11 +21,42 @@ class TurnRequest {
   /// provider, not about what to make.
   final String? pinnedModel;
 
+  /// Material the person attached — notes, today.
+  ///
+  /// **Deliberately not part of routing.** A note that happens to mention a
+  /// photograph must not turn a question into an image job: what to make is
+  /// what they *asked for*, and the attachment is what to make it *from*. So
+  /// [planJobs] matches on [input] and sends [prompt].
+  final List<TurnContext> context;
+
   const TurnRequest({
     required this.input,
     this.mode = AppMode.chat,
     this.webSearch = false,
     this.deepResearch = false,
     this.pinnedModel,
+    this.context = const [],
   });
+
+  /// What the model is given: the attachments, then the request.
+  ///
+  /// Fenced and labelled so a note reads as material rather than as a second
+  /// instruction — the same reason the note tidy fences its input.
+  String get prompt {
+    if (context.isEmpty) return input;
+    final attached = [
+      for (final item in context)
+        '<attached title="${item.title}">\n${item.body.trim()}\n</attached>',
+    ].join('\n\n');
+    return 'Use the attached material where it is relevant.\n\n$attached\n\n'
+        '$input';
+  }
+}
+
+/// One thing attached to a turn.
+class TurnContext {
+  final String title;
+  final String body;
+
+  const TurnContext({required this.title, required this.body});
 }

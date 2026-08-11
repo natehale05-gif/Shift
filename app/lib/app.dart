@@ -52,6 +52,7 @@ class ShiftApp extends StatelessWidget {
             keys: keys,
             conversations: conversations,
             artifacts: artifacts,
+            notes: notes,
           ),
         ),
       ],

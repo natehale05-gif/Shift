@@ -38,7 +38,7 @@ JobGraph planJobs(TurnRequest request) {
       id: 'search',
       needs: Capability.search,
       produces: OutputKind.search,
-      instruction: request.input,
+      instruction: request.prompt,
       label: 'Looking it up',
     ));
   }
@@ -52,7 +52,7 @@ JobGraph planJobs(TurnRequest request) {
       id: 'image',
       needs: Capability.image,
       produces: OutputKind.image,
-      instruction: request.input,
+      instruction: request.prompt,
       label: 'Drawing',
     ));
   }
@@ -63,7 +63,7 @@ JobGraph planJobs(TurnRequest request) {
       id: 'image',
       needs: Capability.image,
       produces: OutputKind.image,
-      instruction: request.input,
+      instruction: request.prompt,
       label: 'Drawing',
     ));
     return JobGraph.build(steps).graph!;
@@ -75,7 +75,7 @@ JobGraph planJobs(TurnRequest request) {
     id: 'main',
     needs: Capability.text,
     produces: OutputKind.text,
-    instruction: request.input,
+    instruction: request.prompt,
     label: wantsPage ? 'Building' : 'Thinking',
     after: [
       if (wantsSearch) 'search',
@@ -91,7 +91,7 @@ JobGraph planJobs(TurnRequest request) {
       id: 'speech',
       needs: Capability.speech,
       produces: OutputKind.audio,
-      instruction: request.input,
+      instruction: request.prompt,
       label: 'Reading it out',
       after: const ['main'],
     ));
@@ -112,7 +112,7 @@ JobGraph _justAnswer(TurnRequest request) => JobGraph.build([
         id: 'main',
         needs: Capability.text,
         produces: OutputKind.text,
-        instruction: request.input,
+        instruction: request.prompt,
         label: 'Thinking',
       ),
     ]).graph!;

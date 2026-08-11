@@ -30,12 +30,22 @@ class Composer extends StatefulWidget {
   final bool busy;
   final String hint;
 
+  /// Shown above the field — the notes going with this message. Null when the
+  /// surface does not offer attachments.
+  final Widget? attachments;
+
+  /// Opens the note picker. Null hides the control, which is what a surface
+  /// with nothing to attach should do rather than showing a dead paperclip.
+  final VoidCallback? onAttach;
+
   const Composer({
     super.key,
     required this.onSend,
     this.onStop,
     this.busy = false,
     this.hint = 'How can I help you today?',
+    this.attachments,
+    this.onAttach,
   });
 
   @override
@@ -97,8 +107,10 @@ class _ComposerState extends State<Composer> {
       ),
       padding: const EdgeInsets.fromLTRB(Space.md, Space.sm, Space.sm, Space.sm),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
+          ?widget.attachments,
           CallbackShortcuts(
             bindings: {
               if (_keyboardSends)
@@ -135,12 +147,10 @@ class _ComposerState extends State<Composer> {
             children: [
               _RoundButton(
                 icon: Icons.add_rounded,
-                tooltip: 'Attach',
-                // Attachments land with the chat wave. The control is here
-                // because its absence changes the composer's proportions, and
-                // it says plainly that it is not ready rather than doing
-                // nothing when pressed.
-                onPressed: null,
+                tooltip: widget.onAttach == null
+                    ? 'Nothing to attach here yet'
+                    : 'Attach a note',
+                onPressed: widget.onAttach,
               ),
               const Spacer(),
               _SendButton(

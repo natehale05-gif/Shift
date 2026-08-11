@@ -9,6 +9,7 @@ import '../../shell/mode.dart';
 import '../settings/settings_screen.dart';
 import '../artifacts/artifact_card.dart';
 import '../artifacts/artifact_panel.dart';
+import 'attached_notes.dart';
 import 'composer.dart';
 import 'failure_card.dart';
 import 'markdown_view.dart';
@@ -97,6 +98,38 @@ class ChatSurface extends StatelessWidget {
   }
 }
 
+/// The composer, with whatever notes are going with the next message.
+///
+/// Built here rather than inline because the composer appears twice — on the
+/// empty state and under a conversation — and both need the same attachments.
+class _ChatComposer extends StatelessWidget {
+  final String hint;
+  final bool withStop;
+
+  const _ChatComposer({this.hint = 'How can I help you today?', this.withStop = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final turn = context.watch<TurnController>();
+
+    return Composer(
+      hint: hint,
+      busy: withStop && turn.running,
+      onStop: withStop ? turn.stop : null,
+      onSend: (t) => turn.send(t, mode: AppMode.chat),
+      attachments: AttachedNotes(
+        ids: turn.attachedNotes,
+        onChanged: turn.attachNotes,
+      ),
+      onAttach: () async {
+        final picked = await NotePicker.show(context,
+            attached: List.of(turn.attachedNotes));
+        if (picked != null) turn.attachNotes(picked);
+      },
+    );
+  }
+}
+
 class _EmptyConversation extends StatelessWidget {
   const _EmptyConversation();
 
@@ -104,8 +137,6 @@ class _EmptyConversation extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = context.colors;
     final text = Theme.of(context).textTheme;
-    final turn = context.read<TurnController>();
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: Space.lg),
       child: Column(
@@ -129,7 +160,7 @@ class _EmptyConversation extends StatelessWidget {
             ],
           ),
           const SizedBox(height: Space.xl),
-          Composer(onSend: (t) => turn.send(t, mode: AppMode.chat)),
+          const _ChatComposer(),
           const SizedBox(height: Space.md),
           // Says the state and offers the fix in the same breath. The previous
           // version said only the state, and the way to act on it was three
@@ -174,12 +205,7 @@ class _Transcript extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.fromLTRB(
               Space.lg, 0, Space.lg, Space.lg),
-          child: Composer(
-            busy: turn.running,
-            hint: 'Reply to SHIFT',
-            onSend: (t) => turn.send(t, mode: AppMode.chat),
-            onStop: turn.stop,
-          ),
+          child: const _ChatComposer(hint: 'Reply to SHIFT', withStop: true),
         ),
       ],
     );
