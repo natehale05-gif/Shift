@@ -64,10 +64,14 @@ probe() {
 # silently did nothing. The observations are the record.
 note() { printf '  %-46s %s\n' "$1" "$2"; }
 
-# Which of the two builds answered. Both apps share a name, an icon and a
-# splash screen, so this tag is the only thing that distinguishes them — and
-# comparing each base href to its own path, which is what this used to do,
-# stays true for *either* app at the root.
+# Which build answered.
+#
+# Kept after v1 was deleted rather than dropped with it. It exists because two
+# apps once shared a name, an icon and a splash screen and the site served the
+# wrong one for days; what makes it worth keeping is that it is the only
+# assertion here that says *this is the app we just built* rather than
+# *something answered*. A stale artifact left in the Pages cache would still
+# return 200 with a base href of the right shape.
 app_marker() {
   sed -n 's/.*name="shift-app" content="\([^"]*\)".*/\1/p' "$tmp/body" | head -1
 }
@@ -93,16 +97,18 @@ run_checks() {
   [ "$status" = 200 ] \
     || failures+=("root: $site -> HTTP $status, want 200")
   [ "$(app_marker)" = 'v2' ] \
-    || failures+=("root: $site serves '$(app_marker)', not v2 — this is the exact fault that had the user looking at the old app")
+    || failures+=("root: $site serves '$(app_marker)', not the app — this is the exact fault that had the user looking at the old one")
   grep -q "<base href=\"$base\"" "$tmp/body" \
     || failures+=("root: $site does not carry <base href=\"$base\">")
 
+  # /v1/ used to serve the old app and is asserted **gone**, not merely
+  # different. "Replace the old app with the new one" is not done while the old
+  # one is still one path away, and a deploy that quietly kept publishing it
+  # would look identical from the root.
   probe "${site}v1/"
-  note "${site}v1/" "HTTP $status · $(app_marker)"
-  [ "$status" = 200 ] \
-    || failures+=("v1: ${site}v1/ -> HTTP $status, want 200")
-  [ "$(app_marker)" = 'v1' ] \
-    || failures+=("v1: ${site}v1/ serves '$(app_marker)', not v1")
+  note "${site}v1/ (deleted)" "HTTP $status"
+  [ "$status" = 404 ] \
+    || failures+=("the old app is still published at ${site}v1/ -> HTTP $status, want 404")
 
   probe "${site}flutter_bootstrap.js"
   note "${site}flutter_bootstrap.js" "HTTP $status · $ctype"
@@ -188,7 +194,7 @@ run_checks() {
 
 while :; do
   if run_checks; then
-    echo "$site serves v2, ${site}v1/ serves v1, and the README agrees."
+    echo "$site serves the app, the old /v1/ is gone, and the README agrees."
     exit 0
   fi
   now=$(date +%s)

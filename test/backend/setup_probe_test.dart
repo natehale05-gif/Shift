@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/backend/setup_probe.dart';
+import 'package:shift/backend/setup_probe.dart';
 
 void main() {
   group('readProxyResponse', () {

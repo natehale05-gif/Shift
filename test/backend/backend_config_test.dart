@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/backend/backend_config.dart';
+import 'package:shift/backend/backend_config.dart';
 
 void main() {
   group('BackendConfig', () {

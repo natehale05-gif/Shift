@@ -1,113 +1,103 @@
 # SHIFT AI
 
-An intuitive app for shiftai.club that works like the Claude app but feels like
-an Apple product. Talk to it like you would a person — it routes your request to
-the right specialised studio automatically.
+Chat, code, images, design, work and notes in one app, on six platforms.
 
 **[▶ Open it in your browser](https://natehale05-gif.github.io/Shift/)** — no
-install; **an account is required**, and creating one takes a moment. This is
-**v2**, the rebuild: six modes (Chat, Code, Visual, Design, Work, Notes),
-targeting the App Store and Google Play as well as the web and desktop.
+install; an account is required, and creating one takes a moment.
 
-> Want a look without signing up? **[v1 is still
-> open](https://natehale05-gif.github.io/Shift/v1/)** — the previous app,
-> frozen, no account and no key needed.
+## Why this was rebuilt rather than restructured
 
-It is early, and worth saying plainly rather than discovering: the shell and
-the six modes exist and each mode says which wave builds it. Nothing works
-beyond navigation yet — the engine underneath it is being wired up now.
+There used to be a previous app at this path, and it has been deleted. It
+worked, and it could not be submitted to either mobile store for structural
+rather than cosmetic reasons: no iOS target at all, Android release builds
+signed with the debug key, `REQUEST_INSTALL_PACKAGES` in the manifest, and a
+self-updater that downloaded and installed an APK — which Play's Device and
+Network Abuse policy prohibits outright. Three of those were *removals*, and
+each was load-bearing in the old app, so unpicking them was most of a rewrite
+done in the least pleasant order.
 
-> **[SHIFT v1 is at `/Shift/v1/`](https://natehale05-gif.github.io/Shift/v1/)**
-> — the finished app: eleven studios, artifacts, projects, demo mode. Use it
-> if you want something that works today. It is frozen; no new features go
-> into it.
->
-> The two swapped places, because this link is the one people press and it had
-> been pointing at v1 while v2 was reported missing. `tool/verify_site.sh` now
-> checks that the button above serves the app it advertises.
->
-> See [`app/README.md`](app/README.md) for what it is and why it exists.
+Its history is still in this repository; nothing about it is still built,
+deployed or served.
 
-## Download
+## The one idea to know
 
-[![macOS](https://img.shields.io/badge/macOS-Install-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-macos.dmg)
-[![Windows](https://img.shields.io/badge/Windows-Install-0078D4?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-windows-setup.exe)
-[![Linux](https://img.shields.io/badge/Linux-Install-FCC624?style=for-the-badge&logo=linux&logoColor=black)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-linux-amd64.deb)
-[![Android](https://img.shields.io/badge/Android-Install-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-android.apk)
+**Modes are workspaces, not routers.** Every mode can produce everything — ask
+for a landing page in Notes and you get a landing page. A mode chooses the
+*surface*: what is on screen, what is at hand, what the defaults are. The
+engine behind all six is the same.
 
-Each button is a real installer, not an archive to unpack:
+That is why Chat is the default and why it has to be able to answer anything.
 
-| Platform | What you get | How to install |
-|---|---|---|
-| **macOS** | `.dmg` disk image | Open it, drag **SHIFT AI** into Applications |
-| **Windows** | `.exe` setup | Run it — Start Menu entry, desktop shortcut, uninstaller |
-| **Linux** | `.deb` package | `sudo dpkg -i SHIFT-AI-linux-amd64.deb`, then launch it from your apps menu |
-| **Android** | `.apk` | Tap it and confirm the install |
+## Layout
 
-Every button points at `releases/latest`, so it always fetches the newest build.
-All builds are on the [Releases page](https://github.com/natehale05-gif/Shift/releases).
-
-**Portable builds.** `SHIFT-AI-windows.zip` and `SHIFT-AI-linux-x64.tar.gz` are
-also published for anyone who would rather not install anything — extract and
-run. On Linux the tarball is additionally the *self-updating* copy: a `.deb`
-installs into root-owned `/opt`, so that copy cannot replace itself and the app
-says so and links you back here instead of failing an update halfway.
-
-**You only download once.** The app checks for new releases daily and installs
-them itself — silently on Linux and Windows, applied the next time you open it.
-On macOS and Android it downloads the update and hands it to the OS installer,
-which asks you to confirm; unsigned software cannot install without that prompt.
-Turn it off in **Settings → Updates**. The browser version updates on reload.
-
-### First launch
-
-These builds are **unsigned** — code-signing certificates cost money and this
-project does not have them. Your OS will object exactly once:
-
-| | |
-|---|---|
-| **macOS** | Right-click the app → **Open** → **Open**. If it claims the app is "damaged": `xattr -dr com.apple.quarantine "/Applications/SHIFT AI.app"` |
-| **Windows** | SmartScreen shows a blue box → **More info** → **Run anyway** |
-| **Android** | Allow installs from unknown sources for your file manager when prompted |
-| **Linux** | No warning — `dpkg` does not check signatures for a local file |
-
-The Windows installer installs per-user, into
-`%LOCALAPPDATA%\Programs\SHIFT AI`, which is what lets the app update itself
-later. You can choose an all-users install instead; the app then detects that it
-cannot write to its own directory and points you back to the Releases page for
-updates rather than failing one halfway through.
-
-### What differs from the browser version
-
-Chats, projects, artifacts, downloads and bring-your-own-key providers all work
-the same, and **chats persist between launches**. Three things differ, because
-they are browser APIs:
-
-- **Dictation, live voice, paste/drag-drop intake and printing** are
-  browser-only. The attach button works everywhere.
-- **Artifact previews** open in your default browser rather than inline — the
-  desktop app embeds no browser engine. The Code tab shows the source in-app.
-- **Generated audio** opens in your system audio player rather than playing
-  inline.
-
-In exchange, the desktop and Android builds keep your chats between launches and
-update themselves.
-
-## Bring your own key
-
-The app ships in demo mode: every studio responds with simulated output, so
-nothing is hidden behind a signup. Add a key in **Settings → API keys** and the
-same requests run against the real provider — Anthropic, Google Gemini, OpenAI,
-Groq, Mistral, OpenRouter, Flux or Heygen. Keys are stored on your own device
-and calls go direct to the provider.
-
-## Building from source
-
-```bash
-flutter pub get
-flutter test
-flutter run -d chrome     # or: -d linux, -d macos, -d windows, -d <android device>
+```
+lib/
+  core/design/    tokens — palette, metrics, typography, theme
+  core/device/    device class (which is not the same question as window width)
+  core/platform/  conditional-import shims
+  shell/          the six-mode shell
 ```
 
-Linux desktop builds additionally need `libgtk-3-dev ninja-build clang cmake
-pkg-config`.
+## Running it
+
+```sh
+flutter pub get
+flutter run -d linux            # or chrome, macos, windows, ios, android
+```
+
+The phone surface is otherwise unreachable from a desktop, so:
+
+```sh
+flutter run --dart-define=SHIFT_DEVICE_CLASS=phone
+```
+
+That override is permanent rather than a test hook — it is also the fastest way
+to answer a support question about a layout somebody is seeing.
+
+## The gate
+
+Every wave ends green on all of this:
+
+```sh
+flutter analyze
+flutter test
+python3 tool/scan_conditional_imports.py
+flutter build web --wasm --release --no-web-resources-cdn
+flutter build linux --release
+```
+
+`--no-web-resources-cdn` is not optional. Without it the engine is fetched from
+`gstatic.com` at runtime, which is a third-party request on first paint and a
+blank app for anyone offline.
+
+## Things that will bite you
+
+**The viewport meta tag.** Flutter's web template still ships without one, in
+3.44, a year after this cost the previous app every phone laying out at
+~980px and scaling down. `web/index.html` has it and CI asserts it.
+
+**Bundled fonts only.** CanvasKit renders text from bundled font bytes and does
+not fall back to the browser's generic stacks — which is why `monospace` is
+registered as a literal family name in `pubspec.yaml`.
+
+**A `TextTheme` with gaps.** Every slot left undefined resolves to Material's
+Roboto, which the web build then downloads from `fonts.gstatic.com`. The theme
+merges onto the platform theme and forces the family, so no slot can escape.
+
+**Fallback fonts.** `web/fonts/fallback/` is empty and must not stay that way
+past N2 — see its README.
+
+**Conditional imports.** The analyzer resolves only the default branch. Run the
+scan before every build.
+
+## What is verifiable here, and what is not
+
+Linux and web are built and run in the development sandbox. **macOS, Windows,
+iOS and Android are verified in CI as *built*, never as *installed and run*** —
+there is no runner for them, and no amount of care changes that. Android has no
+SDK locally either, so it is CI-only.
+
+Signing is wired to secrets that may be absent. When they are, the Android
+release build falls back to the debug key: installable for testing, and
+rejected by Play. That is the intended failure — a local build that quietly
+produced a Play-shaped artifact would be worse.

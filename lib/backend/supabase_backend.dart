@@ -114,6 +114,114 @@ class SupabaseBackend implements ShiftBackend {
     return session;
   }
 
+  @override
+  Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo}) =>
+      Uri.parse('${config.url}/auth/v1/authorize').replace(
+        queryParameters: {
+          'provider': provider.id,
+          'redirect_to': redirectTo.toString(),
+        },
+      );
+
+  @override
+  Future<Set<OAuthProvider>> enabledProviders() async {
+    try {
+      final response = await _http.get(
+        Uri.parse('${config.url}/auth/v1/settings'),
+        headers: _headers(),
+      );
+      if (response.statusCode >= 400) return OAuthProvider.values.toSet();
+
+      final external = (jsonDecode(response.body)
+          as Map<String, dynamic>)['external'] as Map<String, dynamic>?;
+      // A body without `external` is a shape this does not recognise, which is
+      // not the same as a host with nothing enabled. Same rule as a failed
+      // request: do not hide a sign-in on a guess.
+      if (external == null) return OAuthProvider.values.toSet();
+
+      return {
+        for (final provider in OAuthProvider.values)
+          if (external[provider.id] == true) provider,
+      };
+    } catch (_) {
+      return OAuthProvider.values.toSet();
+    }
+  }
+
+  /// Reads a session out of a callback URL's **fragment**.
+  ///
+  /// The tokens come back after the `#`, which is deliberate on the host's part
+  /// and useful on ours: a fragment is never sent to a server, so the access
+  /// token does not appear in the web server's logs the way a query parameter
+  /// would. It does appear in the address bar, which is why the caller clears
+  /// it immediately.
+  ///
+  /// A callback carrying `error` is a real answer — the person pressed cancel,
+  /// or the provider refused — and becomes an exception rather than a silent
+  /// null, because a null here is indistinguishable from an ordinary page load
+  /// and the button would appear to have done nothing at all.
+  @override
+  Future<ShiftSession?> adoptCallback(Uri url) async {
+    final fragment = url.fragment;
+    if (fragment.isEmpty) return null;
+
+    final params = Uri.splitQueryString(fragment);
+
+    if (params['error'] case final error?) {
+      throw BackendException(
+        BackendProblem.credentials,
+        // `access_denied` is what cancelling looks like, and it is not a
+        // failure worth alarming anybody about.
+        error == 'access_denied'
+            ? 'Sign-in was cancelled.'
+            : 'That sign-in did not complete. Try again.',
+        detail: '$error: ${params['error_description'] ?? ''}',
+      );
+    }
+
+    final token = params['access_token'];
+    if (token == null) return null;
+
+    // Built from the fragment rather than from a `/user` round trip: the
+    // account id is in the token's own payload, and one fewer request on the
+    // path back from a redirect is one fewer thing to fail while the app is
+    // still painting its first frame.
+    final expiresIn = int.tryParse(params['expires_in'] ?? '') ?? 3600;
+    final session = ShiftSession(
+      account: ShiftAccount(id: _subjectOf(token) ?? ''),
+      accessToken: token,
+      refreshToken: params['refresh_token'],
+      expiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
+    );
+    if (session.account.id.isEmpty) return null;
+
+    final adopted = _adopt(session);
+    // The same provisioning an email sign-up gets. **Apple hands over a name
+    // exactly once, on the first authorization ever**, so the row has to be
+    // written on this pass or that name is gone for good — there is no API to
+    // ask again.
+    await _ensureProfile(adopted);
+    return adopted;
+  }
+
+  /// The account id out of a JWT's payload.
+  ///
+  /// Not verified here, and it does not need to be: the token is only useful
+  /// if the server accepts it, and the server verifies it on every call. This
+  /// is reading a field, not trusting a claim.
+  static String? _subjectOf(String jwt) {
+    final parts = jwt.split('.');
+    if (parts.length != 3) return null;
+    try {
+      final payload = parts[1];
+      final padded = payload.padRight((payload.length + 3) ~/ 4 * 4, '=');
+      final json = jsonDecode(utf8.decode(base64Url.decode(padded)));
+      return (json as Map<String, dynamic>)['sub'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Creates the account's own `profiles` row if it has none.
   ///
   /// Nothing else does. The schema deliberately does not reference the auth
@@ -372,26 +480,16 @@ class SupabaseBackend implements ShiftBackend {
   @override
   Future<({int status, String body})?> probeProxy(
     String provider, {
+    required String path,
+    required Map<String, dynamic> body,
     Map<String, String> extraHeaders = const {},
   }) async {
     if (_session == null) return null;
 
-    // The smallest real request the provider will accept. It has to be real —
-    // a malformed body would come back 400 from the provider and look like a
-    // broken key, which is the opposite of what the probe is for.
-    const body = {
-      'model': 'claude-haiku-4-5',
-      'max_tokens': 1,
-      'messages': [
-        {'role': 'user', 'content': 'Hi'}
-      ],
-    };
-
     try {
       final token = await _freshToken();
       final response = await _http.post(
-        Uri.parse('${config.url}/functions/v1/provider-proxy/$provider'
-            '/v1/messages'),
+        Uri.parse('${config.url}/functions/v1/provider-proxy/$provider$path'),
         // The real client's headers too, not just ours. A probe that sends
         // fewer headers triggers a different CORS preflight, and that is how
         // this card reported the proxy working while every turn failed.
@@ -417,6 +515,30 @@ class SupabaseBackend implements ShiftBackend {
     }
   }
 
+  @override
+  Future<({int status, String body})?> proxyRoutes() async {
+    if (_session == null) return null;
+
+    try {
+      final token = await _freshToken();
+      final response = await _http.get(
+        Uri.parse('${config.url}/functions/v1/provider-proxy/_shift/routes'),
+        headers: _headers(token: token),
+      );
+      return (status: response.statusCode, body: response.body);
+    } on BackendException {
+      return null;
+    } catch (_) {
+      // Same recovery as [probeProxy], and needed for the same reason: the
+      // functions host answers 404 for a slug it does not hold, and that 404
+      // carries no CORS header, so a browser reports it as silence. Here the
+      // 404 is not an error to be swallowed — it is the answer. A server that
+      // does not know this route is a server older than this check.
+      if (await _hostIsReachable()) return (status: 404, body: '');
+      return null;
+    }
+  }
+
   /// The project ref, which is the first path segment of the project URL.
   ///
   /// Derived rather than stored so there is one place the project is named.
@@ -436,13 +558,15 @@ class SupabaseBackend implements ShiftBackend {
           copyLabel: 'Site URL',
           copyValue: BackendConfig.siteUrl,
         ),
-        // The functions are deployed. These two are what keeps them that way
-        // without anyone in the loop — so the titles say what they buy rather
-        // than implying nothing works until they exist, which is what the
-        // previous wording implied and what left Grant pointing at a function
-        // nobody had deployed.
+        // These two are what keeps the deployed functions in step with the
+        // app, with nobody in the loop. The titles say what they buy — but
+        // note they buy more than "future" changes: this job has never run,
+        // so every deploy so far has been by hand through whichever tool
+        // happened to be connected, and the live proxy spent a week five
+        // commits behind while the app sent it a route it had never heard of.
+        // The Server card is what makes that visible; these are what fix it.
         SetupLink(
-          title: 'So future changes deploy themselves: an access token',
+          title: 'So the server keeps up with the app: an access token',
           action: 'Add secret',
           url: Uri.parse(
               '${BackendConfig.repoUrl}/settings/secrets/actions/new'),
@@ -450,7 +574,7 @@ class SupabaseBackend implements ShiftBackend {
           copyValue: 'SUPABASE_ACCESS_TOKEN',
         ),
         SetupLink(
-          title: 'So future changes deploy themselves: the project ref',
+          title: 'So the server keeps up with the app: the project ref',
           action: 'Add variable',
           url: Uri.parse(
               '${BackendConfig.repoUrl}/settings/variables/actions/new'),
@@ -512,7 +636,7 @@ class SupabaseBackend implements ShiftBackend {
   Future<Uri> billingPortal({String? plan}) async {
     final json = await _postFunction(
       Uri.parse('${config.url}/functions/v1/billing-portal'),
-      {if (plan != null) 'plan': plan},
+      {'plan': ?plan},
       slug: 'billing-portal',
     );
     final url = json['url'] as String?;
@@ -592,7 +716,7 @@ class SupabaseBackend implements ShiftBackend {
         'apikey': config.anonKey,
         if (token != null) 'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
-        if (prefer != null) 'Prefer': prefer,
+        'Prefer': ?prefer,
       };
 
   Future<List<dynamic>> _get(Uri uri, {bool allowFailure = false}) async {

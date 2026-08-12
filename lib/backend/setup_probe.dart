@@ -88,6 +88,18 @@ ProxyProbeResult readProxyResponse(int status, String body) {
                 'covers this month.',
         detail: detail,
       ),
+    // 403 is the proxy's **own** refusal — a path its allowlist will not
+    // forward — and it fell into the 4xx arm below, which reads every status
+    // as the provider's. So the card blamed OpenAI for our routing, in the
+    // same breath the chat card was blaming the member's key for it. Found by
+    // the test that pins this against `sentenceForManagedStatus`.
+    403 => ProxyProbeResult(
+        ProxyOutcome.serverNotReady,
+        detail ??
+            'The server would not forward that call. Nothing is wrong with '
+                'your account.',
+        detail: detail,
+      ),
     // The server's own words first, as 402 already does. 503 covers three
     // states — no key for this provider, a missing server setting, and an
     // entitlement check that could not run — and only the server knows which.
@@ -121,6 +133,117 @@ ProxyProbeResult readProxyResponse(int status, String body) {
         'Working — the call went through SHIFT\'s key and came back.',
       ),
   };
+}
+
+/// How the deployed proxy's route list compares to what this app needs.
+enum RoutesOutcome {
+  /// Every route the app asks for is one this server forwards.
+  current,
+
+  /// It answered, and does not forward something the app sends. The routes it
+  /// is missing are named — this is the one state where being specific is the
+  /// entire value, because "something is wrong with the server" is what the
+  /// last week already said.
+  behind,
+
+  /// It does not know the question. A 404 here is not a failure: `_shift` is
+  /// not a provider, so a proxy built before this route existed answers exactly
+  /// this — which places it as older than the app asking.
+  older,
+
+  /// Nothing answered, or the answer could not be read.
+  unknown,
+}
+
+/// The comparison, and the sentence for it.
+class RoutesReport {
+  final RoutesOutcome outcome;
+  final String message;
+
+  /// `'openai POST /v1/images/generations'` — one line per route the server
+  /// will not forward. Empty unless [outcome] is [RoutesOutcome.behind].
+  final List<String> missing;
+
+  /// The server's fingerprint of its own table, when it gave one. Useful only
+  /// for telling two deploys apart in a report.
+  final String? version;
+
+  const RoutesReport(this.outcome, this.message,
+      {this.missing = const [], this.version});
+}
+
+/// Compares what the app sends against what a running server says it forwards.
+///
+/// Pure, and it takes [required] as a parameter rather than importing it:
+/// `tool/scan_backend_boundary.py` forbids `lib/backend/` importing the app,
+/// and the required routes are the provider layer's own knowledge.
+///
+/// **This is the check that could not exist before.** The repo-level scan
+/// compares the client to the allowlist *in this repository*, so it stayed
+/// green for the week the deployed proxy was five commits behind with no image
+/// route. Nothing compared the app to the server that was actually running.
+RoutesReport readProxyRoutes(
+  ({int status, String body})? answer, {
+  required Map<String, List<String>> required,
+}) {
+  if (answer == null) {
+    return const RoutesReport(RoutesOutcome.unknown,
+        'Could not ask the server what it forwards. Check your connection.');
+  }
+  if (answer.status == 404) {
+    return const RoutesReport(
+      RoutesOutcome.older,
+      'This server is older than the app and cannot say what it forwards. '
+      'Deploy the functions.',
+    );
+  }
+  if (answer.status != 200) {
+    return RoutesReport(RoutesOutcome.unknown,
+        'The server would not say what it forwards (${answer.status}).');
+  }
+
+  final Map<String, dynamic> decoded;
+  try {
+    final parsed = jsonDecode(answer.body);
+    if (parsed is! Map<String, dynamic>) throw const FormatException();
+    decoded = parsed;
+  } on FormatException {
+    return const RoutesReport(RoutesOutcome.unknown,
+        'The server answered something this app could not read.');
+  }
+
+  final version = decoded['version'];
+  final allow = decoded['allow'];
+  if (allow is! Map) {
+    return const RoutesReport(RoutesOutcome.unknown,
+        'The server answered something this app could not read.');
+  }
+
+  final missing = <String>[];
+  for (final MapEntry(key: provider, value: routes) in required.entries) {
+    final served = allow[provider];
+    final permitted =
+        served is List ? served.whereType<String>().toSet() : <String>{};
+    for (final route in routes) {
+      if (!permitted.contains(route)) missing.add('$provider $route');
+    }
+  }
+
+  final build = version is String && version.isNotEmpty ? version : null;
+  if (missing.isEmpty) {
+    return RoutesReport(
+      RoutesOutcome.current,
+      'The server forwards everything this app asks for.',
+      version: build,
+    );
+  }
+  return RoutesReport(
+    RoutesOutcome.behind,
+    'The server will not forward ${missing.length == 1 ? missing.single : '${missing.length} of the routes this app uses'} '
+    '— it is running an older build.',
+    missing: missing,
+    version: build,
+  );
 }
 
 /// When no HTTP answer arrived at all.

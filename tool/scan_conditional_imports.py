@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks every conditional import pair in v1's `lib/` and v2's `app/lib/`.
+"""Checks every conditional import pair in `lib/`.
 
 The analyzer only ever resolves the **default** branch of a conditional
 import. A stale path or a drifted name in the other branch therefore passes
@@ -24,12 +24,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-# **Both apps.** This scanned only v1 for the whole of the v2 rebuild, so every
-# report of "N pairs clean" during it was true of v1 and silent about v2 --
-# whose pairs key on `dart.library.js_interop` and are the ones most likely to
-# be wrong, because `dart.library.html` is *false* under dart2wasm and picking
-# the wrong arm raises nothing at all.
-LIBS = [ROOT / "lib", ROOT / "app" / "lib"]
+# One app, at the root. It scanned two trees while v1 was still here, and
+# before that only v1 -- so every "N pairs clean" reported during the rebuild
+# was true of the frozen app and silent about the one being written. Worth
+# keeping in mind now that there is only one: these pairs key on
+# `dart.library.js_interop`, and `dart.library.html` is *false* under dart2wasm,
+# so picking the wrong arm raises nothing at all.
+LIBS = [ROOT / "lib"]
 
 # Both keywords: `export` facades (open_url, file_intake) re-expose the whole
 # branch, so they need a stricter check than `import` ones do. Captures the

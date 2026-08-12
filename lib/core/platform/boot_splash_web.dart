@@ -1,25 +1,26 @@
-// ignore_for_file: deprecated_member_use, avoid_web_libraries_in_flutter
-import 'dart:async';
-import 'dart:html' as html;
+import 'package:web/web.dart' as web;
 
-/// Fades out and removes the `#boot` splash that `web/index.html` paints before
-/// Flutter is ready. Called once the first Flutter frame is on screen, so the
-/// handoff has no blank gap between the two.
+/// Fades out the HTML splash and removes it.
 ///
-/// Safe to call more than once — the element is gone after the first call.
+/// Called from the first post-frame callback, so the handover happens once
+/// there is a real frame behind it — dismissing on `main()` entry would show
+/// the user a blank page for the rest of the engine's startup, which is the
+/// problem the splash exists to solve.
+///
+/// The node is removed rather than only hidden: it sits over the whole
+/// viewport, and an invisible full-screen div swallows every pointer event
+/// underneath it.
 void dismissBootSplash() {
-  final boot = html.document.getElementById('boot');
-  if (boot == null) return;
+  final splash = web.document.getElementById('boot');
+  if (splash == null) return;
 
-  // Triggers the CSS opacity transition rather than snapping it away.
-  boot.classes.add('boot--done');
-
-  // The page is scroll-locked while the splash covers it; hand scrolling back
-  // to the app now that it owns the viewport.
-  html.document.documentElement?.style.overflow = '';
-  html.document.body?.style.overflow = '';
-
-  // Remove after the fade so it can never intercept pointer events. Slightly
-  // longer than the 340ms CSS transition.
-  Timer(const Duration(milliseconds: 420), boot.remove);
+  splash.className = 'away';
+  // Matches the CSS transition. Removing immediately would cut the fade.
+  // A Dart timer rather than `setTimeout`, so there is no interop shape to
+  // get wrong for the sake of a delay.
+  // A closure, not `splash.remove` — a tear-off of an interop extension type
+  // member is rejected by the compiler, and only by the compiler: `flutter
+  // analyze` accepts it happily. This is the failure mode the build gate
+  // exists to catch, in miniature.
+  Future<void>.delayed(const Duration(milliseconds: 300), () => splash.remove());
 }

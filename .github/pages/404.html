@@ -8,10 +8,10 @@
   <!--
     This page is deliberately *not* an application shell.
 
-    It used to be `cp site/index.html site/404.html` — a copy of v1's HTML,
+    It used to be `cp site/index.html site/404.html` — a copy of the old app's HTML,
     kept as an SPA fallback for deep links. GitHub Pages serves the site-root
     404 for every missing path under the site, so every wrong URL under
-    /Shift/ answered with v1 and booted it. A missing page that boots a
+    /Shift/ answered with the old app and booted it. A missing page that boots a
     working app is indistinguishable from the app being at that URL, which is
     how "/Shift/v2/ shows the old app" was reported and why it took days to
     place. Neither app rewrites its own URL, so the fallback was never load
@@ -108,15 +108,11 @@
   <main>
     <div class="mark">S</div>
     <h1>That page isn&rsquo;t here.</h1>
-    <p>Nothing is published at <code id="path"></code>. Both apps are below.</p>
+    <p>Nothing is published at <code id="path"></code>.</p>
     <nav>
       <a class="card" href="/Shift/">
         <strong>SHIFT AI</strong>
-        <span>the shipped app</span>
-      </a>
-      <a class="card" href="/Shift/v2/">
-        <strong>SHIFT AI v2</strong>
-        <span>the rebuild, in progress</span>
+        <span>the app</span>
       </a>
     </nav>
   </main>

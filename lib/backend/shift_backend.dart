@@ -67,6 +67,28 @@ class ShiftSession {
   }
 }
 
+/// The identity providers the app can sign in with.
+///
+/// **Apple and Google are one decision, not two.** App Store guideline 4.8
+/// requires that an app offering a third-party login also offer one that limits
+/// collection to name and email and can hide the address — Sign in with Apple
+/// is the option that qualifies. Shipping Google alone on iOS is a rejection,
+/// so they are added together or not at all, and this enum having exactly two
+/// members is that rule written where it cannot be forgotten.
+enum OAuthProvider {
+  apple,
+  google;
+
+  /// What the host calls it. Kept here rather than at the call site because it
+  /// is part of the wire, and the wire is this folder's business.
+  String get id => name;
+
+  String get label => switch (this) {
+        OAuthProvider.apple => 'Apple',
+        OAuthProvider.google => 'Google',
+      };
+}
+
 /// What a client is allowed to know about a stored provider key.
 ///
 /// Never the key. The server encrypts it, uses it, and returns only enough to
@@ -296,6 +318,46 @@ abstract class ShiftBackend {
 
   Future<ShiftSession> signUp({required String email, required String password});
 
+  /// Where to send the browser to sign in with [provider], or null when this
+  /// build has no server.
+  ///
+  /// A URL rather than a `Future<ShiftSession>`, because the sign-in does not
+  /// happen here: the page navigates away to the provider, the person types a
+  /// password this app never sees, and they come back. Returning a session
+  /// would mean this layer owned a redirect, and redirecting is the platform's
+  /// job — this folder does not import one.
+  ///
+  /// [redirectTo] must be a URL the host has been told to allow. One that has
+  /// not been fails at the *provider*, with a page this app never gets to
+  /// render, so there is nothing here that can explain it.
+  Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo});
+
+  /// Which providers the host actually has configured.
+  ///
+  /// Asked because the alternative is what happened the first time these
+  /// shipped: the button navigated away and the person landed on
+  /// `{"code":400,...,"msg":"Unsupported provider: provider is not enabled"}`
+  /// on a domain they had never heard of, with the Back button as the only way
+  /// out. The app had everything it needed to know better — it just never
+  /// asked.
+  ///
+  /// **Unknown is treated as available by every caller, deliberately.** Hiding
+  /// a working sign-in because one request failed is worse than the rare bad
+  /// redirect: one is a feature that vanished, the other is a page with a Back
+  /// button. So this returns every provider when it cannot find out, and the
+  /// empty set only when the host says so.
+  Future<Set<OAuthProvider>> enabledProviders();
+
+  /// Adopts a session handed back on a callback URL, if there is one.
+  ///
+  /// Returns null for every ordinary load, which is the common case and not an
+  /// error — the app calls this on boot with whatever URL it was opened at.
+  ///
+  /// **Whatever this returns, the caller must clear the URL afterwards.** The
+  /// tokens arrive in the fragment, and a fragment stays in the address bar,
+  /// in browser history, and in any screenshot taken of either.
+  Future<ShiftSession?> adoptCallback(Uri url);
+
   Future<void> signOut();
 
   /// Metadata only — the secrets themselves never come back.
@@ -386,10 +448,31 @@ abstract class ShiftBackend {
   /// It arrives as a parameter rather than being built here because naming a
   /// provider's wire format is the provider layer's job, and `lib/backend/`
   /// does not import the app.
+  ///
+  /// **[path] and [body] arrive for exactly that reason, and used not to.**
+  /// They were hardcoded to Claude's `/v1/messages` and sent at whatever
+  /// provider was named — so for the other five the proxy's allowlist refused
+  /// the path, and the one control built to tell these states apart answered
+  /// 403 for a provider that was set up perfectly.
   Future<({int status, String body})?> probeProxy(
     String provider, {
+    required String path,
+    required Map<String, dynamic> body,
     Map<String, String> extraHeaders,
   });
+
+  /// Asks the deployed proxy which routes it will forward.
+  ///
+  /// The status and body are returned raw, exactly as [probeProxy] does, for
+  /// the same reason: deciding what an answer *means* is a pure function's job,
+  /// and there should be one of those rather than one per surface.
+  ///
+  /// Three answers matter to the caller and all three are statuses. **200** is
+  /// the list. **404** is a server built before this route existed — which is
+  /// itself the finding, not an error, because a server that cannot say what it
+  /// forwards is by definition older than the app asking. **null** is nothing
+  /// answered at all.
+  Future<({int status, String body})?> proxyRoutes();
 
   /// The host settings that cannot be changed from here. Empty when there is
   /// no host, or nothing left to do.

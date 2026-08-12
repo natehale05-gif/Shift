@@ -3,9 +3,9 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:shift_ai/backend/backend_config.dart';
-import 'package:shift_ai/backend/shift_backend.dart';
-import 'package:shift_ai/backend/supabase_backend.dart';
+import 'package:shift/backend/backend_config.dart';
+import 'package:shift/backend/shift_backend.dart';
+import 'package:shift/backend/supabase_backend.dart';
 
 const _config = BackendConfig(url: 'https://x.test', anonKey: 'anon-key');
 
@@ -510,6 +510,8 @@ void main() {
       }));
 
       await backend.probeProxy('anthropic',
+          path: '/v1/messages',
+          body: const {'model': 'm'},
           extraHeaders: const {'anthropic-version': '2023-06-01'});
 
       final probe = recorder.to('/v1/messages');
@@ -524,14 +526,16 @@ void main() {
       // exactly one place that turns a proxy status into a sentence.
       final backend = await _signedIn(client(hostUp: true));
 
-      expect(await backend.probeProxy('anthropic'), (status: 404, body: ''));
+      expect(await backend.probeProxy('anthropic',
+          path: '/v1/messages', body: const {'model': 'm'}), (status: 404, body: ''));
       backend.dispose();
     });
 
     test('the proxy probe reports nothing when nothing answers', () async {
       final backend = await _signedIn(client(hostUp: false));
 
-      expect(await backend.probeProxy('anthropic'), isNull);
+      expect(await backend.probeProxy('anthropic',
+          path: '/v1/messages', body: const {'model': 'm'}), isNull);
       backend.dispose();
     });
   });

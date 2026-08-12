@@ -21,15 +21,10 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
-# Both apps. v1 is frozen at the root and v2 is being built in app/, and the
-# seam matters more in the one still being written — a scan that only watched
-# the finished tree would be guarding the code least likely to break it.
-#
-# Written as a list rather than a parameter because it must not be possible to
-# run this and have it silently check half of what there is. That is the same
-# failure the conditional-import scanner had: it watched v1 only, and every
-# "23 pairs clean" reported during the v2 rebuild was true of the wrong tree.
-TREES = [tree for tree in (ROOT / "lib", ROOT / "app" / "lib") if tree.is_dir()]
+# The one app. Written as a list rather than a parameter because it must not
+# be possible to run this and have it silently check half of what there is —
+# which is exactly what happened while there were two trees.
+TREES = [tree for tree in (ROOT / "lib",) if tree.is_dir()]
 
 # Things only lib/backend/ is allowed to mention.
 VENDOR = [

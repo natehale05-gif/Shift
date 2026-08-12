@@ -1,18 +1,13 @@
-# One GitHub Pages site, two apps.
+# One GitHub Pages site, one app.
 #
-#   https://natehale05-gif.github.io/Shift/      v1 — the shipped app
-#   https://natehale05-gif.github.io/Shift/v2/   v2 — the rebuild in progress
+#   https://natehale05-gif.github.io/Shift/   the app
 #
-# **Why one workflow rather than two.** `actions/deploy-pages` publishes a
-# single artifact that *replaces* the whole site. Two workflows each uploading
-# their own tree would not coexist — the second to finish would delete the
-# first, and which one that is would depend on runner scheduling. So both apps
-# are built here and assembled into one tree before a single deploy.
-#
-# **Why v1 keeps the root.** The desktop installers check for updates against
-# it and the README's download buttons point at it. v2 currently renders six
-# empty states, so promoting it would replace a working app with a shell. The
-# swap is one line in the `assemble` step when v2 is ready.
+# It used to build two: v1 at the root and the rebuild under /v2/, then the
+# other way round after the swap. v1 has been deleted, so both of those jobs
+# and the assembly that arranged them are gone with it. What is left of that
+# arrangement is one redirect — /Shift/v2/ is in this repo's history, in the
+# README and in a browser history or two, and leaving it to 404 would trade one
+# wrong destination for another.
 name: Deploy to GitHub Pages
 
 on:
@@ -32,69 +27,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # v1, at the repository root. Frozen: its Flutter version is pinned
-  # separately from v2's because it is not being upgraded.
-  build-v1:
+  build:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          flutter-version: 3.35.5
-
-      - name: Install dependencies
-        run: flutter pub get
-
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Run tests
-        run: flutter test
-
-      # The analyzer only resolves the default branch of a conditional import,
-      # so a stale `if (dart.library.html)` path passes analysis and fails only
-      # at build. And an interface alone does not keep a backend swappable —
-      # one direct import from a widget re-welds it, quietly.
-      - name: Check conditional imports and the backend boundary
-        run: |
-          python3 tool/scan_conditional_imports.py
-          python3 tool/scan_backend_boundary.py
-          python3 tool/scan_proxy_providers.py
-
-      # --no-web-resources-cdn bundles CanvasKit locally instead of loading it
-      # from gstatic, so the app boots even where that CDN is blocked or slow.
-      #
-      # The dart-defines are passed only when both repository variables are
-      # actually set. They were once passed unconditionally and had never been
-      # set, so every deploy compiled `SHIFT_SUPABASE_URL=""` — which is not
-      # "no opinion", it is "there is no backend", and the app correctly hid
-      # its account section with nothing to say why.
-      - name: Build web
-        run: |
-          defines=""
-          if [ -n "${{ vars.SHIFT_SUPABASE_URL }}" ] \
-            && [ -n "${{ vars.SHIFT_SUPABASE_ANON_KEY }}" ]; then
-            defines="--dart-define=SHIFT_SUPABASE_URL=${{ vars.SHIFT_SUPABASE_URL }}"
-            defines="$defines --dart-define=SHIFT_SUPABASE_ANON_KEY=${{ vars.SHIFT_SUPABASE_ANON_KEY }}"
-            echo "Overriding the built-in project with the repository variables."
-          fi
-          flutter build web --release --no-web-resources-cdn \
-            --base-href "/${{ github.event.repository.name }}/v1/" $defines
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: site-v1
-          path: build/web
-          retention-days: 1
-
-  # v2, under /v2/. Its own Flutter version, its own gate.
-  build-v2:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: app
     steps:
       - uses: actions/checkout@v4
 
@@ -106,13 +40,16 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      # The repository's copy, not a second one under `app/` — see the note in
-      # `app.yml`. There was a second one and it had silently fallen behind.
-      - run: python3 ../tool/scan_conditional_imports.py
+      - run: python3 tool/scan_conditional_imports.py
+      - run: python3 tool/scan_backend_boundary.py
+      - run: python3 tool/scan_proxy_providers.py
 
       # The base href has to match where the app is actually served from, or
-      # every asset request 404s against the site root. Verified locally under
-      # this exact subpath before it was written here.
+      # every asset request 404s against the site root.
+      #
+      # `--no-web-resources-cdn` bundles the engine instead of fetching it from
+      # gstatic at runtime — a third-party request on first paint, and a build
+      # that fails closed offline.
       - name: Build web
         run: |
           flutter build web --wasm --release --no-web-resources-cdn \
@@ -134,61 +71,23 @@ jobs:
           test -f build/web/canvaskit/skwasm.wasm \
             || { echo "::error::the engine is not in the build output"; exit 1; }
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: site-v2
-          path: app/build/web
-          retention-days: 1
-
-  assemble:
-    needs: [build-v1, build-v2]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # v2 owns the root, v1 sits under /v1/.
-      #
-      # It was the other way round, and the reason given for it was wrong: the
-      # plan said the desktop installers update against v1 at the root. They
-      # do not — `lib/core/update/update_check.dart` asks
-      # api.github.com/repos/.../releases/latest, and nothing installed cares
-      # what Pages serves.
-      #
-      # What the old arrangement actually cost: README's "Try it in your
-      # browser" button points at the root, so every visit — including the
-      # user's, three times — landed on v1 and looked like v2 had not
-      # deployed. Whatever address someone already has now leads to v2.
-      - uses: actions/download-artifact@v4
-        with:
-          name: site-v2
-          path: site
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: site-v1
-          path: site/v1
-
-      # This used to be `cp site/index.html site/404.html`, an SPA fallback,
-      # with a second copy under v2/ whose comment named the risk exactly —
-      # "a 404 under /v2/ served with v1's HTML would boot the wrong app".
-      #
-      # Both lines were wrong. Actions-deployed Pages serves only the *site
-      # root* 404, so the v2 copy did nothing at all, and the root copy meant
-      # every missing path under /Shift/ answered with v1 and booted it. That
-      # is how "/Shift/v2/ shows the old app" reached a phone and stayed
-      # unexplained for days: a 404 wearing a working app's face.
-      #
-      # Neither app rewrites its own URL, so the fallback was never load
-      # bearing. The failure mode it created was.
-      - name: A 404 that looks like a 404
-        run: cp .github/pages/404.html site/404.html
-
-      # /Shift/v2/ is in the README, in this repo's history and in the user's
-      # browser history. Left alone it would 404 the moment v2 moved, which is
-      # trading one wrong destination for another.
-      - name: Keep the old v2 address working
+      - name: Assemble the site
         run: |
           set -euo pipefail
+          rm -rf site && cp -r build/web site
+
+          # A 404 that looks like a 404.
+          #
+          # This used to be `cp site/index.html site/404.html`, an SPA
+          # fallback, and it was how "/Shift/v2/ shows the old app" reached a
+          # phone and stayed unexplained for days: Actions-deployed Pages
+          # serves the site-root 404 for every missing path, so a missing page
+          # answered with a working app's HTML and booted it. The app does not
+          # rewrite its own URL, so the fallback was never load-bearing. The
+          # failure mode it created was.
+          cp .github/pages/404.html site/404.html
+
+          # The old address, kept alive rather than left to 404.
           mkdir -p site/v2
           cat > site/v2/index.html <<'HTML'
           <!DOCTYPE html>
@@ -205,32 +104,14 @@ jobs:
           </html>
           HTML
 
-      # Asserts *which app* is at each path, not merely that something is.
-      #
-      # The check this replaces compared each index's base href to its own
-      # path — which stays true for either app at the root, so after the swap
-      # it could not have told v1 from v2. That is the failure shape this
-      # branch keeps meeting: a check that cannot fail in the case it exists
-      # for. The `shift-app` meta tag is in both templates for this reason.
-      - name: Assert the right app is at the right path
-        run: |
-          set -euo pipefail
-          grep -q 'name="shift-app" content="v2"' site/index.html \
-            || { echo "::error::the root is not v2"; exit 1; }
-          grep -q 'name="shift-app" content="v1"' site/v1/index.html \
-            || { echo "::error::/v1/ is not v1"; exit 1; }
-          grep -q '<base href="/Shift/"' site/index.html \
-            || { echo "::error::v2 has the wrong base href"; exit 1; }
-          grep -q '<base href="/Shift/v1/"' site/v1/index.html \
-            || { echo "::error::v1 has the wrong base href"; exit 1; }
-          echo "v2 $(du -sh site --exclude=site/v1 | cut -f1) · v1 $(du -sh site/v1 | cut -f1)"
+          echo "site $(du -sh site | cut -f1)"
 
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
-    needs: assemble
+    needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -242,15 +123,13 @@ jobs:
         uses: actions/deploy-pages@v4
 
   # Everything above this job checks the *artifact*. All of it passed while
-  # "/Shift/v2/ shows the old app" was live on a phone, because none of it can
+  # "the site shows the old app" was live on a phone, because none of it can
   # see the published site — and the sandbox those checks were written in
-  # cannot reach *.github.io, which was allowed to stand as "unverifiable"
-  # when this runner has no such restriction and was simply never asked.
+  # cannot reach *.github.io, which was allowed to stand as "unverifiable" when
+  # this runner has no such restriction and was simply never asked.
   #
-  # So: ask. `tool/verify_site.sh` fetches the deployed origin and asserts what
-  # it actually serves — including that a missing path comes back looking
-  # missing. Each of its assertions was broken on purpose against a local
-  # replica of this tree before it was trusted here.
+  # So: ask. Each of `verify_site.sh`'s assertions was broken on purpose
+  # against a local replica of this tree before it was trusted here.
   verify:
     needs: deploy
     runs-on: ubuntu-latest

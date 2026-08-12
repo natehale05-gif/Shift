@@ -1,30 +1,19 @@
-# SHIFT v2 — the gate for everything in `app/`.
+# The gate for the app, on all six platform targets.
 #
-# v1 at the repository root keeps its own workflows and its own pinned Flutter
-# (3.35.5). Nothing here touches it: v1 is frozen and keeps deploying so there
-# is always something that runs.
-#
-# Every job is path-filtered to `app/`, so v1 commits do not spend six runners.
-name: App (v2)
+# It used to be path-filtered to `app/` and named "App (v2)", because the
+# frozen v1 lived at the root with workflows of its own. v1 is gone and the app
+# is the repository, so there is nothing left to filter against and no version
+# left to disambiguate.
+name: App
 
 on:
   push:
     branches: ['**']
-    paths:
-      - 'app/**'
-      - '.github/workflows/app.yml'
   pull_request:
-    paths:
-      - 'app/**'
-      - '.github/workflows/app.yml'
   workflow_dispatch:
 
 env:
   FLUTTER_VERSION: 3.44.9
-
-defaults:
-  run:
-    working-directory: app
 
 jobs:
   # Analyze and test first, alone, so a compile error costs one runner rather
@@ -48,18 +37,20 @@ jobs:
       # renaming an export on purpose, because a check that cannot fail is
       # worse than no check.
       #
-      # The repository's copy, not a second one under `app/`. There *was* a
-      # second one, and it silently fell behind: it scanned v2 only, could not
-      # see a top-level getter, and was the copy this job ran — so the scanner
-      # this workflow trusted and the scanner run locally were two different
-      # programs giving two different answers. One rule, one file.
-      - run: python3 ../tool/scan_conditional_imports.py
+      # There was once a second copy of this under `app/`, and it silently fell
+      # behind — so the scanner this workflow ran and the one run locally were
+      # two different programs giving two different answers. One rule, one file.
+      - run: python3 tool/scan_conditional_imports.py
 
-      # v2 has a `backend/` now, so the seam that makes the host swappable has
-      # to be guarded here too. The same file checks both trees; running it in
-      # only one workflow would leave the app still being written as the one
-      # nothing watched.
-      - run: python3 ../tool/scan_backend_boundary.py
+      # An interface alone does not keep the host swappable: one direct import
+      # from a widget re-welds it, quietly, and nothing fails until the day
+      # somebody tries to move.
+      - run: python3 tool/scan_backend_boundary.py
+
+      # And the app's idea of what the proxy forwards against the proxy's own
+      # table — the check that was missing when every managed image came back
+      # 403 from our own server.
+      - run: python3 tool/scan_proxy_providers.py
 
   web:
     needs: check
@@ -111,7 +102,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: web
-          path: app/build/web
+          path: build/web
           retention-days: 7
 
   linux:
@@ -184,7 +175,7 @@ jobs:
           set -euo pipefail
           MANIFEST=android/app/src/main/AndroidManifest.xml
           if grep -q 'REQUEST_INSTALL_PACKAGES' "$MANIFEST"; then
-            echo "::error::REQUEST_INSTALL_PACKAGES is restricted by Play and got v1 nowhere near the store"
+            echo "::error::REQUEST_INSTALL_PACKAGES is restricted by Play and is what kept the old app out of the store"
             exit 1
           fi
 
@@ -192,8 +183,8 @@ jobs:
         with:
           name: android
           path: |
-            app/build/app/outputs/bundle/release/*.aab
-            app/build/app/outputs/flutter-apk/*.apk
+            build/app/outputs/bundle/release/*.aab
+            build/app/outputs/flutter-apk/*.apk
           retention-days: 7
 
   # macOS and iOS only build on a macOS runner, and iOS is the one target that

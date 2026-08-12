@@ -1,12 +1,12 @@
 {
-    "name": "SHIFT AI v1",
-    "short_name": "SHIFT v1",
+    "name": "SHIFT AI",
+    "short_name": "SHIFT",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#F5F4EF",
-    "theme_color": "#AF52DE",
-    "description": "One studio. Every AI tool. Routes your request to the right specialized studio automatically.",
-    "orientation": "any",
+    "background_color": "#0A0714",
+    "theme_color": "#0A0714",
+    "description": "Chat, code, images, design, work and notes in one app.",
+    "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
         {

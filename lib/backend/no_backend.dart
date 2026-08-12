@@ -45,6 +45,21 @@ class NoBackend implements ShiftBackend {
   }) async =>
       throw _unconfigured;
 
+  /// Null rather than a throw, in both cases. There is no host to sign in to,
+  /// and the caller's question — "is there somewhere to send them?", "did they
+  /// come back with a session?" — has a true answer of "no" either way. A throw
+  /// would make the boot path handle an exception on every ordinary load.
+  @override
+  Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo}) => null;
+
+  /// Empty, and here the empty set is the truth rather than a failure to ask:
+  /// there is no host, so nothing is configured on one.
+  @override
+  Future<Set<OAuthProvider>> enabledProviders() async => const {};
+
+  @override
+  Future<ShiftSession?> adoptCallback(Uri url) async => null;
+
   @override
   Future<void> signOut() async {}
 
@@ -86,9 +101,14 @@ class NoBackend implements ShiftBackend {
   @override
   Future<({int status, String body})?> probeProxy(
     String provider, {
+    required String path,
+    required Map<String, dynamic> body,
     Map<String, String> extraHeaders = const {},
   }) async =>
       null;
+
+  @override
+  Future<({int status, String body})?> proxyRoutes() async => null;
 
   @override
   List<SetupLink> setupLinks() => const [];

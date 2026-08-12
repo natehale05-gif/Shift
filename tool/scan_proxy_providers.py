@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Keep the client's idea of what the proxy forwards in step with the proxy.
 
-`lib/providers/clients/proxyable_providers.dart` lists the providers a
+`lib/providers/proxyable.dart` lists the providers a
 membership can pay for; `supabase/functions/_shared/upstream.js` decides which
 ones the server will actually forward to. They are written in different
 languages, deployed on different schedules, and read by nobody at the same
@@ -22,7 +22,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DART = ROOT / 'lib' / 'providers' / 'clients' / 'proxyable_providers.dart'
+DART = ROOT / 'lib' / 'providers' / 'proxyable.dart'
 JS = ROOT / 'supabase' / 'functions' / '_shared' / 'upstream.js'
 
 
@@ -46,7 +46,7 @@ def js_keys() -> set:
     return set(re.findall(r'^  ([\w-]+): \{', block.group(1), re.M))
 
 
-TOOLS = ROOT / 'lib' / 'providers' / 'clients' / 'anthropic_tools.dart'
+TOOLS = ROOT / 'lib' / 'providers' / 'clients' / 'anthropic_tools.dart'  # not built yet
 PROXY = ROOT / 'supabase' / 'functions' / 'provider-proxy' / 'index.js'
 
 
@@ -67,6 +67,14 @@ def betas_agree() -> bool:
     tool the client believes it enabled, which reads as the model declining to
     run code rather than as a typo.
     """
+    if not TOOLS.exists():
+        # Said out loud rather than skipped silently. The app has no
+        # code-execution tool yet, so there is no second copy to disagree with
+        # the server's — but a check that quietly passes when it cannot run is
+        # the shape this repository keeps getting bitten by.
+        print('code-execution beta unchecked: the app has no tool for it yet')
+        return True
+
     client = one(TOOLS, r"codeExecutionBeta = '([^']+)'", 'codeExecutionBeta')
     server = one(PROXY, r"CODE_EXECUTION_BETA = '([^']+)'", 'CODE_EXECUTION_BETA')
     if client == server:
@@ -77,38 +85,26 @@ def betas_agree() -> bool:
     return False
 
 
-def v2_subset(server: set) -> bool:
-    """v2's list may be smaller, but may not name something the server won't take.
+def offered_is_covered(server: set) -> bool:
+    """The app may offer fewer providers than the proxy serves, never more.
 
-    v1 must match the server exactly — it has a client for everything the proxy
-    forwards. v2 is still being built and covers six of the eight, so equality
-    would be the wrong test: it would fail for the honest reason that a client
-    does not exist yet.
+    Equality would be the wrong test: the proxy forwards eight and the app has
+    wire clients for six, so a provider without a client yet is an honest gap
+    rather than a fault.
 
-    What must hold is the direction that costs money. A provider v2 offers and
-    the server refuses sends a call out with no credential and answers 401,
-    which reads as a bad key rather than as a routing mistake. The other
-    direction — the server would forward it, v2 does not ask — costs nothing but
-    a feature nobody has yet.
+    The direction that costs money is the other one. A provider the app offers
+    and the server refuses sends a call out with no credential and answers 401,
+    which reads to a member as a bad key rather than as a routing mistake.
     """
-    path = ROOT / 'app' / 'lib' / 'providers' / 'proxyable.dart'
-    if not path.exists():
-        return True
-
-    block = re.search(
-        r'const Set<String> proxyableProviders = \{(.*?)\};',
-        path.read_text(), re.S)
-    if not block:
-        raise SystemExit('app/lib/providers/proxyable.dart: no proxyableProviders')
-
-    v2 = set(re.findall(r"'([\w-]+)'", block.group(1)))
-    extra = v2 - server
+    client = dart_set()
+    extra = client - server
     if not extra:
-        print(f'v2 proxyable providers are covered ({len(v2)}): '
-              f'{", ".join(sorted(v2))}')
+        print(f'offered providers are covered ({len(client)}): '
+              f'{", ".join(sorted(client))}')
         return True
 
-    print('FAIL: v2 offers providers the proxy will not forward', file=sys.stderr)
+    print('FAIL: the app offers providers the proxy will not forward',
+          file=sys.stderr)
     for name in sorted(extra):
         print(f'  {name}', file=sys.stderr)
     return False
@@ -150,13 +146,13 @@ CLIENT_SERVES = {
 
 
 def client_path(name: str):
-    """The provider path a v2 client sends, or None when it does not exist yet.
+    """The provider path a client sends, or None when it does not exist yet.
 
     A declared constant where there is one, and otherwise the literal in the
     managed arm — Gemini's path carries a model id, so it cannot be a constant
     and the prefix is what matters.
     """
-    source = ROOT / 'app' / 'lib' / 'providers' / 'clients' / name
+    source = ROOT / 'lib' / 'providers' / 'clients' / name
     if not source.exists():
         return None
 
@@ -210,7 +206,7 @@ def managed_paths_reach_the_server(allow: dict) -> bool:
 
 def required_routes() -> dict:
     """`app/lib/providers/proxy_routes.dart` as `{provider: {'METHOD /prefix'}}`."""
-    path = ROOT / 'app' / 'lib' / 'providers' / 'proxy_routes.dart'
+    path = ROOT / 'lib' / 'providers' / 'proxy_routes.dart'
     if not path.exists():
         return {}
 
@@ -276,26 +272,12 @@ def required_routes_are_a_mirror(allow: dict) -> bool:
 
 
 def main() -> int:
-    client, server = dart_set(), js_keys()
+    server = js_keys()
     allow = js_allow()
-    ok = (betas_agree() and v2_subset(server)
+    ok = (betas_agree() and offered_is_covered(server)
           and managed_paths_reach_the_server(allow)
           and required_routes_are_a_mirror(allow))
-
-    if client == server:
-        print(f'proxyable providers agree ({len(client)}): '
-              f'{", ".join(sorted(client))}')
-        return 0 if ok else 1
-
-    print('FAIL: the client and the proxy disagree about what is covered',
-          file=sys.stderr)
-    for name in sorted(client - server):
-        print(f'  offered to members but the server will not forward it: {name}',
-              file=sys.stderr)
-    for name in sorted(server - client):
-        print(f'  the server forwards it but no member is offered it: {name}',
-              file=sys.stderr)
-    return 1
+    return 0 if ok else 1
 
 
 if __name__ == '__main__':
