@@ -448,8 +448,16 @@ abstract class ShiftBackend {
   /// It arrives as a parameter rather than being built here because naming a
   /// provider's wire format is the provider layer's job, and `lib/backend/`
   /// does not import the app.
+  ///
+  /// **[path] and [body] arrive for exactly that reason, and used not to.**
+  /// They were hardcoded to Claude's `/v1/messages` and sent at whatever
+  /// provider was named — so for the other five the proxy's allowlist refused
+  /// the path, and the one control built to tell these states apart answered
+  /// 403 for a provider that was set up perfectly.
   Future<({int status, String body})?> probeProxy(
     String provider, {
+    required String path,
+    required Map<String, dynamic> body,
     Map<String, String> extraHeaders,
   });
 

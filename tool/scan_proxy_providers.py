@@ -114,9 +114,96 @@ def v2_subset(server: set) -> bool:
     return False
 
 
+def js_allow() -> dict:
+    """`{provider: [(METHOD, path-prefix), ...]}` — the server's own allowlist.
+
+    Same indentation trick as `js_keys`: each provider's block starts at two
+    spaces, and its `allow:` array is the only one inside it.
+    """
+    text = JS.read_text()
+    block = re.search(r'const UPSTREAMS = \{(.*?)\n\};', text, re.S)
+    if not block:
+        raise SystemExit(f'{JS.name}: could not find UPSTREAMS')
+
+    allow = {}
+    for match in re.finditer(
+            r'^  ([\w-]+): \{(.*?)^  \},', block.group(1) + '\n  },', re.M | re.S):
+        entries = re.search(r'allow: \[(.*?)\]', match.group(2), re.S)
+        if not entries:
+            raise SystemExit(f'{JS.name}: {match.group(1)} has no allow list')
+        allow[match.group(1)] = [
+            tuple(entry.split(' ', 1))
+            for entry in re.findall(r"'([^']+)'", entries.group(1))
+        ]
+    return allow
+
+
+def managed_paths_reach_the_server(allow: dict) -> bool:
+    """Every path a client sends through the proxy is one the proxy forwards.
+
+    **This is the check that was missing.** The server's allowlist lives in this
+    repository and nothing compared it to what the clients actually send, so
+    `openai_text` and `openai_image` spent months sending `/chat/completions`
+    and `/images/generations` against an allowlist wanting `/v1/...`. Every
+    managed turn on OpenAI, Groq, Mistral and OpenRouter came back 403, and the
+    app reported it as a rejected key.
+
+    The `/v1` was dropped because the direct arm inherits it from the registry's
+    `baseUrl` and the managed arm rebuilt the path from scratch. So the fix is
+    one constant per client — and this is what stops the next one.
+    """
+    clients = ROOT / 'app' / 'lib' / 'providers' / 'clients'
+    if not clients.is_dir():
+        return True
+
+    # Which upstreams a client's path has to satisfy. `openai_*` serves every
+    # provider on that wire, which is how one missing prefix broke four.
+    serves = {
+        'anthropic_text.dart': ['anthropic'],
+        'gemini_text.dart': ['gemini'],
+        'gemini_image.dart': ['gemini'],
+        'openai_text.dart': ['openai', 'groq', 'mistral', 'openrouter'],
+        'openai_image.dart': ['openai'],
+    }
+
+    problems = []
+    checked = 0
+    for name, providers in serves.items():
+        source = clients / name
+        if not source.exists():
+            continue
+
+        # A declared constant, or the literal in the managed arm for the
+        # clients whose path carries a model id and cannot be a constant.
+        declared = re.search(
+            r"static const providerPath = '([^']+)'", source.read_text())
+        path = declared.group(1) if declared else re.search(
+            r"path: '\$\{base\.path\}(/[^'$]*)", source.read_text()).group(1)
+
+        for provider in providers:
+            checked += 1
+            permitted = any(
+                method == 'POST' and path.startswith(prefix)
+                for method, prefix in allow.get(provider, []))
+            if not permitted:
+                problems.append(f'  {name} sends {path!r}, which the proxy '
+                                f'will not forward to {provider}')
+
+    if problems:
+        print('FAIL: a managed call would be refused by our own proxy',
+              file=sys.stderr)
+        for line in problems:
+            print(line, file=sys.stderr)
+        return False
+
+    print(f'managed paths reach the server ({checked} client/provider pairs)')
+    return True
+
+
 def main() -> int:
     client, server = dart_set(), js_keys()
-    ok = betas_agree() and v2_subset(server)
+    ok = (betas_agree() and v2_subset(server)
+          and managed_paths_reach_the_server(js_allow()))
 
     if client == server:
         print(f'proxyable providers agree ({len(client)}): '

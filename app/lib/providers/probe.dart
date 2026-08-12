@@ -160,6 +160,67 @@ String probeSentence(
   }
 }
 
+/// The same call, for the **membership** path: what the Setup card should ask
+/// the proxy to forward.
+///
+/// The proxy's base is the backend's business and its allowlist is the
+/// server's, so this hands over the two things only the provider layer knows —
+/// the path at the provider, and a body that wire will accept.
+///
+/// **It used to be neither.** `probeProxy` hardcoded Claude's `/v1/messages`
+/// and a Claude body and sent them at whatever provider was named, so for the
+/// other five the allowlist refused the path and the card reported 403 —
+/// "not available through SHIFT" — for a provider that was configured
+/// correctly. A diagnostic that is wrong for five of six is worse than none,
+/// because it is believed.
+///
+/// Null when this provider has no text model or no endpoint, which is the same
+/// condition [canProbe] already reports.
+({String path, Map<String, dynamic> body, Map<String, String> headers})?
+    managedProbeCall(ProviderDescriptor provider) {
+  final model = provider.modelFor(Capability.text);
+  if (model == null) return null;
+
+  switch (provider.id) {
+    case 'anthropic':
+      return (
+        path: AnthropicText.providerPath,
+        body: AnthropicText.buildBody(
+          model: model.id,
+          instruction: 'hi',
+          maxTokens: 1,
+          thinking: false,
+        )..remove('stream'),
+        // The version header a real turn sends. A probe that omits it triggers
+        // a different CORS preflight, which is how this card once reported a
+        // proxy working that no turn could reach.
+        headers: const {
+          'content-type': 'application/json',
+          'anthropic-version': AnthropicText.apiVersion,
+        },
+      );
+
+    case 'gemini':
+      return (
+        // Not the streaming path: the probe wants one small answer.
+        path: '/v1beta/models/${model.id}:generateContent',
+        body: GeminiText.buildBody(instruction: 'hi')
+          ..['generationConfig'] = const {'maxOutputTokens': 1},
+        headers: const {'content-type': 'application/json'},
+      );
+
+    default:
+      if (provider.baseUrl == null) return null;
+      return (
+        path: OpenAiText.providerPath,
+        body: OpenAiText.buildBody(model: model.id, instruction: 'hi')
+          ..['stream'] = false
+          ..['max_tokens'] = 1,
+        headers: const {'content-type': 'application/json'},
+      );
+  }
+}
+
 /// Whether Settings should offer a connection test for this provider.
 ///
 /// False only for a provider with no text model or no endpoint — offering to

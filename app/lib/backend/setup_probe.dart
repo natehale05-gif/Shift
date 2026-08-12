@@ -88,6 +88,18 @@ ProxyProbeResult readProxyResponse(int status, String body) {
                 'covers this month.',
         detail: detail,
       ),
+    // 403 is the proxy's **own** refusal — a path its allowlist will not
+    // forward — and it fell into the 4xx arm below, which reads every status
+    // as the provider's. So the card blamed OpenAI for our routing, in the
+    // same breath the chat card was blaming the member's key for it. Found by
+    // the test that pins this against `sentenceForManagedStatus`.
+    403 => ProxyProbeResult(
+        ProxyOutcome.serverNotReady,
+        detail ??
+            'The server would not forward that call. Nothing is wrong with '
+                'your account.',
+        detail: detail,
+      ),
     // The server's own words first, as 402 already does. 503 covers three
     // states — no key for this provider, a missing server setting, and an
     // entitlement check that could not run — and only the server knows which.

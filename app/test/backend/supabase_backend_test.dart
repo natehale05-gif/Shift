@@ -510,6 +510,8 @@ void main() {
       }));
 
       await backend.probeProxy('anthropic',
+          path: '/v1/messages',
+          body: const {'model': 'm'},
           extraHeaders: const {'anthropic-version': '2023-06-01'});
 
       final probe = recorder.to('/v1/messages');
@@ -524,14 +526,16 @@ void main() {
       // exactly one place that turns a proxy status into a sentence.
       final backend = await _signedIn(client(hostUp: true));
 
-      expect(await backend.probeProxy('anthropic'), (status: 404, body: ''));
+      expect(await backend.probeProxy('anthropic',
+          path: '/v1/messages', body: const {'model': 'm'}), (status: 404, body: ''));
       backend.dispose();
     });
 
     test('the proxy probe reports nothing when nothing answers', () async {
       final backend = await _signedIn(client(hostUp: false));
 
-      expect(await backend.probeProxy('anthropic'), isNull);
+      expect(await backend.probeProxy('anthropic',
+          path: '/v1/messages', body: const {'model': 'm'}), isNull);
       backend.dispose();
     });
   });

@@ -480,26 +480,16 @@ class SupabaseBackend implements ShiftBackend {
   @override
   Future<({int status, String body})?> probeProxy(
     String provider, {
+    required String path,
+    required Map<String, dynamic> body,
     Map<String, String> extraHeaders = const {},
   }) async {
     if (_session == null) return null;
 
-    // The smallest real request the provider will accept. It has to be real —
-    // a malformed body would come back 400 from the provider and look like a
-    // broken key, which is the opposite of what the probe is for.
-    const body = {
-      'model': 'claude-haiku-4-5',
-      'max_tokens': 1,
-      'messages': [
-        {'role': 'user', 'content': 'Hi'}
-      ],
-    };
-
     try {
       final token = await _freshToken();
       final response = await _http.post(
-        Uri.parse('${config.url}/functions/v1/provider-proxy/$provider'
-            '/v1/messages'),
+        Uri.parse('${config.url}/functions/v1/provider-proxy/$provider$path'),
         // The real client's headers too, not just ours. A probe that sends
         // fewer headers triggers a different CORS preflight, and that is how
         // this card reported the proxy working while every turn failed.

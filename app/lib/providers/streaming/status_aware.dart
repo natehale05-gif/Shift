@@ -26,6 +26,7 @@ Stream<SseEvent> statusAware(
   required String host,
   required Future<Reach> Function() reach,
   String? blocked,
+  bool managed = false,
 }) async* {
   String? sentence;
   String? detail;
@@ -40,7 +41,12 @@ Stream<SseEvent> statusAware(
     }
     return;
   } on SseHttpException catch (e) {
-    sentence = sentenceForStatus(e.statusCode);
+    // Which reader depends on who answered. A managed call's 4xx often came
+    // from our own proxy, and reading it as the provider's is how a member was
+    // told to check a key they do not have.
+    sentence = managed
+        ? sentenceForManagedStatus(e.statusCode, e.body)
+        : sentenceForStatus(e.statusCode);
     detail = 'HTTP ${e.statusCode} from $host';
   } on SseTimeoutException catch (e) {
     sentence = sentenceForTimeout;

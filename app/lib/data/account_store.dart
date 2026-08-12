@@ -5,8 +5,9 @@ import 'package:flutter/foundation.dart';
 import '../backend/shift_backend.dart';
 import '../backend/setup_probe.dart';
 import '../core/platform/browser_nav.dart';
-import '../providers/clients/anthropic_text.dart';
 import '../providers/access.dart';
+import '../providers/probe.dart';
+import '../providers/registry.dart';
 import '../providers/proxyable.dart';
 
 /// What the sign-in form is doing right now.
@@ -453,17 +454,19 @@ class AccountStore extends ChangeNotifier {
   Future<ProxyProbeResult> testProxy({String provider = 'anthropic'}) async {
     if (!isConfigured || !isSignedIn) return proxyNotSignedIn;
 
-    // The headers a real Anthropic turn sends, so the browser runs the same
-    // preflight. Without them the probe asked an easier question than the
-    // product does and answered "working" for a proxy no turn could reach.
+    // The path, body and headers a real turn to *this* provider sends, so the
+    // browser runs the same preflight and the proxy's allowlist sees the same
+    // path. All three used to be Claude's regardless of who was named, which
+    // made the card answer 403 for five of the six.
+    final descriptor = providerById(provider);
+    final call = descriptor == null ? null : managedProbeCall(descriptor);
+    if (call == null) return proxyNotSignedIn;
+
     final answer = await backend.probeProxy(
       provider,
-      extraHeaders: provider == 'anthropic'
-          ? const {
-              'content-type': 'application/json',
-              'anthropic-version': AnthropicText.apiVersion,
-            }
-          : const {},
+      path: call.path,
+      body: call.body,
+      extraHeaders: call.headers,
     );
     if (answer == null) return proxyUnreachable;
 

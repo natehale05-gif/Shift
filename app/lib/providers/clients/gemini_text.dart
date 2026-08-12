@@ -122,6 +122,9 @@ class GeminiText {
         host: _host,
         reach: _reach,
         blocked: blocked,
+        // Which reader a failing status gets. The clients already know:
+        // `target` matched on the arm to build the URL.
+        managed: access is ManagedAccess,
       ),
       stepId: stepId,
     );

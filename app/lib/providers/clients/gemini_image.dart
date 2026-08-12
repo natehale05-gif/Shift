@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../turn/job_output.dart';
 import '../../turn/turn_event.dart';
 import '../access.dart';
+import '../failure_text.dart';
 
 /// Generating an image with Gemini.
 ///
@@ -119,7 +120,13 @@ class GeminiImage {
     }
 
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      yield StepFailed(stepId, reason: _readable(response.statusCode));
+      yield StepFailed(
+        stepId,
+        reason: access is ManagedAccess
+            ? sentenceForManagedStatus(response.statusCode, response.body)
+            : _readable(response.statusCode),
+        detail: 'HTTP ${response.statusCode} from ${target.uri.host}',
+      );
       return;
     }
 

@@ -32,10 +32,27 @@ class OpenAiText {
       : _sse = sse ?? SseClient(),
         _reach = reach ?? probeReach;
 
+  /// The full path at the provider, `/v1` included.
+  ///
+  /// **Both arms derive from this**, and they used to not. The direct arm
+  /// inherited `/v1` from the registry's `baseUrl` — every one of the four is
+  /// exactly `host + /v1` — while the managed arm rebuilt the path from the
+  /// proxy's base and dropped it. `/v1` is the only thing the proxy's allowlist
+  /// matches on, so every managed turn on OpenAI, Groq, Mistral and OpenRouter
+  /// came back 403 and read as a rejected key.
+  ///
+  /// `tool/scan_proxy_providers.py` checks this against the server's own
+  /// allowlist, because nothing was comparing the two and that gap is exactly
+  /// the width of that bug.
+  static const providerPath = '/v1/chat/completions';
+
+  /// What follows the registry's `baseUrl`, which already ends in `/v1`.
+  static const _suffix = '/chat/completions';
+
   static Uri endpoint(String baseUrl) {
     final trimmed =
         baseUrl.endsWith('/') ? baseUrl.substring(0, baseUrl.length - 1) : baseUrl;
-    return Uri.parse('$trimmed/chat/completions');
+    return Uri.parse('$trimmed$_suffix');
   }
 
   static ({Uri uri, Map<String, String> headers}) target(
@@ -54,7 +71,7 @@ class OpenAiText {
         // provider it forwards to is decided server-side from the slug in
         // [base], never from a header a client could change.
         ManagedAccess(:final base, :final headers) => (
-            uri: base.replace(path: '${base.path}/chat/completions'),
+            uri: base.replace(path: '${base.path}$providerPath'),
             headers: {'content-type': 'application/json', ...headers},
           ),
       };
@@ -106,6 +123,9 @@ class OpenAiText {
         host: resolved.uri.host,
         reach: _reach,
         blocked: blocked,
+        // Which reader a failing status gets. The clients already know:
+        // `target` matched on the arm to build the URL.
+        managed: access is ManagedAccess,
       ),
       stepId: stepId,
     );

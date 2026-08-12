@@ -28,7 +28,12 @@ import '../streaming/sse_client.dart' show createProviderHttpClient;
 ///   requested shape is mapped to the nearest one the endpoint accepts rather
 ///   than passed through.
 class OpenAiImage {
-  static const _path = '/images/generations';
+  /// The full path at the provider, `/v1` included. Both arms derive from
+  /// this — see [OpenAiText.providerPath] for why they must.
+  static const providerPath = '/v1/images/generations';
+
+  /// What follows the registry's `baseUrl`, which already ends in `/v1`.
+  static const _suffix = '/images/generations';
 
   final http.Client Function() _clientFactory;
   final Future<Reach> Function() _reach;
@@ -43,7 +48,7 @@ class OpenAiImage {
     final trimmed = baseUrl.endsWith('/')
         ? baseUrl.substring(0, baseUrl.length - 1)
         : baseUrl;
-    return Uri.parse('$trimmed$_path');
+    return Uri.parse('$trimmed$_suffix');
   }
 
   static ({Uri uri, Map<String, String> headers}) target(
@@ -59,7 +64,7 @@ class OpenAiImage {
             },
           ),
         ManagedAccess(:final base, :final headers) => (
-            uri: base.replace(path: '${base.path}$_path'),
+            uri: base.replace(path: '${base.path}$providerPath'),
             headers: {'content-type': 'application/json', ...headers},
           ),
       };
@@ -121,7 +126,12 @@ class OpenAiImage {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         yield StepFailed(
           stepId,
-          reason: sentenceForStatus(response.statusCode),
+          // The arm decides the reader. This call is what produced
+          // "That key was rejected" for a 403 the proxy raised about its own
+          // path allowlist, to somebody paying not to hold a key.
+          reason: access is ManagedAccess
+              ? sentenceForManagedStatus(response.statusCode, response.body)
+              : sentenceForStatus(response.statusCode),
           detail: 'HTTP ${response.statusCode} from ${resolved.uri.host}',
         );
         return;

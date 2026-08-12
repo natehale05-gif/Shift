@@ -52,6 +52,10 @@ class AnthropicText {
   /// Public because the connection test in Settings sends the *same* request
   /// this client does. A test that used a different URL or different headers
   /// would answer a different question from the one being asked.
+  /// The full path at the provider. Named so the probe and
+  /// `tool/scan_proxy_providers.py` read the same string the turn sends.
+  static const providerPath = '/v1/messages';
+
   static ({Uri uri, Map<String, String> headers}) target(
     ProviderAccess access,
   ) =>
@@ -80,7 +84,7 @@ class AnthropicText {
             },
           ),
         ManagedAccess(:final base, :final headers) => (
-            uri: base.replace(path: '${base.path}/v1/messages'),
+            uri: base.replace(path: '${base.path}$providerPath'),
             headers: {'content-type': 'application/json', ...headers},
           ),
       };
@@ -158,6 +162,9 @@ class AnthropicText {
         host: _endpoint.host,
         reach: _reach,
         blocked: blocked,
+        // Which reader a failing status gets. The clients already know:
+        // `target` matched on the arm to build the URL.
+        managed: access is ManagedAccess,
       ),
       stepId: stepId,
     );

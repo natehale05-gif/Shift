@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'access.dart';
 import 'registry.dart';
 import 'streaming/reachability.dart';
@@ -69,6 +71,66 @@ String sentenceForBrowserBlocked(ProviderDescriptor? provider,
 const String sentenceForTimeout =
     'The provider did not answer in time. Try again.';
 
+/// The same statuses, but for a call **the membership paid for**.
+///
+/// [sentenceForStatus] reads every status as though the provider sent it. On a
+/// managed call it often did not: the proxy answers 402, 403 and 503 in its own
+/// right, and it passes the provider's status through for everything else. The
+/// difference is not academic — a 403 from our own path allowlist was reported
+/// as *"That key was rejected. Check it is complete and still active."* to
+/// somebody whose whole reason for paying is not holding a key.
+///
+/// **No branch here mentions the reader's own key**, because on this path they
+/// do not have one. What they can do is report it; what they cannot do is fix
+/// a credential they never supplied.
+///
+/// The server's own sentence wins whenever it left one. It is the only thing
+/// that knows which of its states this is — 503 alone covers a missing platform
+/// key, a missing server setting, and an entitlement check that could not run.
+String sentenceForManagedStatus(int status, String body) {
+  final said = messageInBody(body);
+
+  return switch (status) {
+    401 => 'Your session expired. Sign out and back in.',
+    402 || 429 => said ??
+        'Your plan does not cover this right now — it may have lapsed or used '
+            'its monthly allowance.',
+    403 || 503 => said ?? 'The server refused that call. Nothing is wrong with '
+        'your account; this is ours to fix.',
+    // Passed through from the provider. SHIFT's key, not theirs — so it is
+    // reported rather than repaired, and the sentence says whose problem it is.
+    >= 400 && < 500 =>
+      "SHIFT's own key for this provider was rejected ($status). Your plan is "
+          'fine; this needs fixing on our side.',
+    _ => 'The provider is having trouble right now ($status). Try again '
+        'shortly.',
+  };
+}
+
+/// A sentence a server buried in its error body, if it left one.
+///
+/// Shared shape with `readProxyResponse`'s reader in `backend/setup_probe.dart`
+/// rather than shared code: `tool/scan_backend_boundary.py` forbids `backend/`
+/// importing `providers/`, and the probe has to live in `backend/`. A test
+/// asserts the two agree on every status they both handle, which pins them
+/// without either importing the other.
+String? messageInBody(String body) {
+  if (body.trim().isEmpty) return null;
+  try {
+    final decoded = jsonDecode(body);
+    if (decoded is! Map) return null;
+    final error = decoded['error'];
+    final candidate = error is Map
+        ? (error['message'] ?? error['detail'])
+        : (decoded['message'] ?? decoded['msg'] ?? error);
+    if (candidate is! String || candidate.trim().isEmpty) return null;
+    final text = candidate.trim();
+    return text.length > 240 ? '${text.substring(0, 237)}…' : text;
+  } on FormatException {
+    return null;
+  }
+}
+
 /// Why nothing could run a step, in the words that name the actual reason.
 ///
 /// [what] is the plural noun for the step's output — "images", "writing" — so
@@ -127,5 +189,12 @@ final Set<String> writtenSentences = {
   // generic 500 — an allowlist quietly undoing the fix it was protecting.
   for (final provider in kProviders)
     sentenceForBrowserBlocked(provider, onWeb: true),
+  // The managed variants too, with an empty body so the *defaults* are what
+  // gets listed — a server that left its own sentence is a different string
+  // every time and cannot be enumerated. Those pass because `readErrorFrame`
+  // only filters what a client tried to quote back, and this file's job is to
+  // let its own writing through.
+  for (final status in [401, 402, 403, 429, 500, 503])
+    sentenceForManagedStatus(status, ''),
   sentenceForTimeout,
 };

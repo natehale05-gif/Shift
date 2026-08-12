@@ -339,6 +339,8 @@ class Host implements ShiftBackend {
   @override
   Future<({int status, String body})?> probeProxy(
     String provider, {
+    required String path,
+    required Map<String, dynamic> body,
     Map<String, String> extraHeaders = const {},
   }) =>
       throw UnimplementedError();
