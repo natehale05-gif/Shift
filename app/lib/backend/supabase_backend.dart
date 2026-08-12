@@ -515,6 +515,30 @@ class SupabaseBackend implements ShiftBackend {
     }
   }
 
+  @override
+  Future<({int status, String body})?> proxyRoutes() async {
+    if (_session == null) return null;
+
+    try {
+      final token = await _freshToken();
+      final response = await _http.get(
+        Uri.parse('${config.url}/functions/v1/provider-proxy/_shift/routes'),
+        headers: _headers(token: token),
+      );
+      return (status: response.statusCode, body: response.body);
+    } on BackendException {
+      return null;
+    } catch (_) {
+      // Same recovery as [probeProxy], and needed for the same reason: the
+      // functions host answers 404 for a slug it does not hold, and that 404
+      // carries no CORS header, so a browser reports it as silence. Here the
+      // 404 is not an error to be swallowed — it is the answer. A server that
+      // does not know this route is a server older than this check.
+      if (await _hostIsReachable()) return (status: 404, body: '');
+      return null;
+    }
+  }
+
   /// The project ref, which is the first path segment of the project URL.
   ///
   /// Derived rather than stored so there is one place the project is named.
@@ -534,13 +558,15 @@ class SupabaseBackend implements ShiftBackend {
           copyLabel: 'Site URL',
           copyValue: BackendConfig.siteUrl,
         ),
-        // The functions are deployed. These two are what keeps them that way
-        // without anyone in the loop — so the titles say what they buy rather
-        // than implying nothing works until they exist, which is what the
-        // previous wording implied and what left Grant pointing at a function
-        // nobody had deployed.
+        // These two are what keeps the deployed functions in step with the
+        // app, with nobody in the loop. The titles say what they buy — but
+        // note they buy more than "future" changes: this job has never run,
+        // so every deploy so far has been by hand through whichever tool
+        // happened to be connected, and the live proxy spent a week five
+        // commits behind while the app sent it a route it had never heard of.
+        // The Server card is what makes that visible; these are what fix it.
         SetupLink(
-          title: 'So future changes deploy themselves: an access token',
+          title: 'So the server keeps up with the app: an access token',
           action: 'Add secret',
           url: Uri.parse(
               '${BackendConfig.repoUrl}/settings/secrets/actions/new'),
@@ -548,7 +574,7 @@ class SupabaseBackend implements ShiftBackend {
           copyValue: 'SUPABASE_ACCESS_TOKEN',
         ),
         SetupLink(
-          title: 'So future changes deploy themselves: the project ref',
+          title: 'So the server keeps up with the app: the project ref',
           action: 'Add variable',
           url: Uri.parse(
               '${BackendConfig.repoUrl}/settings/variables/actions/new'),

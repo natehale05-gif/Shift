@@ -9,10 +9,12 @@ import {
   UNREPORTED_CALL_MICROS,
 } from '../_shared/pricing.js';
 import {
+  allowedRoutes,
   callKind,
   isImageCall,
   parseProxyPath,
   proxyableProviders,
+  routesVersion,
   upstreamFor,
   upstreamHeaders,
   upstreamUrl,
@@ -605,4 +607,88 @@ test('a path outside the allowlist never reaches the provider', async () => {
 
   assert.equal(response.status, 403);
   assert.equal(world.calls.length, 0, 'the entitlement check ran anyway');
+});
+
+// ------------------------------------------------- what the server will forward
+
+test('a signed-in member can ask what this proxy forwards', async () => {
+  const world = await fakeWorld();
+  const response = await proxy(
+    new Request('https://x.test/functions/v1/provider-proxy/_shift/routes', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token(USER)}` },
+    }),
+    { env: ENV, fetch: world.fetch },
+  );
+
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.deepEqual(body.allow, allowedRoutes());
+  assert.equal(body.version, routesVersion());
+
+  // The assertion that is false on what is deployed today: the live proxy's
+  // OpenAI list is `['/v1/chat/completions', '/v1/responses']`, from 3 August.
+  // Every managed image request has been refused by its own allowlist since.
+  assert.ok(body.allow.openai.includes('POST /v1/images/generations'));
+});
+
+test('asking costs nothing — no vault, no meter, no entitlement check',
+    async () => {
+  // It is answered from a constant table, so a card that polls it must not be
+  // spending a database round trip per open.
+  const world = await fakeWorld();
+  await proxy(
+    new Request('https://x.test/functions/v1/provider-proxy/_shift/routes', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${token(USER)}` },
+    }),
+    { env: ENV, fetch: world.fetch },
+  );
+
+  assert.equal(world.calls.length, 0);
+});
+
+test('it is behind the session, like everything else here', async () => {
+  const world = await fakeWorld();
+  const response = await proxy(
+    new Request('https://x.test/functions/v1/provider-proxy/_shift/routes',
+        { method: 'GET' }),
+    { env: ENV, fetch: world.fetch },
+  );
+
+  assert.equal(response.status, 401);
+});
+
+test('_shift is not mistaken for a provider, and a real one still routes',
+    async () => {
+  const world = await fakeWorld();
+
+  // POST is what a provider call uses, so the reserved path must refuse it
+  // rather than trying to forward one.
+  const posted = await proxy(proxyRequest('/_shift/routes'),
+      { env: ENV, fetch: world.fetch });
+  assert.equal(posted.status, 405);
+
+  // And intercepting it must not have swallowed the ordinary path.
+  const forwarded = await proxy(proxyRequest('/anthropic/v1/messages'),
+      { env: ENV, fetch: world.fetch });
+  assert.equal(forwarded.status, 200);
+  assert.ok(world.calls.some((c) => c.url.includes('api.anthropic.com')));
+});
+
+test('the version follows the table, because nobody maintains it', () => {
+  // A hand-written version is the thing that would report this server current
+  // while it is five commits behind — which is the exact failure the route
+  // exists to catch. Derived, it cannot.
+  const routes = allowedRoutes();
+  assert.equal(routesVersion(routes), routesVersion(routes));
+  assert.notEqual(
+    routesVersion({ ...routes, openai: ['POST /v1/chat/completions'] }),
+    routesVersion(routes),
+  );
+  // Order is not a change.
+  assert.equal(
+    routesVersion({ ...routes, openai: [...routes.openai].reverse() }),
+    routesVersion(routes),
+  );
 });

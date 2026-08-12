@@ -273,6 +273,27 @@ something, or "return something unparseable" becomes a way to spend SHIFT's
 keys for free. For the same reason an unknown model is priced at the *most
 expensive* rate in the table rather than at zero.
 
+**The proxy can say what it forwards, and that is not a convenience.** A
+signed-in member may `GET /functions/v1/provider-proxy/_shift/routes`, which
+answers `{version, allow}` — the whole table above, plus a fingerprint derived
+from it so it cannot claim to be current while it is not.
+
+It exists because every other check in this repository compares the client to
+the allowlist **in this repository**, and the repository is not what is
+running. The deployed proxy sat five commits behind for a week with no image
+route at all; the app sent `/v1/images/generations` correctly, its own scan was
+green, and the only symptom was a member's failed turn reported to them as a
+rejected key. The app now asks the running server and names the route.
+
+An older server answers **404** — `_shift` is not a provider — and that is the
+finding rather than an error: a server that cannot say what it forwards is by
+definition older than the app asking.
+
+Disclosing the list here does not contradict the deliberately vague 403 beside
+it. That vagueness is about an anonymous prober; this route is behind the
+gateway's JWT check, and a signed-in member can already read every path the
+client calls out of the app bundle.
+
 **Video and speech are asynchronous, which is why the allowlist names a
 method.** A render is submitted with a POST and collected with a GET, so a
 POST-only proxy could start a video and never fetch it. Allowing GET

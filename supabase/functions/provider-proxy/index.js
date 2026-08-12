@@ -22,6 +22,7 @@
 import { masterKeyBytes, open, hexToBytes } from '../_shared/crypto.js';
 import {
   corsHeaders,
+  json,
   problem,
   requireEnv,
   serviceRequest,
@@ -33,8 +34,10 @@ import {
   UNREPORTED_CALL_MICROS,
 } from '../_shared/pricing.js';
 import {
+  allowedRoutes,
   callKind,
   parseProxyPath,
+  routesVersion,
   upstreamFor,
   upstreamHeaders,
   upstreamUrl,
@@ -55,6 +58,29 @@ export const handle = withAdapter(async (req, ctx) => {
   }
 
   const url = new URL(req.url);
+
+  // A reserved route, answered before the path is read as a provider's.
+  //
+  // **Why it exists.** The client's idea of which paths this proxy forwards
+  // comes from the repository, and the repository is not what is running: for
+  // five commits the deployed proxy had no image route while the app sent one
+  // correctly, and the only way to find out was a member's failed turn. A
+  // server that can be asked turns that into a line in Settings.
+  //
+  // **Why disclosing the list is safe here, despite the 403 below being
+  // deliberately vague.** That vagueness is about an anonymous prober; this sits
+  // behind the gateway's JWT check, so only a signed-in member reaches it — and
+  // a member can already read every path the client calls out of the app
+  // bundle. It tells them nothing new and tells a stranger nothing at all.
+  //
+  // A server built before this route answers 404, because `_shift` is not a
+  // provider. That is the honest signal — *this server predates the check* —
+  // and the client reports it as exactly that.
+  if (url.pathname.endsWith('/provider-proxy/_shift/routes')) {
+    if (req.method !== 'GET') return problem(405, 'Use GET.');
+    return json({ version: routesVersion(), allow: allowedRoutes() });
+  }
+
   const { provider, path } = parseProxyPath(url.pathname);
   if (!provider || !upstreamFor(provider)) {
     return problem(404, 'Unknown provider.');

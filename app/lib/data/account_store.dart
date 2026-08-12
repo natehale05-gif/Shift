@@ -8,6 +8,7 @@ import '../core/platform/browser_nav.dart';
 import '../providers/access.dart';
 import '../providers/probe.dart';
 import '../providers/registry.dart';
+import '../providers/proxy_routes.dart';
 import '../providers/proxyable.dart';
 
 /// What the sign-in form is doing right now.
@@ -474,6 +475,21 @@ class AccountStore extends ChangeNotifier {
     // A working call spends a token or two, so the meter moved.
     if (result.isWorking) await refresh();
     return result;
+  }
+
+  /// What the *running* proxy says it will forward, against what this app
+  /// sends.
+  ///
+  /// The one check that can see a stale deploy. Everything else in this file
+  /// asks the server about the account; this asks it about itself, because for
+  /// a week the account was fine and the server was five commits behind.
+  Future<RoutesReport> checkProxyRoutes() async {
+    if (!isConfigured || !isSignedIn) {
+      return const RoutesReport(
+          RoutesOutcome.unknown, 'Sign in first — this runs as your account.');
+    }
+    return readProxyRoutes(await backend.proxyRoutes(),
+        required: requiredProxyRoutes);
   }
 
   Future<String?> deleteProviderKey(String id) async {

@@ -108,6 +108,9 @@ class NoBackend implements ShiftBackend {
       null;
 
   @override
+  Future<({int status, String body})?> proxyRoutes() async => null;
+
+  @override
   List<SetupLink> setupLinks() => const [];
 
   @override

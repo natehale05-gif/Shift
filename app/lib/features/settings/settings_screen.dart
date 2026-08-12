@@ -17,6 +17,7 @@ import 'account_card.dart';
 import 'erase_everything.dart';
 import 'platform_keys_card.dart';
 import 'provider_key_field.dart';
+import 'server_card.dart';
 
 /// Where a key goes in.
 ///
@@ -60,6 +61,7 @@ class SettingsScreen extends StatelessWidget {
                 // consequential of the two: these are the keys every member
                 // spends.
                 const AccountCard(),
+                const ServerCard(),
                 const PlatformKeysCard(),
 
                 Text('Provider keys', style: text.titleMedium),

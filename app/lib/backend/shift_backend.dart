@@ -461,6 +461,19 @@ abstract class ShiftBackend {
     Map<String, String> extraHeaders,
   });
 
+  /// Asks the deployed proxy which routes it will forward.
+  ///
+  /// The status and body are returned raw, exactly as [probeProxy] does, for
+  /// the same reason: deciding what an answer *means* is a pure function's job,
+  /// and there should be one of those rather than one per surface.
+  ///
+  /// Three answers matter to the caller and all three are statuses. **200** is
+  /// the list. **404** is a server built before this route existed — which is
+  /// itself the finding, not an error, because a server that cannot say what it
+  /// forwards is by definition older than the app asking. **null** is nothing
+  /// answered at all.
+  Future<({int status, String body})?> proxyRoutes();
+
   /// The host settings that cannot be changed from here. Empty when there is
   /// no host, or nothing left to do.
   List<SetupLink> setupLinks();

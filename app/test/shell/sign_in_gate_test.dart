@@ -297,6 +297,9 @@ class _Host implements ShiftBackend {
       throw UnimplementedError();
 
   @override
+  Future<({int status, String body})?> proxyRoutes() async => null;
+
+  @override
   Future<({int status, String body})?> probeProxy(
     String provider, {
     required String path,

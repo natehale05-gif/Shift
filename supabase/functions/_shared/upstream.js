@@ -125,6 +125,50 @@ export function proxyableProviders() {
   return Object.keys(UPSTREAMS);
 }
 
+/**
+ * Every route this proxy will forward, provider by provider.
+ *
+ * Copied out rather than handed over: the arrays above are what every request
+ * is checked against, and a caller that could mutate one could widen the
+ * allowlist for every later call in the same process.
+ *
+ * @returns {Record<string, string[]>}
+ */
+export function allowedRoutes() {
+  return Object.fromEntries(
+    Object.entries(UPSTREAMS).map(([id, upstream]) => [id, [...upstream.allow]]),
+  );
+}
+
+/**
+ * A fingerprint of the table above.
+ *
+ * **Derived, never written down.** A hand-maintained version string is one more
+ * thing to forget on the commit that matters, and a stale one is worse than
+ * none — it would report a server as current while it is five commits behind,
+ * which is precisely the failure this route exists to make visible. Computed
+ * from the entries themselves, it cannot say "current" about a table that is
+ * not.
+ *
+ * FNV-1a because it needs no crypto and no await; this identifies a build, it
+ * does not protect anything.
+ *
+ * @param {Record<string, string[]>} [routes]
+ */
+export function routesVersion(routes = allowedRoutes()) {
+  const canonical = Object.keys(routes)
+      .sort()
+      .map((id) => `${id}:${[...routes[id]].sort().join(',')}`)
+      .join(';');
+
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < canonical.length; i++) {
+    hash ^= canonical.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, '0');
+}
+
 export function upstreamFor(provider) {
   return UPSTREAMS[provider] ?? null;
 }

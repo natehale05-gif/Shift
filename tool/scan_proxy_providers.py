@@ -138,6 +138,35 @@ def js_allow() -> dict:
     return allow
 
 
+# Which upstreams a client's path has to satisfy. `openai_*` serves every
+# provider on that wire, which is how one missing prefix broke four.
+CLIENT_SERVES = {
+    'anthropic_text.dart': ['anthropic'],
+    'gemini_text.dart': ['gemini'],
+    'gemini_image.dart': ['gemini'],
+    'openai_text.dart': ['openai', 'groq', 'mistral', 'openrouter'],
+    'openai_image.dart': ['openai'],
+}
+
+
+def client_path(name: str):
+    """The provider path a v2 client sends, or None when it does not exist yet.
+
+    A declared constant where there is one, and otherwise the literal in the
+    managed arm — Gemini's path carries a model id, so it cannot be a constant
+    and the prefix is what matters.
+    """
+    source = ROOT / 'app' / 'lib' / 'providers' / 'clients' / name
+    if not source.exists():
+        return None
+
+    text = source.read_text()
+    declared = re.search(r"static const providerPath = '([^']+)'", text)
+    if declared:
+        return declared.group(1)
+    return re.search(r"path: '\$\{base\.path\}(/[^'$]*)", text).group(1)
+
+
 def managed_paths_reach_the_server(allow: dict) -> bool:
     """Every path a client sends through the proxy is one the proxy forwards.
 
@@ -152,33 +181,12 @@ def managed_paths_reach_the_server(allow: dict) -> bool:
     `baseUrl` and the managed arm rebuilt the path from scratch. So the fix is
     one constant per client — and this is what stops the next one.
     """
-    clients = ROOT / 'app' / 'lib' / 'providers' / 'clients'
-    if not clients.is_dir():
-        return True
-
-    # Which upstreams a client's path has to satisfy. `openai_*` serves every
-    # provider on that wire, which is how one missing prefix broke four.
-    serves = {
-        'anthropic_text.dart': ['anthropic'],
-        'gemini_text.dart': ['gemini'],
-        'gemini_image.dart': ['gemini'],
-        'openai_text.dart': ['openai', 'groq', 'mistral', 'openrouter'],
-        'openai_image.dart': ['openai'],
-    }
-
     problems = []
     checked = 0
-    for name, providers in serves.items():
-        source = clients / name
-        if not source.exists():
+    for name, providers in CLIENT_SERVES.items():
+        path = client_path(name)
+        if path is None:
             continue
-
-        # A declared constant, or the literal in the managed arm for the
-        # clients whose path carries a model id and cannot be a constant.
-        declared = re.search(
-            r"static const providerPath = '([^']+)'", source.read_text())
-        path = declared.group(1) if declared else re.search(
-            r"path: '\$\{base\.path\}(/[^'$]*)", source.read_text()).group(1)
 
         for provider in providers:
             checked += 1
@@ -200,10 +208,79 @@ def managed_paths_reach_the_server(allow: dict) -> bool:
     return True
 
 
+def required_routes() -> dict:
+    """`app/lib/providers/proxy_routes.dart` as `{provider: {'METHOD /prefix'}}`."""
+    path = ROOT / 'app' / 'lib' / 'providers' / 'proxy_routes.dart'
+    if not path.exists():
+        return {}
+
+    block = re.search(
+        r'const Map<String, List<String>> requiredProxyRoutes = \{(.*?)\n\};',
+        path.read_text(), re.S)
+    if not block:
+        raise SystemExit('proxy_routes.dart: no requiredProxyRoutes')
+
+    routes = {}
+    for entry in re.finditer(r"'([\w-]+)': \[(.*?)\]", block.group(1), re.S):
+        routes[entry.group(1)] = set(re.findall(r"'([^']+)'", entry.group(2)))
+    return routes
+
+
+def required_routes_are_a_mirror(allow: dict) -> bool:
+    """The app's stated requirement matches what its clients actually send.
+
+    `requiredProxyRoutes` is what the app asks a *running* server about, and a
+    list nobody checks is the reason this whole wave exists. Two directions,
+    both of which have to hold:
+
+      * every path a client builds is covered by an entry — otherwise the app
+        would report a server "current" while sending it something it refuses,
+        which is worse than not asking;
+      * every entry appears verbatim in this repository's own allowlist —
+        otherwise the app asks for a route we never intended to serve, and a
+        correctly-deployed server would be reported as behind.
+    """
+    routes = required_routes()
+    if not routes:
+        return True
+
+    problems = []
+    for name, providers in CLIENT_SERVES.items():
+        path = client_path(name)
+        if path is None:
+            continue
+        for provider in providers:
+            covered = any(
+                entry.startswith('POST ') and path.startswith(entry[5:])
+                for entry in routes.get(provider, ()))
+            if not covered:
+                problems.append(f'  {name} sends {path!r} to {provider}, which '
+                                f'requiredProxyRoutes does not claim')
+
+    for provider, entries in routes.items():
+        served = {f'{method} {prefix}' for method, prefix in allow.get(provider, [])}
+        for entry in sorted(entries - served):
+            problems.append(f'  requiredProxyRoutes asks {provider} for {entry!r}, '
+                            f'which this repo\'s proxy does not allow')
+
+    if problems:
+        print('FAIL: requiredProxyRoutes is not a mirror of what the app sends',
+              file=sys.stderr)
+        for line in problems:
+            print(line, file=sys.stderr)
+        return False
+
+    total = sum(len(entries) for entries in routes.values())
+    print(f'required proxy routes mirror the clients ({total} routes)')
+    return True
+
+
 def main() -> int:
     client, server = dart_set(), js_keys()
+    allow = js_allow()
     ok = (betas_agree() and v2_subset(server)
-          and managed_paths_reach_the_server(js_allow()))
+          and managed_paths_reach_the_server(allow)
+          and required_routes_are_a_mirror(allow))
 
     if client == server:
         print(f'proxyable providers agree ({len(client)}): '
