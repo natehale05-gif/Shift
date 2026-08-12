@@ -54,10 +54,11 @@ void main() {
       await t.pumpWidget(host(_Configured()));
       await t.pumpAndSettle();
 
-      // The account card offers sign-in...
-      expect(find.text('Account'), findsOneWidget);
-      expect(find.text('Sign in'), findsOneWidget);
-      // ...and the vault is not on screen at all.
+      // Neither card, and the account card is empty rather than offering a
+      // sign-in: `SignInGate` stands in front of the whole app, so a signed-out
+      // person never reaches Settings and a form here could never be opened.
+      expect(find.text('Account'), findsNothing);
+      expect(find.text('Sign in'), findsNothing);
       expect(find.text('Included with membership'), findsNothing);
     });
 

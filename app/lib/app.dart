@@ -26,6 +26,7 @@ import 'features/visual/visual_turns.dart';
 import 'features/work/work_runner.dart';
 import 'shell/app_shell.dart';
 import 'shell/shell_controller.dart';
+import 'shell/sign_in_gate.dart';
 
 class ShiftApp extends StatelessWidget {
   final ApiKeysStore keys;
@@ -49,8 +50,12 @@ class ShiftApp extends StatelessWidget {
   ///
   /// The composition root is the one place `tool/scan_backend_boundary.py`
   /// allows to name an implementation — everything above talks to
-  /// [ShiftBackend]. [NoBackend] is not a stub: signed-out on local keys is a
-  /// supported way to run, and it is how the public demo runs permanently.
+  /// [ShiftBackend].
+  ///
+  /// [NoBackend] is what a build with no configured host gets, and such a build
+  /// is **not** put behind [SignInGate] — there would be nothing to sign in to,
+  /// so the gate would be an app that never opens. Shipped builds all carry a
+  /// host, so in practice this arm is a local build without the defines.
   static ShiftBackend backendFor(KvStore kv) {
     final config = BackendConfig.fromEnvironment();
     if (config == null) return NoBackend();
@@ -154,7 +159,11 @@ class ShiftApp extends StatelessWidget {
         // themes are built to the same standard, so neither is a fallback.
         themeMode: ThemeMode.system,
 
-        home: const AppShell(),
+        // The app is behind an account. The gate is here rather than inside
+        // the shell so nothing below it has to ask whether it is allowed to
+        // exist — every mode, store and surface runs only for a signed-in
+        // person, or not at all.
+        home: const SignInGate(child: AppShell()),
       ),
     );
   }

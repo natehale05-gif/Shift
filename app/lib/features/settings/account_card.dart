@@ -1,29 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../backend/shift_backend.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../data/account_store.dart';
+import '../../shell/sign_in_gate.dart';
 
-/// Signing in, and what the account currently buys.
+/// Who is signed in, and what the account currently buys.
 ///
-/// **Renders nothing when the build has no server behind it**, which is a
-/// supported way to run rather than a broken one: the app works signed out on
-/// local keys, and that is how the public demo works permanently. Offering a
-/// sign-in that cannot succeed would be worse than offering none.
+/// **Signing in is not here.** [SignInGate] stands in front of the whole app,
+/// so nobody signed out ever reaches Settings — a form on this card would be a
+/// second way in that nothing could ever open. The card is signed-in only, and
+/// its one control that changes state is Sign out.
 ///
-/// **Apple and Google lead; email is the alternative underneath.** That order
-/// is what most people take, and the pairing is a rule rather than a
-/// preference: App Store guideline 4.8 requires an app offering a third-party
-/// login to also offer one that limits collection to name and email, which is
-/// what Sign in with Apple is. Google alone on iOS is a rejection.
-///
-/// A provider's button appears only when both halves are true: this platform
-/// can complete a redirect, and the host has that provider configured. Either
-/// one missing produced a real failure — off-web the person never comes back,
-/// and an unconfigured provider answers with raw JSON on the host's own domain
-/// and no way forward. Neither is worth a button.
+/// **Renders nothing when the build has no server behind it.** That build is
+/// not gated, so it is the one case where a signed-out person can be looking
+/// at this — and there is nothing to sign in to, so there is nothing to show.
 class AccountCard extends StatefulWidget {
   const AccountCard({super.key});
 
@@ -32,27 +24,14 @@ class AccountCard extends StatefulWidget {
 }
 
 class _AccountCardState extends State<AccountCard> {
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-
-  @override
-  void dispose() {
-    _email.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _run(Future<bool> Function() action) async {
-    final ok = await action();
-    // Cleared only on success. A password wiped after a typo means typing the
-    // whole thing again on a phone, which is where this is used.
-    if (ok && mounted) _password.clear();
-  }
-
   @override
   Widget build(BuildContext context) {
     final store = context.watch<AccountStore>();
-    if (!store.isConfigured) return const SizedBox.shrink();
+
+    // Signed out means either a build with no host, or the one frame between
+    // Sign out and the gate taking the screen back. Neither wants a card
+    // describing an account that is not there.
+    if (!store.isConfigured || !store.isSignedIn) return const SizedBox.shrink();
 
     final c = context.colors;
     final text = Theme.of(context).textTheme;
@@ -71,22 +50,13 @@ class _AccountCardState extends State<AccountCard> {
           Text('Account', style: text.titleMedium?.copyWith(color: c.text)),
           const SizedBox(height: Space.xxs),
 
-          if (store.isSignedIn)
-            ..._signedIn(store, c, text)
-          else
-            ..._signedOut(store, c, text),
+          ..._signedIn(store, c, text),
 
-          // Both, and they are different things: [problem] is what went wrong,
-          // [notice] is what went right but is not finished — "check your
-          // email" after a sign-up is not an error, and showing it in red under
-          // a form that just worked reads as failure and invites a retry.
+          // Signed in, the only failure this card can report is a sign-out or
+          // a refresh that did not work.
           if (store.problem case final problem?) ...[
             const SizedBox(height: Space.sm),
             Text(problem, style: text.bodySmall?.copyWith(color: c.danger)),
-          ],
-          if (store.notice case final notice?) ...[
-            const SizedBox(height: Space.sm),
-            Text(notice, style: text.bodySmall?.copyWith(color: c.textMuted)),
           ],
         ],
       ),
@@ -137,116 +107,4 @@ class _AccountCardState extends State<AccountCard> {
       ),
     ];
   }
-
-  List<Widget> _signedOut(AccountStore store, ShiftColors c, TextTheme text) => [
-        Text(
-          'Sign in to spend a membership instead of your own keys.',
-          style: text.bodySmall?.copyWith(color: c.textMuted),
-        ),
-
-        // First, and full width, because it is the fast way in and the one
-        // most people will take. Email is underneath for anyone who prefers
-        // it — not hidden, just second.
-        if (store.signInProviders.isNotEmpty) ...[
-          const SizedBox(height: Space.md),
-          for (final provider in store.signInProviders) ...[
-            SizedBox(
-              width: double.infinity,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: kMinTouchTarget),
-                child: OutlinedButton.icon(
-                  onPressed:
-                      store.isBusy ? null : () => store.signInWith(provider),
-                  icon: Icon(
-                    provider == OAuthProvider.apple
-                        ? Icons.apple
-                        : Icons.g_mobiledata_rounded,
-                    size: 22,
-                    color: c.text,
-                  ),
-                  label: Text('Continue with ${provider.label}',
-                      style: text.labelLarge?.copyWith(color: c.text)),
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(color: c.border),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: Space.sm),
-          ],
-
-          // A rule with a word in it, so what follows reads as the alternative
-          // rather than as a second required step.
-          Row(
-            children: [
-              Expanded(child: Divider(color: c.divider)),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Space.sm),
-                child: Text('or',
-                    style: text.labelSmall?.copyWith(color: c.textFaint)),
-              ),
-              Expanded(child: Divider(color: c.divider)),
-            ],
-          ),
-        ],
-
-        const SizedBox(height: Space.md),
-        TextField(
-          controller: _email,
-          enabled: !store.isBusy,
-          autocorrect: false,
-          keyboardType: TextInputType.emailAddress,
-          style: text.bodyMedium?.copyWith(color: c.text),
-          cursorColor: c.accent,
-          decoration: const InputDecoration(
-              isDense: true, labelText: 'Email'),
-        ),
-        const SizedBox(height: Space.sm),
-        TextField(
-          controller: _password,
-          enabled: !store.isBusy,
-          obscureText: true,
-          autocorrect: false,
-          enableSuggestions: false,
-          style: text.bodyMedium?.copyWith(color: c.text),
-          cursorColor: c.accent,
-          decoration:
-              const InputDecoration(isDense: true, labelText: 'Password'),
-          onSubmitted: (_) => _run(() => store.signIn(
-                email: _email.text.trim(),
-                password: _password.text,
-              )),
-        ),
-        const SizedBox(height: Space.md),
-        Row(
-          children: [
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: kMinTouchTarget),
-              child: TextButton(
-                onPressed: store.isBusy
-                    ? null
-                    : () => _run(() => store.signUp(
-                          email: _email.text.trim(),
-                          password: _password.text,
-                        )),
-                child: Text('Create account',
-                    style: text.labelLarge?.copyWith(color: c.textMuted)),
-              ),
-            ),
-            const Spacer(),
-            ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: kMinTouchTarget),
-              child: FilledButton(
-                onPressed: store.isBusy
-                    ? null
-                    : () => _run(() => store.signIn(
-                          email: _email.text.trim(),
-                          password: _password.text,
-                        )),
-                child: const Text('Sign in'),
-              ),
-            ),
-          ],
-        ),
-      ];
 }

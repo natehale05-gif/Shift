@@ -4,10 +4,14 @@ An intuitive app for shiftai.club that works like the Claude app but feels like
 an Apple product. Talk to it like you would a person — it routes your request to
 the right specialised studio automatically.
 
-**[▶ Try it in your browser](https://natehale05-gif.github.io/Shift/)** — no
-install, no key required. This is **v2**, the rebuild: six modes (Chat, Code,
-Visual, Design, Work, Notes), targeting the App Store and Google Play as well
-as the web and desktop.
+**[▶ Open it in your browser](https://natehale05-gif.github.io/Shift/)** — no
+install; **an account is required**, and creating one takes a moment. This is
+**v2**, the rebuild: six modes (Chat, Code, Visual, Design, Work, Notes),
+targeting the App Store and Google Play as well as the web and desktop.
+
+> Want a look without signing up? **[v1 is still
+> open](https://natehale05-gif.github.io/Shift/v1/)** — the previous app,
+> frozen, no account and no key needed.
 
 It is early, and worth saying plainly rather than discovering: the shell and
 the six modes exist and each mode says which wave builds it. Nothing works

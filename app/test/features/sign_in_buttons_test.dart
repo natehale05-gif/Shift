@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:shift/backend/no_backend.dart';
 import 'package:shift/backend/shift_backend.dart';
 import 'package:shift/core/design/metrics.dart';
 import 'package:shift/core/design/theme.dart';
 import 'package:shift/core/platform/browser_nav.dart';
 import 'package:shift/data/account_store.dart';
-import 'package:shift/features/settings/account_card.dart';
+import 'package:shift/features/settings/sign_in_form.dart';
 
-/// Which sign-in buttons the card offers, and why each one is absent when it is.
+/// Which sign-in buttons the form offers, and why each one is absent when it is.
 ///
 /// The rule has two independent halves and both produced a real failure:
 /// off-web a redirect never comes back, and a provider the host has not enabled
@@ -42,7 +41,7 @@ void main() {
         value: store,
         child: MaterialApp(
           theme: shiftTheme(Brightness.light, TargetPlatform.iOS),
-          home: const Scaffold(body: SingleChildScrollView(child: AccountCard())),
+          home: const Scaffold(body: SingleChildScrollView(child: SignInForm())),
         ),
       ),
     );
@@ -67,7 +66,7 @@ void main() {
     expect(find.text('Continue with Apple'), findsNothing);
   });
 
-  testWidgets('the host says neither, so the card is email alone', (t) async {
+  testWidgets('the host says neither, so it is email alone', (t) async {
     await pump(t, _Host(const {}));
 
     expect(find.textContaining('Continue with'), findsNothing);
@@ -93,12 +92,6 @@ void main() {
 
     expect(find.textContaining('Continue with'), findsNothing);
     expect(find.text('Sign in'), findsOneWidget);
-  });
-
-  testWidgets('a build with no server offers no account surface at all',
-      (t) async {
-    await pump(t, NoBackend());
-    expect(find.text('Account'), findsNothing);
   });
 
   testWidgets('tapping one asks for that provider', (t) async {
