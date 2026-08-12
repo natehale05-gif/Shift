@@ -145,19 +145,32 @@ run_checks() {
   # Every published link in the README has to resolve, and the one people
   # actually press has to serve the app it advertises.
   if [ -f "$readme" ]; then
-    local try
-    try=$(grep -o 'Try it in your browser\](https://[^)]*)' "$readme" \
-          | sed -E 's/.*\((.*)\)/\1/' | head -1)
+    # The **first** site link in the document, whatever it is labelled.
+    #
+    # It used to grep for the literal phrase "Try it in your browser", which is
+    # how this check spent three commits red while the site was perfectly
+    # fine: the button was reworded to "Open it in your browser" and the grep
+    # found nothing, so the check failed closed on its own wording. Failing
+    # closed is the right direction and a check nobody can keep green is still
+    # a check nobody reads.
+    #
+    # Position is the property that actually matters and it cannot be reworded
+    # away: whichever link comes first is the one people press, and it has to
+    # serve the current app. That is precisely what was wrong before — a v1
+    # button above a v2 pointer in a blockquote.
+    local primary
+    primary=$(grep -o '\](https://natehale05-gif\.github\.io[^)]*)' "$readme" \
+              | sed -E 's/.*\((.*)\)/\1/' | head -1)
 
-    if [ -z "$try" ]; then
-      failures+=("README has no 'Try it in your browser' link to check")
+    if [ -z "$primary" ]; then
+      failures+=("README links to the site nowhere at all")
     else
-      probe "$(against_site "$try")"
-      note "README 'Try it' -> $try" "HTTP $status · $(app_marker)"
+      probe "$(against_site "$primary")"
+      note "README's first link -> $primary" "HTTP $status · $(app_marker)"
       [ "$status" = 200 ] \
-        || failures+=("README 'Try it' link -> HTTP $status")
+        || failures+=("README's first site link -> HTTP $status")
       [ "$(app_marker)" = 'v2' ] \
-        || failures+=("README 'Try it' link serves '$(app_marker)' — it advertises the current app and points at another one")
+        || failures+=("README's first site link serves '$(app_marker)' — the link people press has to be the current app")
     fi
 
     while read -r url; do
