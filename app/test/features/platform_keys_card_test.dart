@@ -197,6 +197,9 @@ class _Configured implements ShiftBackend {
   Future<ShiftSession?> adoptCallback(Uri url) async => null;
 
   @override
+  Future<Set<OAuthProvider>> enabledProviders() async => const {};
+
+  @override
   Future<bool> isAdmin() async => admin;
 
   @override

@@ -123,6 +123,31 @@ class SupabaseBackend implements ShiftBackend {
         },
       );
 
+  @override
+  Future<Set<OAuthProvider>> enabledProviders() async {
+    try {
+      final response = await _http.get(
+        Uri.parse('${config.url}/auth/v1/settings'),
+        headers: _headers(),
+      );
+      if (response.statusCode >= 400) return OAuthProvider.values.toSet();
+
+      final external = (jsonDecode(response.body)
+          as Map<String, dynamic>)['external'] as Map<String, dynamic>?;
+      // A body without `external` is a shape this does not recognise, which is
+      // not the same as a host with nothing enabled. Same rule as a failed
+      // request: do not hide a sign-in on a guess.
+      if (external == null) return OAuthProvider.values.toSet();
+
+      return {
+        for (final provider in OAuthProvider.values)
+          if (external[provider.id] == true) provider,
+      };
+    } catch (_) {
+      return OAuthProvider.values.toSet();
+    }
+  }
+
   /// Reads a session out of a callback URL's **fragment**.
   ///
   /// The tokens come back after the `#`, which is deliberate on the host's part

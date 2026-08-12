@@ -19,9 +19,11 @@ import '../../data/account_store.dart';
 /// login to also offer one that limits collection to name and email, which is
 /// what Sign in with Apple is. Google alone on iOS is a rejection.
 ///
-/// The two buttons appear only where a redirect can come back — the web today.
-/// A desktop or mobile build has no registered deep link yet, so it shows email
-/// alone rather than a button that leaves and never returns.
+/// A provider's button appears only when both halves are true: this platform
+/// can complete a redirect, and the host has that provider configured. Either
+/// one missing produced a real failure — off-web the person never comes back,
+/// and an unconfigured provider answers with raw JSON on the host's own domain
+/// and no way forward. Neither is worth a button.
 class AccountCard extends StatefulWidget {
   const AccountCard({super.key});
 
@@ -145,9 +147,9 @@ class _AccountCardState extends State<AccountCard> {
         // First, and full width, because it is the fast way in and the one
         // most people will take. Email is underneath for anyone who prefers
         // it — not hidden, just second.
-        if (store.canSignInWithProvider) ...[
+        if (store.signInProviders.isNotEmpty) ...[
           const SizedBox(height: Space.md),
-          for (final provider in OAuthProvider.values) ...[
+          for (final provider in store.signInProviders) ...[
             SizedBox(
               width: double.infinity,
               child: ConstrainedBox(

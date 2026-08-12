@@ -127,12 +127,27 @@ class AccountStore extends ChangeNotifier {
   Future<bool> signUp({required String email, required String password}) =>
       _attempt(() => backend.signUp(email: email, password: password));
 
-  /// Whether a hosted sign-in can be offered at all.
+  /// Providers that are worth offering: the host has them configured, and this
+  /// platform can complete a redirect.
   ///
-  /// Off-web there is no URL for a provider to return to yet, so the buttons
-  /// are absent rather than present and broken — the same rule the app applies
-  /// to every other control it cannot honour.
-  bool get canSignInWithProvider => isConfigured && canRedirect;
+  /// Two independent reasons a button should not be there, and both have been
+  /// seen. Off-web there is no URL for a provider to return to yet. And a
+  /// provider the host has not enabled answers *"Unsupported provider: provider
+  /// is not enabled"* — as raw JSON, on the host's own domain, with Back as the
+  /// only way out. The app knew where it was sending someone; it just never
+  /// checked whether anything was there.
+  Set<OAuthProvider> get signInProviders =>
+      isConfigured && canReturnHere() ? _enabledProviders : const {};
+
+  Set<OAuthProvider> _enabledProviders = const {};
+
+  /// Whether this platform can leave and be returned to.
+  ///
+  /// Injectable for the same reason [returnUrl] is: [canRedirect] is a
+  /// compile-time constant chosen by the conditional import, so a test running
+  /// on the VM could only ever observe the off-web answer — and the arm that
+  /// matters for these buttons is the web one.
+  static bool Function() canReturnHere = () => canRedirect;
 
   /// Sends the page to [provider]'s sign-in.
   ///
@@ -173,6 +188,23 @@ class AccountStore extends ChangeNotifier {
   Future<void> start(Uri openedAt) async {
     await adoptCallback(openedAt);
     await restore();
+
+    // Last, and not awaited by anything above it: which providers are
+    // configured decides what the *signed-out* card offers, so it must not sit
+    // in front of restoring a session that would hide that card anyway.
+    //
+    // The catch is the same rule the interface states, restated at the
+    // boundary because this runs on every launch from a `create:` that nobody
+    // awaits — an implementation that threw here would take out the whole boot
+    // with an unhandled error, and take sign-in with it.
+    if (isConfigured) {
+      try {
+        _enabledProviders = await backend.enabledProviders();
+      } catch (_) {
+        _enabledProviders = OAuthProvider.values.toSet();
+      }
+      notifyListeners();
+    }
   }
 
   /// Takes a session out of the URL the app was opened at, if there is one.

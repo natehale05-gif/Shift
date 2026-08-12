@@ -52,6 +52,11 @@ class NoBackend implements ShiftBackend {
   @override
   Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo}) => null;
 
+  /// Empty, and here the empty set is the truth rather than a failure to ask:
+  /// there is no host, so nothing is configured on one.
+  @override
+  Future<Set<OAuthProvider>> enabledProviders() async => const {};
+
   @override
   Future<ShiftSession?> adoptCallback(Uri url) async => null;
 

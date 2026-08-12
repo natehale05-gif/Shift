@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:shift/backend/backend_config.dart';
 import 'package:shift/backend/no_backend.dart';
 import 'package:shift/backend/shift_backend.dart';
@@ -61,6 +63,64 @@ void main() {
             .oauthUrl(OAuthProvider.google, redirectTo: Uri.parse('https://a/')),
         isNull,
       );
+    });
+  });
+
+  group('which providers the host has', () {
+    /// A backend whose only HTTP is the settings call these tests are about.
+    SupabaseBackend answering(http.Response Function(http.Request) reply) =>
+        SupabaseBackend(config: config, client: MockClient((r) async => reply(r)));
+
+    String settings(Map<String, dynamic> external) =>
+        jsonEncode({'external': external});
+
+    test('asks the host, and takes it at its word', () async {
+      late Uri asked;
+      final backend = answering((r) {
+        asked = r.url;
+        return http.Response(
+            settings({'apple': false, 'google': true, 'github': true}), 200);
+      });
+
+      expect(await backend.enabledProviders(), {OAuthProvider.google});
+      expect(asked.path, '/auth/v1/settings');
+    });
+
+    test('none enabled is an answer, and it means no buttons', () async {
+      // The state that produced the report: both providers off, and the app
+      // sent someone to a page that could only say so in JSON.
+      final backend =
+          answering((_) => http.Response(settings({'apple': false, 'google': false}), 200));
+
+      expect(await backend.enabledProviders(), isEmpty);
+    });
+
+    // The three ways of not finding out. All three answer with everything,
+    // which is the rule the interface states: hiding a working sign-in on one
+    // failed request is worse than the rare bad redirect.
+    test('a refused request hides nothing', () async {
+      final backend = answering((_) => http.Response('nope', 500));
+      expect(await backend.enabledProviders(), OAuthProvider.values.toSet());
+    });
+
+    test('a body with no `external` hides nothing', () async {
+      final backend = answering((_) => http.Response('{"disable_signup":false}', 200));
+      expect(await backend.enabledProviders(), OAuthProvider.values.toSet());
+    });
+
+    test('a request that never lands hides nothing', () async {
+      final backend = SupabaseBackend(
+        config: config,
+        client: MockClient(
+            (_) async => throw http.ClientException('Failed to fetch')),
+      );
+      expect(await backend.enabledProviders(), OAuthProvider.values.toSet());
+    });
+
+    test('a build with no server has nothing configured on one', () async {
+      // Empty here is the truth rather than a failure to ask, which is why
+      // this one arm is allowed to answer with nothing.
+      expect(await NoBackend().enabledProviders(), isEmpty);
     });
   });
 

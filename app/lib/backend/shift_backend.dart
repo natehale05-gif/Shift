@@ -332,6 +332,22 @@ abstract class ShiftBackend {
   /// render, so there is nothing here that can explain it.
   Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo});
 
+  /// Which providers the host actually has configured.
+  ///
+  /// Asked because the alternative is what happened the first time these
+  /// shipped: the button navigated away and the person landed on
+  /// `{"code":400,...,"msg":"Unsupported provider: provider is not enabled"}`
+  /// on a domain they had never heard of, with the Back button as the only way
+  /// out. The app had everything it needed to know better — it just never
+  /// asked.
+  ///
+  /// **Unknown is treated as available by every caller, deliberately.** Hiding
+  /// a working sign-in because one request failed is worse than the rare bad
+  /// redirect: one is a feature that vanished, the other is a page with a Back
+  /// button. So this returns every provider when it cannot find out, and the
+  /// empty set only when the host says so.
+  Future<Set<OAuthProvider>> enabledProviders();
+
   /// Adopts a session handed back on a callback URL, if there is one.
   ///
   /// Returns null for every ordinary load, which is the common case and not an
