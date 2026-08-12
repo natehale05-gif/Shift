@@ -2,14 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/account_store.dart';
 import '../../data/api_keys_store.dart';
+import '../../data/provider_access_source.dart';
 import '../../data/artifact.dart';
 import '../../data/artifact_store.dart';
 import '../../data/conversation_store.dart';
 import '../../data/image_store.dart';
 import '../../data/made_image.dart';
 import '../../data/note_store.dart';
-import '../../providers/access.dart';
 import '../../shell/mode.dart';
 import '../../turn/capability.dart';
 import '../../turn/executors/image_executor.dart';
@@ -261,6 +262,7 @@ class TurnController extends ChangeNotifier {
 
   TurnController({
     ApiKeysStore? keys,
+    AccountStore? account,
     this.conversations,
     this.artifacts,
     this.notes,
@@ -268,8 +270,12 @@ class TurnController extends ChangeNotifier {
     Map<Capability, StepExecutor> Function()? executors,
     this.snapshotEvery = const Duration(seconds: 3),
   }) {
-    this.executors =
-        executors ?? () => _fromKeys(keys, () => _conversationId ?? '', images);
+    // Read through the source on every turn rather than captured once: a plan
+    // granted while the app is open has to take effect on the next message,
+    // not on the next launch.
+    final source = ProviderAccessSource(keys: keys, account: account);
+    this.executors = executors ??
+        () => _fromKeys(source, () => _conversationId ?? '', images);
   }
 
   /// Where deliverables are kept. Optional, like [conversations], so a test can
@@ -491,29 +497,26 @@ class TurnController extends ChangeNotifier {
   /// answer. v1 shipped a demo mode that answered convincingly with no model
   /// behind it, and it made "is this actually working?" unanswerable.
   ///
-  /// The membership arm of [resolveAccess] is written and dormant: it needs an
-  /// account, which lands with sign-in.
+  /// Credentials come from [ProviderAccessSource] — the plan first, this
+  /// device's keys second. This used to read [ApiKeysStore] and nothing else,
+  /// which is why a member whose plan covered a provider was told none was set
+  /// up: routing asked only about local keys, so the vault was never reached.
   static Map<Capability, StepExecutor> _fromKeys(
-    ApiKeysStore? keys,
+    ProviderAccessSource source,
     String Function() conversationId,
     ImageStore? images,
   ) {
-    bool usable(String id) => keys?.has(id) ?? false;
-
-    Future<ProviderAccess?> access(String id) async {
-      final key = keys?.get(id);
-      return key == null ? null : DirectKey(key);
-    }
-
     return {
       Capability.text: TextExecutor(
-        usable: usable,
-        access: access,
+        usable: source.usable,
+        access: source.access,
+        explainUnavailable: source.explain,
         conversationId: conversationId,
       ),
       Capability.image: ImageExecutor(
-        usable: usable,
-        access: access,
+        usable: source.usable,
+        access: source.access,
+        explainUnavailable: source.explain,
         sourceBytes: images?.sourceFor,
       ),
     };

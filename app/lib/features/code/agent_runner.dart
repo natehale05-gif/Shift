@@ -13,8 +13,9 @@ import '../../data/agent.dart';
 import '../../data/agent_run.dart';
 import '../../data/agent_run_store.dart';
 import '../../data/agent_store.dart';
+import '../../data/account_store.dart';
 import '../../data/api_keys_store.dart';
-import '../../providers/access.dart';
+import '../../data/provider_access_source.dart';
 import 'run_changes.dart';
 
 /// Whether a workspace can be worked in here, and what to say when it cannot.
@@ -33,6 +34,9 @@ class AgentRunner extends ChangeNotifier {
   final AgentStore agents;
   final AgentRunStore runs;
   final ApiKeysStore? keys;
+
+  /// The account, so a membership pays for an agent run too.
+  final AccountStore? account;
 
   /// Opens a working copy. Injected so a test drives the real loop against a
   /// real temp directory, and so N9b's server workspace is a new arm here
@@ -97,6 +101,7 @@ class AgentRunner extends ChangeNotifier {
     required this.agents,
     required this.runs,
     this.keys,
+    this.account,
     OpenedWorkspace Function(Workspace)? openWorkspace,
     AnthropicAgent Function()? client,
     this.model = 'claude-opus-4-8',
@@ -243,13 +248,16 @@ class AgentRunner extends ChangeNotifier {
       return _end(agent, run, opened.refusal ?? 'That workspace cannot be opened.');
     }
 
-    final key = keys?.get('anthropic');
-    if (key == null) {
-      return _end(
-        agent,
-        run,
-        'Add an Anthropic key in Settings — the agent needs one to work.',
-      );
+    // The plan first, this device's key second — the same source Chat and
+    // Notes use. This read `keys.get('anthropic')` alone, so a member whose
+    // plan covered Anthropic was told to add a key they were already paying
+    // not to need.
+    final source = ProviderAccessSource(keys: keys, account: account);
+    final access = await source.access('anthropic');
+    if (access == null) {
+      // Named, because Code mode speaks Anthropic's tool-use wire and nothing
+      // else: "add a key" without saying which is advice you cannot act on.
+      return _end(agent, run, source.explain('Claude'));
     }
 
     final loop = AgentLoop(
@@ -271,7 +279,7 @@ class AgentRunner extends ChangeNotifier {
     );
     final events = loop.run(
       instruction: _instructionFrom(run, text),
-      access: DirectKey(key),
+      access: access,
       model: model,
     );
 

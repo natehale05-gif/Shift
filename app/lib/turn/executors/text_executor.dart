@@ -28,6 +28,15 @@ class TextExecutor implements StepExecutor {
   /// token is short-lived and must not be cached on the client.
   final Future<ProviderAccess?> Function(String providerId) access;
 
+  /// Why there is nothing to run this with, when [usable] finds nothing.
+  ///
+  /// Injected rather than written here because the answer depends on the
+  /// account — no plan, a spent one, one that does not cover this, or one that
+  /// could not be read — and `turn/` deliberately knows nothing about accounts.
+  /// The default is the signed-out sentence, which is the honest answer when
+  /// nobody supplied a better one.
+  final String Function(String what) explainUnavailable;
+
   final String? pinned;
   final AnthropicText anthropic;
   final GeminiText gemini;
@@ -48,6 +57,7 @@ class TextExecutor implements StepExecutor {
   TextExecutor({
     required this.usable,
     required this.access,
+    this.explainUnavailable = defaultUnavailable,
     this.pinned,
     AnthropicText? anthropic,
     GeminiText? gemini,
@@ -83,8 +93,7 @@ class TextExecutor implements StepExecutor {
     if (choice == null) {
       yield StepFailed(
         step.id,
-        reason: 'No provider is set up for writing yet. Add a key in '
-            'Settings, or start a plan.',
+        reason: explainUnavailable('writing'),
       );
       return;
     }

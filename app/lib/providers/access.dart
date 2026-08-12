@@ -49,12 +49,35 @@ class Entitlement {
   /// ordinary shape, not an edge case.
   final Set<String> includedProviders;
 
+  /// Whether the plan is *active but spent*, as opposed to absent.
+  ///
+  /// Carried separately because the two produce the same `canSpendManaged` and
+  /// need opposite sentences: "start a plan" is wrong advice for somebody who
+  /// has one and has used it up.
+  final bool overCeiling;
+
+  /// False when the server could not be asked.
+  ///
+  /// [AccountStore.refresh] swallows its failures on purpose — it runs in the
+  /// background and an error banner nobody asked for is noise — which means a
+  /// plan that could not be *read* is indistinguishable from no plan at all.
+  /// It stops being indistinguishable here: unknown never claims the user has
+  /// no plan, because telling somebody who is paying that they are not is the
+  /// worse of the two errors.
+  final bool known;
+
   const Entitlement({
     this.canSpendManaged = false,
     this.includedProviders = const {},
+    this.overCeiling = false,
+    this.known = true,
   });
 
+  /// No plan, and that is a fact rather than a failure to ask.
   static const Entitlement none = Entitlement();
+
+  /// The server could not be asked.
+  static const Entitlement unknown = Entitlement(known: false);
 }
 
 /// Decides which credential a provider call uses. Pure, so the rule can be

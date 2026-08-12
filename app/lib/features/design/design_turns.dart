@@ -17,7 +17,12 @@ import '../chat/turn_controller.dart';
 class DesignTurns extends TurnController {
   DesignTurns({
     required ApiKeysStore keys,
+    super.account,
     required ConversationStore conversations,
     required ArtifactStore artifacts,
-  }) : super(keys: keys, conversations: conversations, artifacts: artifacts);
+  }) : super(
+          keys: keys,
+          conversations: conversations,
+          artifacts: artifacts,
+        );
 }

@@ -121,27 +121,53 @@ class ShiftApp extends StatelessWidget {
         ChangeNotifierProvider.value(value: folders),
         ChangeNotifierProvider.value(value: notes),
         ChangeNotifierProvider.value(value: images),
-        ChangeNotifierProvider(create: (_) => NoteCleaner(keys: keys)),
+        // Everything below takes the account, and that is the whole of what
+        // makes a membership buy anything: without it these resolve
+        // credentials from this device's keys alone, so a member with SHIFT's
+        // keys on the server is told no provider is set up. `context` rather
+        // than `_` because MultiProvider nests — `AccountStore` above is
+        // already in scope for each of these.
         ChangeNotifierProvider(
-          create: (_) => AgentRunner(agents: agents, runs: runs, keys: keys),
-        ),
-        ChangeNotifierProvider(
-          create: (_) =>
-              WorkRunner(agents: folders, runs: jobRuns, keys: keys),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => VisualTurns(keys: keys, images: images),
-        ),
-        ChangeNotifierProvider(
-          create: (_) => DesignTurns(
+          create: (context) => NoteCleaner(
             keys: keys,
+            account: context.read<AccountStore>(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => AgentRunner(
+            agents: agents,
+            runs: runs,
+            keys: keys,
+            account: context.read<AccountStore>(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => WorkRunner(
+            agents: folders,
+            runs: jobRuns,
+            keys: keys,
+            account: context.read<AccountStore>(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => VisualTurns(
+            keys: keys,
+            account: context.read<AccountStore>(),
+            images: images,
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => DesignTurns(
+            keys: keys,
+            account: context.read<AccountStore>(),
             conversations: conversations,
             artifacts: artifacts,
           ),
         ),
         ChangeNotifierProvider(
-          create: (_) => TurnController(
+          create: (context) => TurnController(
             keys: keys,
+            account: context.read<AccountStore>(),
             conversations: conversations,
             artifacts: artifacts,
             notes: notes,

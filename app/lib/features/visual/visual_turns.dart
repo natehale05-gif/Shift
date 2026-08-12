@@ -19,6 +19,9 @@ import '../chat/turn_controller.dart';
 /// Held at app level rather than created by the surface, so switching to Chat
 /// and back does not abandon a generation already paid for.
 class VisualTurns extends TurnController {
-  VisualTurns({required ApiKeysStore keys, required ImageStore images})
-      : super(keys: keys, images: images);
+  VisualTurns({
+    required ApiKeysStore keys,
+    super.account,
+    required ImageStore images,
+  }) : super(keys: keys, images: images);
 }

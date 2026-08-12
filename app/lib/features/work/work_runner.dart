@@ -25,6 +25,7 @@ class WorkRunner extends AgentRunner {
     required WorkAgents super.agents,
     required super.runs,
     super.keys,
+    super.account,
     super.openWorkspace,
     super.client,
   }) : super(

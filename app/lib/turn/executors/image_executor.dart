@@ -23,6 +23,12 @@ import '../turn_event.dart';
 class ImageExecutor implements StepExecutor {
   final bool Function(String providerId) usable;
   final Future<ProviderAccess?> Function(String providerId) access;
+
+  /// Why there is nothing to run this with. Same reasoning as
+  /// [TextExecutor.explainUnavailable]: the answer depends on the account, and
+  /// `turn/` knows nothing about accounts.
+  final String Function(String what) explainUnavailable;
+
   final String? pinned;
   final GeminiImage gemini;
   final OpenAiImage openai;
@@ -47,6 +53,7 @@ class ImageExecutor implements StepExecutor {
   ImageExecutor({
     required this.usable,
     required this.access,
+    this.explainUnavailable = defaultUnavailable,
     this.pinned,
     this.sourceBytes,
     GeminiImage? gemini,
@@ -73,8 +80,7 @@ class ImageExecutor implements StepExecutor {
     if (choice == null) {
       yield StepFailed(
         step.id,
-        reason: 'No provider is set up for images yet. Add a key in '
-            'Settings, or start a plan.',
+        reason: explainUnavailable('images'),
       );
       return;
     }

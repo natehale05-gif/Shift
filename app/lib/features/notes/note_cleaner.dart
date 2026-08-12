@@ -1,7 +1,8 @@
 import 'package:flutter/foundation.dart';
 
+import '../../data/account_store.dart';
 import '../../data/api_keys_store.dart';
-import '../../providers/access.dart';
+import '../../data/provider_access_source.dart';
 import '../../turn/capability.dart';
 import '../../turn/executors/text_executor.dart';
 import '../../turn/job_graph.dart';
@@ -25,12 +26,15 @@ typedef Cleaned = ({String? text, String? failure, String? detail});
 class NoteCleaner extends ChangeNotifier {
   final ApiKeysStore? keys;
 
+  /// The account, so a membership pays for tidying a note too.
+  final AccountStore? account;
+
   /// Injected so a test drives the real graph with a fake executor.
   final Map<Capability, StepExecutor> Function()? executors;
 
   bool _running = false;
 
-  NoteCleaner({this.keys, this.executors});
+  NoteCleaner({this.keys, this.account, this.executors});
 
   bool get running => _running;
 
@@ -101,14 +105,15 @@ class NoteCleaner extends ChangeNotifier {
 
   Map<Capability, StepExecutor> _executors() {
     if (executors case final build?) return build();
-    final store = keys;
+    // The plan first, this device's keys second — the same source Chat and
+    // Code use, so tidying a note is covered by a membership exactly as a
+    // message is. This asked only about local keys, which is why it was not.
+    final source = ProviderAccessSource(keys: keys, account: account);
     return {
       Capability.text: TextExecutor(
-        usable: (id) => store?.has(id) ?? false,
-        access: (id) async {
-          final key = store?.get(id);
-          return key == null ? null : DirectKey(key);
-        },
+        usable: source.usable,
+        access: source.access,
+        explainUnavailable: source.explain,
         // No conversation: a note is not one, and an artifact extracted from a
         // tidied note would be the note itself in a panel.
         conversationId: () => '',

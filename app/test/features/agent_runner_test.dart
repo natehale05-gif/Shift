@@ -184,7 +184,9 @@ void main() {
       await r.send(agent, 'do something');
 
       final ended = r.runFor('a1').entries.whereType<RunEnded>().single;
-      expect(ended.reason, contains('Anthropic key'));
+      // Names the credential rather than saying "a key": Code mode works with
+      // Claude alone, so an unnamed refusal is advice nobody can act on.
+      expect(ended.reason, contains('Claude'));
       expect(agents.agent('a1')?.status, AgentStatus.failed);
       expect(transport.calls, 0);
     });

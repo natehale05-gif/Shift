@@ -289,6 +289,9 @@ class AccountStore extends ChangeNotifier {
     _serverKeys = const [];
     _includedProviders = const [];
     _isAdmin = false;
+    // The next account gets asked afresh. Left true, a signed-out store would
+    // report a confident "no plan" built from the previous person's answer.
+    _planRead = false;
     _problem = null;
     _notice = null;
     _phase = AccountPhase.signedOut;
@@ -313,9 +316,12 @@ class AccountStore extends ChangeNotifier {
       _serverKeys = results[1] as List<ProviderKeyInfo>;
       _includedProviders = results[2] as List<String>;
       _isAdmin = results[3] as bool;
+      _planRead = true;
       notifyListeners();
     } catch (_) {
-      // Left as-is on purpose.
+      // Quiet, but not invisible: `_planRead` stays false, so `entitlement`
+      // reports unknown rather than none and nothing tells a paying member
+      // they have no plan because one request failed.
     }
   }
 
@@ -355,30 +361,56 @@ class AccountStore extends ChangeNotifier {
     }
   }
 
-  /// Where a call for [provider] goes when the membership pays for it, or
-  /// null when it does not.
+  /// What this account may spend from SHIFT's keys.
   ///
-  /// Three conditions, checked here so a turn does not make a request it
-  /// already knows will be refused: signed in, a subscription that is active
-  /// and under its ceiling, and a provider the plan actually covers. The
-  /// server checks all three again — this is a shortcut, not the gate.
-  Future<ProviderAccess?> managedAccess(String provider) async {
-    if (!isSignedIn || !_membership.canSpendManaged) return null;
-    if (!_includedProviders.contains(provider)) return null;
+  /// The facts, not the decision: [resolveAccess] owns the rule, and this
+  /// store's job is to say what is true rather than to re-derive it. Two copies
+  /// of "active, under the ceiling, and covered" is exactly the duplication
+  /// that let one of them go unwired without anything noticing.
+  Entitlement get entitlement {
+    if (!isSignedIn) return Entitlement.none;
+    if (!_planRead) return Entitlement.unknown;
+    return Entitlement(
+      canSpendManaged: _membership.canSpendManaged,
+      includedProviders: includedProviders.toSet(),
+      overCeiling: _membership.isActive && !_membership.canSpendManaged,
+    );
+  }
 
-    final call = await backend.managedProviderCall(provider);
-    if (call == null) return null;
-    return ManagedAccess(base: call.base, headers: call.headers);
+  /// Whether [refresh] has ever succeeded for this session.
+  ///
+  /// It swallows its own failures on purpose, so without this a plan that could
+  /// not be *read* is indistinguishable from no plan — and the app tells a
+  /// paying member to start a plan.
+  bool _planRead = false;
+
+  /// Where a call for [provider] goes when the membership pays for it, or null
+  /// when it does not.
+  ///
+  /// Checked here so a turn does not make a request it already knows will be
+  /// refused. The server checks all of it again — this is a shortcut, not the
+  /// gate.
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  ) async {
+    if (!entitlement.canSpendManaged) return null;
+    if (!entitlement.includedProviders.contains(provider)) return null;
+    try {
+      return await backend.managedProviderCall(provider);
+    } catch (_) {
+      // A token that could not be refreshed is not a reason to fail the turn:
+      // the caller falls back to the user's own key if they have one.
+      return null;
+    }
   }
 
   /// The covered providers, as the set routing needs synchronously.
   ///
   /// Empty unless the plan can actually pay right now, so a lapsed or spent
   /// membership stops steering the router the moment the meter says so.
-  Set<String> get spendableProviders =>
-      isSignedIn && _membership.canSpendManaged
-          ? includedProviders.toSet()
-          : const {};
+  Set<String> get spendableProviders => entitlement.canSpendManaged
+      ? entitlement.includedProviders
+      : const {};
 
   /// Grants a membership. Returns the error to show, or null on success.
   ///

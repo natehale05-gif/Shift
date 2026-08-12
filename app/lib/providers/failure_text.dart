@@ -1,3 +1,4 @@
+import 'access.dart';
 import 'registry.dart';
 import 'streaming/reachability.dart';
 
@@ -67,6 +68,50 @@ String sentenceForBrowserBlocked(ProviderDescriptor? provider,
 /// anything above.
 const String sentenceForTimeout =
     'The provider did not answer in time. Try again.';
+
+/// Why nothing could run a step, in the words that name the actual reason.
+///
+/// [what] is the plural noun for the step's output — "images", "writing" — so
+/// one function serves every capability without a switch per executor.
+///
+/// **Five states shared one sentence**, and the one they shared was the least
+/// useful of them: *"Add a key in Settings, or start a plan."* said to someone
+/// who had both. Which state it is decides who can fix it and how, so each gets
+/// its own — the same split [sentenceForUnreachable] made for network faults,
+/// and made for the same reason.
+String sentenceForNoProvider(
+  String what, {
+  required Entitlement entitlement,
+  required bool signedIn,
+}) {
+  if (!signedIn) {
+    return 'No provider is set up for $what yet. Add a key in Settings, '
+        'or sign in and start a plan.';
+  }
+  // Ordered by what the reader can do about it. "Couldn't check" first, because
+  // every sentence below it would be a claim about a plan nobody has read.
+  if (!entitlement.known) {
+    return "Couldn't check what your plan covers just now, and there is no key "
+        'on this device for $what. Try again in a moment.';
+  }
+  if (entitlement.overCeiling) {
+    return "You've used this month's allowance, and there is no key on this "
+        'device for $what. Add your own key to keep going.';
+  }
+  if (!entitlement.canSpendManaged) {
+    return 'You do not have an active plan, and there is no key on this device '
+        'for $what. Start a plan, or add a key in Settings.';
+  }
+  return "Your plan doesn't cover $what yet, and there is no key on this "
+      'device for it. Add a key in Settings.';
+}
+
+/// The signed-out answer, and the executors' default.
+///
+/// A `static const` default has to be a top-level function, which is also why
+/// this is the shape it is rather than a closure with a captured entitlement.
+String defaultUnavailable(String what) =>
+    sentenceForNoProvider(what, entitlement: Entitlement.none, signedIn: false);
 
 /// Sentences already written for a reader.
 ///
