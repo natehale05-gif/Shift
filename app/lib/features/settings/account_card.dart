@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../backend/shift_backend.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../data/account_store.dart';
@@ -12,11 +13,15 @@ import '../../data/account_store.dart';
 /// local keys, and that is how the public demo works permanently. Offering a
 /// sign-in that cannot succeed would be worse than offering none.
 ///
-/// Email and password only, for now. Sign in with Apple and Google are the
-/// front door this eventually gets — and on iOS they are not optional, since
-/// an app offering one third-party login must offer Apple's too — but both
-/// need developer-portal credentials, and neither is needed to put a key in the
-/// vault.
+/// **Apple and Google lead; email is the alternative underneath.** That order
+/// is what most people take, and the pairing is a rule rather than a
+/// preference: App Store guideline 4.8 requires an app offering a third-party
+/// login to also offer one that limits collection to name and email, which is
+/// what Sign in with Apple is. Google alone on iOS is a rejection.
+///
+/// The two buttons appear only where a redirect can come back — the web today.
+/// A desktop or mobile build has no registered deep link yet, so it shows email
+/// alone rather than a button that leaves and never returns.
 class AccountCard extends StatefulWidget {
   const AccountCard({super.key});
 
@@ -136,6 +141,53 @@ class _AccountCardState extends State<AccountCard> {
           'Sign in to spend a membership instead of your own keys.',
           style: text.bodySmall?.copyWith(color: c.textMuted),
         ),
+
+        // First, and full width, because it is the fast way in and the one
+        // most people will take. Email is underneath for anyone who prefers
+        // it — not hidden, just second.
+        if (store.canSignInWithProvider) ...[
+          const SizedBox(height: Space.md),
+          for (final provider in OAuthProvider.values) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+                child: OutlinedButton.icon(
+                  onPressed:
+                      store.isBusy ? null : () => store.signInWith(provider),
+                  icon: Icon(
+                    provider == OAuthProvider.apple
+                        ? Icons.apple
+                        : Icons.g_mobiledata_rounded,
+                    size: 22,
+                    color: c.text,
+                  ),
+                  label: Text('Continue with ${provider.label}',
+                      style: text.labelLarge?.copyWith(color: c.text)),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: c.border),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: Space.sm),
+          ],
+
+          // A rule with a word in it, so what follows reads as the alternative
+          // rather than as a second required step.
+          Row(
+            children: [
+              Expanded(child: Divider(color: c.divider)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: Space.sm),
+                child: Text('or',
+                    style: text.labelSmall?.copyWith(color: c.textFaint)),
+              ),
+              Expanded(child: Divider(color: c.divider)),
+            ],
+          ),
+        ],
+
         const SizedBox(height: Space.md),
         TextField(
           controller: _email,

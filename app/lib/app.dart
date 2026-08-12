@@ -107,7 +107,7 @@ class ShiftApp extends StatelessWidget {
         Provider<KvStore>.value(value: kv),
         ChangeNotifierProvider(create: (_) => ShellController()),
         ChangeNotifierProvider(
-          create: (_) => AccountStore(backend: backendFor(kv))..restore(),
+          create: (_) => AccountStore(backend: backendFor(kv))..start(Uri.base),
         ),
         ChangeNotifierProvider.value(value: keys),
         ChangeNotifierProvider.value(value: conversations),

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../backend/shift_backend.dart';
 import '../backend/setup_probe.dart';
+import '../core/platform/browser_nav.dart';
 import '../providers/clients/anthropic_text.dart';
 import '../providers/access.dart';
 import '../providers/proxyable.dart';
@@ -125,6 +126,82 @@ class AccountStore extends ChangeNotifier {
 
   Future<bool> signUp({required String email, required String password}) =>
       _attempt(() => backend.signUp(email: email, password: password));
+
+  /// Whether a hosted sign-in can be offered at all.
+  ///
+  /// Off-web there is no URL for a provider to return to yet, so the buttons
+  /// are absent rather than present and broken — the same rule the app applies
+  /// to every other control it cannot honour.
+  bool get canSignInWithProvider => isConfigured && canRedirect;
+
+  /// Sends the page to [provider]'s sign-in.
+  ///
+  /// Nothing after this runs on success: the page navigates away, and the app
+  /// starts again at [adoptCallback] when the provider sends it back. So there
+  /// is no session to return and no spinner to clear — the only thing that can
+  /// happen here is failing to leave.
+  void signInWith(OAuthProvider provider) {
+    final url = backend.oauthUrl(provider, redirectTo: returnUrl());
+    if (url == null) {
+      _problem = 'This build has no server behind it.';
+      notifyListeners();
+      return;
+    }
+    redirectTo(url);
+  }
+
+  /// Where the provider sends the browser back to.
+  ///
+  /// The app's own address with nothing after it — no query, no fragment. A
+  /// return URL carrying the last sign-in's leftovers would be a different
+  /// string each time, and the host matches these **exactly** against its
+  /// allow-list, so one that varies is one that is sometimes rejected.
+  ///
+  /// Injectable so the callback tests do not depend on where they are run.
+  static Uri Function() returnUrl = () => Uri.base.removeFragment().replace(
+        queryParameters: const {},
+      );
+
+  /// Everything the store does on boot, in the order it has to happen.
+  ///
+  /// A method rather than two calls at the composition root, because the order
+  /// is load-bearing and a cascade does not enforce it: `..adoptCallback()
+  /// ..restore()` starts both at once, and whichever finishes last wins. A
+  /// session handed back by a provider is newer than a stored one by
+  /// definition, so losing that race would silently discard the sign-in that
+  /// had just happened.
+  Future<void> start(Uri openedAt) async {
+    await adoptCallback(openedAt);
+    await restore();
+  }
+
+  /// Takes a session out of the URL the app was opened at, if there is one.
+  ///
+  /// Called once on boot, before [restore], because a callback is newer than
+  /// anything on disk. Silent on an ordinary load, which is nearly every load.
+  Future<void> adoptCallback(Uri url) async {
+    if (!isConfigured) return;
+    try {
+      final session = await backend.adoptCallback(url);
+      if (session == null) return;
+      _account = session.account;
+      _phase = AccountPhase.signedIn;
+      notifyListeners();
+      await refresh();
+    } on BackendException catch (e) {
+      // Cancelling is the common one, and it has to be visible: the button
+      // navigated away and came back, and saying nothing would read as the
+      // app having lost the attempt.
+      _problem = e.message;
+      _phase = AccountPhase.signedOut;
+      notifyListeners();
+    } finally {
+      // Whatever happened — session, cancellation, or nothing at all — the
+      // tokens do not stay in the address bar. In the `finally` because the
+      // one case that must not skip it is the one that succeeded.
+      clearCallbackFragment();
+    }
+  }
 
   /// Runs one credential attempt, and reports it as a bool rather than by
   /// throwing — a form needs to know whether to close, not to catch.

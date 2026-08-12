@@ -67,6 +67,28 @@ class ShiftSession {
   }
 }
 
+/// The identity providers the app can sign in with.
+///
+/// **Apple and Google are one decision, not two.** App Store guideline 4.8
+/// requires that an app offering a third-party login also offer one that limits
+/// collection to name and email and can hide the address — Sign in with Apple
+/// is the option that qualifies. Shipping Google alone on iOS is a rejection,
+/// so they are added together or not at all, and this enum having exactly two
+/// members is that rule written where it cannot be forgotten.
+enum OAuthProvider {
+  apple,
+  google;
+
+  /// What the host calls it. Kept here rather than at the call site because it
+  /// is part of the wire, and the wire is this folder's business.
+  String get id => name;
+
+  String get label => switch (this) {
+        OAuthProvider.apple => 'Apple',
+        OAuthProvider.google => 'Google',
+      };
+}
+
 /// What a client is allowed to know about a stored provider key.
 ///
 /// Never the key. The server encrypts it, uses it, and returns only enough to
@@ -295,6 +317,30 @@ abstract class ShiftBackend {
   Future<ShiftSession> signIn({required String email, required String password});
 
   Future<ShiftSession> signUp({required String email, required String password});
+
+  /// Where to send the browser to sign in with [provider], or null when this
+  /// build has no server.
+  ///
+  /// A URL rather than a `Future<ShiftSession>`, because the sign-in does not
+  /// happen here: the page navigates away to the provider, the person types a
+  /// password this app never sees, and they come back. Returning a session
+  /// would mean this layer owned a redirect, and redirecting is the platform's
+  /// job — this folder does not import one.
+  ///
+  /// [redirectTo] must be a URL the host has been told to allow. One that has
+  /// not been fails at the *provider*, with a page this app never gets to
+  /// render, so there is nothing here that can explain it.
+  Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo});
+
+  /// Adopts a session handed back on a callback URL, if there is one.
+  ///
+  /// Returns null for every ordinary load, which is the common case and not an
+  /// error — the app calls this on boot with whatever URL it was opened at.
+  ///
+  /// **Whatever this returns, the caller must clear the URL afterwards.** The
+  /// tokens arrive in the fragment, and a fragment stays in the address bar,
+  /// in browser history, and in any screenshot taken of either.
+  Future<ShiftSession?> adoptCallback(Uri url);
 
   Future<void> signOut();
 

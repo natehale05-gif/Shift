@@ -185,6 +185,17 @@ class _Configured implements ShiftBackend {
   @override
   Future<ShiftSession?> restore() async => session;
 
+  /// A plausible URL and no callback. These tests are about the vault, not
+  /// about signing in — but the interface is abstract on purpose, so adding a
+  /// method here is the compiler insisting every implementation makes a
+  /// decision rather than inheriting a default that might be wrong.
+  @override
+  Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo}) =>
+      Uri.parse('https://host.test/authorize?provider=${provider.id}');
+
+  @override
+  Future<ShiftSession?> adoptCallback(Uri url) async => null;
+
   @override
   Future<bool> isAdmin() async => admin;
 
