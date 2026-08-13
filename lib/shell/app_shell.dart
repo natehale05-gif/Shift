@@ -8,6 +8,7 @@ import 'mode_menu.dart';
 import '../features/design/design_surface.dart';
 import '../features/visual/visual_surface.dart';
 import 'sidebar.dart';
+import 'update_banner.dart';
 import '../features/chat/chat_surface.dart';
 import '../features/chat/private_toggle.dart';
 import '../features/code/code_surface.dart';
@@ -67,6 +68,10 @@ class AppShell extends StatelessWidget {
 
     final content = Column(
       children: [
+        // Above the bar, not below it: it is about the app itself rather than
+        // about what is on screen, and a strip that pushes the mode menu down
+        // would move a control people aim at.
+        const UpdateBanner(),
         _TopBar(wide: wide),
         Expanded(child: _ModeBody(mode: shell.mode)),
       ],

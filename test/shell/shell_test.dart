@@ -10,6 +10,7 @@ import 'package:shift/data/image_store.dart';
 import 'package:shift/data/agent_store.dart';
 import 'package:shift/data/conversation_store.dart';
 import 'package:shift/data/kv_store.dart';
+import 'package:shift/data/update_store.dart';
 import 'package:shift/data/note_store.dart';
 import 'package:shift/features/notes/note_cleaner.dart';
 import 'package:shift/features/chat/chat_surface.dart';
@@ -35,6 +36,9 @@ Widget _app({
     MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: controller ?? ShellController()),
+        // The shell renders `UpdateBanner`, which reads this. Idle and never
+        // loaded here, so it does no I/O and draws nothing.
+        ChangeNotifierProvider(create: (_) => UpdateStore(KvStore())),
         ChangeNotifierProvider(create: (_) => ApiKeysStore(KvStore())),
         ChangeNotifierProvider(create: (_) => ConversationStore(KvStore())),
         ChangeNotifierProvider(create: (_) => TurnController()),

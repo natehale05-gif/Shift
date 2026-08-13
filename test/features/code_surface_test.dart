@@ -11,6 +11,7 @@ import 'package:shift/data/agent_store.dart';
 import 'package:shift/data/api_keys_store.dart';
 import 'package:shift/data/conversation_store.dart';
 import 'package:shift/data/kv_store.dart';
+import 'package:shift/data/update_store.dart';
 import 'package:shift/features/chat/turn_controller.dart';
 import 'package:shift/features/code/agent_list_screen.dart';
 import 'package:shift/features/code/agent_row.dart';
@@ -64,6 +65,9 @@ void main() {
 
   Widget shell(ShellController controller) => MultiProvider(
         providers: [
+          // The shell renders `UpdateBanner`, which reads this. Idle and never
+          // loaded here, so it does no I/O and draws nothing.
+          ChangeNotifierProvider(create: (_) => UpdateStore(KvStore())),
           ChangeNotifierProvider.value(value: controller),
           ChangeNotifierProvider.value(value: agents),
           ChangeNotifierProvider(create: (_) => ApiKeysStore(KvStore())),

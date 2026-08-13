@@ -17,6 +17,7 @@ import 'data/artifact_store.dart';
 import 'data/conversation_store.dart';
 import 'data/image_store.dart';
 import 'data/kv_store.dart';
+import 'data/update_store.dart';
 import 'data/note_store.dart';
 import 'features/chat/turn_controller.dart';
 import 'features/code/agent_runner.dart';
@@ -45,6 +46,7 @@ class ShiftApp extends StatelessWidget {
   /// The store behind every other store. Provided so Settings can offer the
   /// one action that has to reach all of them at once.
   final KvStore kv;
+  final UpdateStore updates;
 
   /// Which host is behind the app, chosen here and nowhere else.
   ///
@@ -103,6 +105,7 @@ class ShiftApp extends StatelessWidget {
     required this.notes,
     required this.images,
     required this.kv,
+    required this.updates,
   });
 
   @override
@@ -111,6 +114,11 @@ class ShiftApp extends StatelessWidget {
       providers: [
         Provider<KvStore>.value(value: kv),
         ChangeNotifierProvider(create: (_) => ShellController()),
+
+        // Built in `main` so its version is read before the first frame, and
+        // its check fires after it — a launch that waits on GitHub is a launch
+        // that is slow whenever GitHub is.
+        ChangeNotifierProvider.value(value: updates),
         ChangeNotifierProvider(
           create: (_) => AccountStore(backend: backendFor(kv))..start(Uri.base),
         ),

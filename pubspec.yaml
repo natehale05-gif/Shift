@@ -24,11 +24,21 @@ dependencies:
   # Path arithmetic for the agent's workspace. The containment check is the
   # security boundary of Code mode, and hand-rolled path normalisation is a
   # famously bad place to be clever.
+  # The running app's *packaged* version, for the updater to compare against
+  # the newest release. Read rather than declared: a `--dart-define`d version
+  # is a hand-maintained copy of the line above it, and with auto-install on, a
+  # version that drifts has every copy reinstalling itself.
+  package_info_plus: ^10.2.1
   path: ^1.9.0
   provider: ^6.1.2
 
   # Browser DOM access for the boot splash. `dart:html` is deprecated in
   # current Flutter; this is the supported replacement.
+  # Opening something outside the app: a release page this copy cannot install
+  # from, a downloaded .dmg for Finder, a source link. Resolves on all six
+  # targets, which is why `core/platform/open_url.dart` is one file rather than
+  # a conditional pair.
+  url_launcher: ^6.3.2
   web: ^1.1.0
 
 dev_dependencies:

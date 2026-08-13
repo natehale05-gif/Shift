@@ -7,6 +7,7 @@ import 'package:shift/core/design/theme.dart';
 import 'package:shift/data/api_keys_store.dart';
 import 'package:shift/data/conversation_store.dart';
 import 'package:shift/data/kv_store.dart';
+import 'package:shift/data/update_store.dart';
 import 'package:shift/features/chat/chat_surface.dart';
 import 'package:shift/features/chat/failure_card.dart';
 import 'package:shift/features/chat/message_actions.dart';
@@ -125,6 +126,9 @@ void main() {
 
     await t.pumpWidget(MultiProvider(
       providers: [
+        // The shell renders `UpdateBanner`, which reads this. Idle and never
+        // loaded here, so it does no I/O and draws nothing.
+        ChangeNotifierProvider(create: (_) => UpdateStore(KvStore())),
         ChangeNotifierProvider.value(value: turn),
         ChangeNotifierProvider.value(value: store),
         ChangeNotifierProvider(create: (_) => ShellController()),

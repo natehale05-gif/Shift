@@ -3,6 +3,7 @@ import 'package:flutter/scheduler.dart';
 
 import 'app.dart';
 import 'core/platform/boot_splash.dart';
+import 'core/update/update_installer.dart';
 import 'data/api_keys_store.dart';
 import 'data/agent_run_store.dart';
 import 'data/agent_store.dart';
@@ -12,10 +13,21 @@ import 'data/conversation_store.dart';
 import 'data/image_store.dart';
 import 'data/kv_store.dart';
 import 'data/note_store.dart';
+import 'data/update_store.dart';
 import 'features/work/work_runner.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // An update downloaded during the last session is swapped in here, before
+  // any UI exists. Two reasons, and the first is not negotiable: a running
+  // process cannot replace the directory it is executing from. The second is
+  // the design choice — the app never quits out from under somebody
+  // mid-sentence to update itself; it stages quietly and applies at the next
+  // launch. Never returns if it fires, because this process is replaced.
+  if (hasStagedUpdate) {
+    if (await applyStagedUpdate()) return;
+  }
 
   // Loaded before the first frame so the app never renders once as "no keys"
   // and then again with them — which on a slow disk reads as the keys having
@@ -46,6 +58,11 @@ Future<void> main() async {
   // touches only orphans, so nothing on screen waits for it.
   images.sweep().ignore();
 
+  // Loaded before `runApp` so the card never renders once as "no version" and
+  // then again with one. The *check* is deliberately not awaited here.
+  final updates = UpdateStore(kv);
+  await updates.load();
+
   runApp(ShiftApp(
     keys: keys,
     conversations: conversations,
@@ -57,10 +74,19 @@ Future<void> main() async {
     notes: notes,
     images: images,
     kv: kv,
+    updates: updates,
   ));
 
   // After the first real frame, not before: the HTML splash is what the user
   // is looking at until then, and taking it down early trades a branded screen
   // for a blank one.
-  SchedulerBinding.instance.addPostFrameCallback((_) => dismissBootSplash());
+  SchedulerBinding.instance.addPostFrameCallback((_) {
+    dismissBootSplash();
+
+    // Off the boot path for the same reason: this makes a network request, and
+    // a launch that waits on GitHub is a launch that is slow whenever GitHub
+    // is. `checkIfDue` is throttled to once a day and every failure inside it
+    // is swallowed, so nothing here can surface an error or block a frame.
+    updates.checkIfDue().ignore();
+  });
 }

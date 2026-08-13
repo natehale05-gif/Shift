@@ -12,6 +12,7 @@ import 'package:shift/core/widgets/agent_composer.dart';
 import 'package:shift/data/agent.dart';
 import 'package:shift/data/agent_run_store.dart';
 import 'package:shift/data/kv_store.dart';
+import 'package:shift/data/update_store.dart';
 import 'package:shift/features/work/approval_card.dart';
 import 'package:shift/features/work/task_list.dart';
 import 'package:shift/features/work/work_runner.dart';
@@ -56,6 +57,9 @@ void main() {
   Widget shell(ShellController controller, Brightness brightness) =>
       MultiProvider(
         providers: [
+          // The shell renders `UpdateBanner`, which reads this. Idle and never
+          // loaded here, so it does no I/O and draws nothing.
+          ChangeNotifierProvider(create: (_) => UpdateStore(KvStore())),
           ChangeNotifierProvider.value(value: controller),
           ChangeNotifierProvider.value(value: folders),
           ChangeNotifierProvider(

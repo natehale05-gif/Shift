@@ -11,6 +11,7 @@ import 'package:shift/data/asset_store.dart';
 import 'package:shift/data/conversation_store.dart';
 import 'package:shift/data/image_store.dart';
 import 'package:shift/data/kv_store.dart';
+import 'package:shift/data/update_store.dart';
 import 'package:shift/data/note_store.dart';
 import 'package:shift/features/chat/private_banner.dart';
 import 'package:shift/features/chat/private_toggle.dart';
@@ -36,6 +37,9 @@ void main() {
   }) =>
       MultiProvider(
         providers: [
+          // The shell renders `UpdateBanner`, which reads this. Idle and never
+          // loaded here, so it does no I/O and draws nothing.
+          ChangeNotifierProvider(create: (_) => UpdateStore(KvStore())),
           ChangeNotifierProvider.value(value: shell),
           ChangeNotifierProvider.value(value: turn),
           ChangeNotifierProvider(create: (_) => ApiKeysStore(KvStore())),
