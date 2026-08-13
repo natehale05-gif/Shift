@@ -95,6 +95,7 @@ class AnthropicText {
     String? system,
     int maxTokens = 16000,
     bool thinking = true,
+    bool search = false,
     List<Exchange> history = const [],
   }) =>
       {
@@ -128,8 +129,27 @@ class AnthropicText {
         ],
         if (thinking && thinkingModels.contains(model))
           'thinking': {'type': 'adaptive', 'display': 'summarized'},
+        // Declared only when the turn asked for it. An unconditional tool
+        // block is a bill on every ordinary message — each use is a billable
+        // search — which is also why `max_uses` is here rather than left to
+        // the default. An unbounded loop is an unbounded charge.
+        if (search)
+          'tools': [
+            {
+              'type': webSearchTool,
+              'name': 'web_search',
+              'max_uses': 5,
+            }
+          ],
         'stream': true,
       };
+
+  /// The server-side search tool's versioned type string.
+  ///
+  /// Its own constant because it is a dated identifier the provider revises,
+  /// and a wrong one is a 400 on a turn that looks ordinary — not something to
+  /// find inline in a map literal.
+  static const webSearchTool = 'web_search_20260209';
 
   Stream<TurnEvent> stream({
     required String stepId,
@@ -138,6 +158,7 @@ class AnthropicText {
     required String instruction,
     String? system,
     String? blocked,
+    bool search = false,
     List<Exchange> history = const [],
   }) async* {
     final resolved = target(access);
@@ -156,6 +177,7 @@ class AnthropicText {
             model: model,
             instruction: instruction,
             system: system,
+            search: search,
             history: history,
           )),
         ),

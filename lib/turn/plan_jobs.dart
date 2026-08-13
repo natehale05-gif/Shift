@@ -48,18 +48,6 @@ JobGraph planJobs(TurnRequest request) {
 
   final steps = <JobStep>[];
 
-  // Search first when it is wanted, because everything downstream reads
-  // better with sources than without them.
-  if (wantsSearch) {
-    steps.add(JobStep(
-      id: 'search',
-      needs: Capability.search,
-      produces: OutputKind.search,
-      instruction: request.prompt,
-      label: 'Looking it up',
-    ));
-  }
-
   // A picture that something else will use. Only split when the request names
   // *both* a picture and a thing to put it in — "make me a logo" is one step,
   // and treating it as two would produce a page nobody asked for.
@@ -118,8 +106,18 @@ JobGraph planJobs(TurnRequest request) {
     // which is the intent: a drawing model given the last twenty things that
     // were said would draw something nobody asked for.
     history: trimHistory(request.history),
+    // Looking things up is something this step *does*, not something another
+    // step does first. Both providers that can search do it as a server-side
+    // tool inside the same turn and hand back prose with cited spans — which is
+    // the thing worth having, and which a separate step could not produce.
+    //
+    // It **was** a separate step, and that is why asking about anything current
+    // answered nothing at all: no executor could run `Capability.search`, a
+    // missing executor fails hard, and a hard failure skips every dependent —
+    // so this step was cancelled before it ran, on the strength of the word
+    // "today" appearing in an ordinary question.
+    search: wantsSearch,
     after: [
-      if (wantsSearch) 'search',
       if (wantsPicture && wantsBoth) 'image',
     ],
   ));

@@ -68,11 +68,27 @@ class JobStep {
   /// change what it draws for no reason anyone asked for.
   final List<Exchange> history;
 
+  /// Whether this step should look things up as it answers.
+  ///
+  /// **A property of the writing step, not a step of its own.** Both providers
+  /// that can search do it as a server-side tool *inside* the same turn, so a
+  /// separate search step would need a standalone search provider nobody has a
+  /// key for — and its output would be a bare list of links, which is the
+  /// citation-chips-at-the-bottom shape that [Citation]'s offsets exist to
+  /// replace.
+  ///
+  /// It was a separate step, and that is why asking about anything current
+  /// produced **no answer at all**: nothing could run `Capability.search`, a
+  /// missing executor fails hard, and a hard failure skips every dependent —
+  /// so the writing step was cancelled before it started.
+  final bool search;
+
   const JobStep({
     required this.id,
     required this.needs,
     required this.produces,
     required this.instruction,
+    this.search = false,
     required this.label,
     this.after = const [],
     this.editing,

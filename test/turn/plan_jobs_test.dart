@@ -64,26 +64,54 @@ void main() {
               'heard and easy to miss on paper');
     });
 
-    test('search feeds the writing', () {
+    test('looking things up is the writing step, not a step before it', () {
+      // This asserted the opposite until N2f, and the opposite is why asking
+      // about anything current answered *nothing*: the search step needed a
+      // capability no executor could run, a missing executor fails hard, and a
+      // hard failure skips every dependent — so the reply was cancelled.
+      //
+      // Both providers that can search do it as a server-side tool inside the
+      // same turn, so there was never a second call to make.
       final graph = planJobs(
           const TurnRequest(input: 'summarise it', webSearch: true));
 
-      expect(graph.steps.map((s) => s.id), ['search', 'main']);
-      expect(graph.steps.last.after, contains('search'));
+      expect(graph.steps.map((s) => s.id), ['main']);
+      expect(graph.steps.single.search, isTrue);
+      expect(graph.steps.single.after, isEmpty);
     });
 
-    test('search, picture and page compose into one graph', () {
+    test('an ordinary question containing "today" still gets answered', () {
+      // The reported shape. "today" is in the trigger list, so this used to
+      // produce a two-step graph whose answer step could never run.
+      final graph = planJobs(const TurnRequest(input: 'what happened today'));
+
+      expect(graph.steps.map((s) => s.id), ['main']);
+      expect(graph.steps.single.search, isTrue,
+          reason: 'it should still try to look it up');
+      expect(graph.capabilities, isNot(contains(Capability.search)),
+          reason: 'but not by needing a provider nothing can supply');
+    });
+
+    test('a request that asks for nothing current does not search', () {
+      // The other direction: a tool block on every ordinary message is a
+      // billable search on every ordinary message.
+      expect(planJobs(const TurnRequest(input: 'write me a poem'))
+          .steps.single.search, isFalse);
+    });
+
+    test('a picture and a page still compose, with search on top', () {
       final graph = planJobs(const TurnRequest(
         input: 'research the latest news and build a page with an image',
         webSearch: true,
       ));
 
-      expect(graph.steps.map((s) => s.id), ['search', 'image', 'main']);
-      expect(graph.capabilities,
-          {Capability.search, Capability.image, Capability.text});
-      // The page waits for both, which the graph expresses and a list could
-      // not.
-      expect(graph.steps.last.after, containsAll(['search', 'image']));
+      expect(graph.steps.map((s) => s.id), ['image', 'main']);
+      expect(graph.capabilities, {Capability.image, Capability.text});
+      // The page waits for the picture, which the graph expresses and a list
+      // could not — and it looks things up itself rather than waiting on a
+      // step that never had anything to run it.
+      expect(graph.steps.last.after, ['image']);
+      expect(graph.steps.last.search, isTrue);
     });
   });
 

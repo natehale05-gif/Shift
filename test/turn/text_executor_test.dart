@@ -37,22 +37,108 @@ class FakeTransport implements SseClient {
   }
 }
 
+/// The OpenAI wire, which is `choices[].delta.content` rather than Anthropic's
+/// content blocks. Its event name is empty — that stream is unnamed data lines.
+List<(String, String)> openaiSaying(String text) => [
+      ('', '{"choices":[{"delta":{"content":"$text"}}]}'),
+      ('', '[DONE]'),
+    ];
+
 List<(String, String)> saying(String text) => [
       ('content_block_start', '{"content_block":{"type":"text","text":""}}'),
       ('content_block_delta', '{"delta":{"type":"text_delta","text":"$text"}}'),
       ('message_stop', '{}'),
     ];
 
-JobStep step(String id, {List<String> after = const []}) => JobStep(
+JobStep step(String id, {List<String> after = const [], bool search = false}) =>
+    JobStep(
       id: id,
       needs: Capability.text,
       produces: OutputKind.text,
       after: after,
+      search: search,
       instruction: 'write the page',
       label: id,
     );
 
 void main() {
+  group('looking things up', () {
+    test('a searching turn asks the provider to search', () async {
+      final transport = FakeTransport(saying('here you go'));
+      final executor = TextExecutor(
+        usable: (id) => id == 'anthropic',
+        access: (_) async => const DirectKey('k'),
+        anthropic: AnthropicText(sse: transport),
+      );
+
+      await executor.run(step('main', search: true), const {}).toList();
+
+      expect(transport.calls.single.body, contains(AnthropicText.webSearchTool));
+      expect(transport.calls.single.body, contains('max_uses'),
+          reason: 'each use is billable, so an unbounded loop is an '
+              'unbounded charge');
+    });
+
+    test('an ordinary turn declares no tool at all', () async {
+      // The other direction, and the expensive one: a tool block on every
+      // message is a billable search on every message.
+      final transport = FakeTransport(saying('hi'));
+      final executor = TextExecutor(
+        usable: (id) => id == 'anthropic',
+        access: (_) async => const DirectKey('k'),
+        anthropic: AnthropicText(sse: transport),
+      );
+
+      await executor.run(step('main'), const {}).toList();
+
+      expect(transport.calls.single.body, isNot(contains('tools')));
+    });
+
+    test('nothing that can search still answers, and says why not', () async {
+      // **The reported bug, asserted end to end.** A question containing
+      // "today" used to produce two failures and no reply, because the search
+      // step failed hard and a hard failure skips every dependent. The answer
+      // has to arrive; the note is the honest part.
+      final transport = FakeTransport(openaiSaying('as far as I know'));
+      final executor = TextExecutor(
+        // Groq can write and cannot search.
+        usable: (id) => id == 'groq',
+        access: (_) async => const DirectKey('k'),
+        openai: OpenAiText(sse: transport),
+      );
+
+      final events =
+          await executor.run(step('main', search: true), const {}).toList();
+
+      expect(events.whereType<TextDelta>().map((e) => e.text).join(),
+          'as far as I know');
+
+      final note = events.whereType<StepFailed>().single;
+      expect(note.reason, contains('without looking anything up'));
+      expect(note.blocksDependents, isFalse,
+          reason: 'a hard failure here is what cancelled the whole reply');
+    });
+
+    test('a provider that can search is preferred for a searching turn',
+        () async {
+      // Both keyed. Groq ranks ahead of Gemini for plain text, so this can
+      // only pass if the capability is what decided it.
+      final anthropic = FakeTransport(saying('claude'));
+      final openai = FakeTransport(openaiSaying('groq'));
+      final executor = TextExecutor(
+        usable: (id) => id == 'groq' || id == 'anthropic',
+        access: (_) async => const DirectKey('k'),
+        anthropic: AnthropicText(sse: anthropic),
+        openai: OpenAiText(sse: openai),
+      );
+
+      await executor.run(step('main', search: true), const {}).toList();
+
+      expect(anthropic.calls, hasLength(1));
+      expect(openai.calls, isEmpty);
+    });
+  });
+
   group('choosing and paying', () {
     test('no provider at all fails with something the user can act on',
         () async {

@@ -59,6 +59,7 @@ class GeminiText {
   static Map<String, dynamic> buildBody({
     required String instruction,
     String? system,
+    bool search = false,
     List<Exchange> history = const [],
   }) =>
       {
@@ -95,6 +96,12 @@ class GeminiText {
               {'text': system}
             ],
           },
+        // Grounding, and only when asked. Gemini's sources already arrive as
+        // `groundingMetadata` and are already parsed below — what was missing
+        // was ever requesting them.
+        if (search) 'tools': [
+          {'google_search': <String, dynamic>{}}
+        ],
       };
 
   Stream<TurnEvent> stream({
@@ -104,6 +111,7 @@ class GeminiText {
     required String instruction,
     String? system,
     String? blocked,
+    bool search = false,
     List<Exchange> history = const [],
   }) async* {
     final resolved = target(access, model);
@@ -116,6 +124,7 @@ class GeminiText {
           body: jsonEncode(buildBody(
             instruction: instruction,
             system: system,
+            search: search,
             history: history,
           )),
         ),

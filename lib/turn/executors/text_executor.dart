@@ -71,8 +71,26 @@ class TextExecutor implements StepExecutor {
 
   static String _noConversation() => '';
 
-  ProviderChoice? _choose(JobStep step) =>
-      chooseProvider(Capability.text, usable: usable, pinned: pinned);
+  /// The provider for this step, and for a searching step the narrower
+  /// question of who can also search.
+  ///
+  /// Falling back to a plain text provider is deliberate and is why the caller
+  /// checks [_searchable] separately: a request that mentioned "today" should
+  /// still be answered by whatever is available, with a note that it was
+  /// answered without sources. Refusing outright is what this wave exists to
+  /// stop — it is the shape that turned the word "today" into no reply at all.
+  ProviderChoice? _choose(JobStep step) {
+    if (step.search) {
+      final searching =
+          chooseProvider(Capability.search, usable: usable, pinned: pinned);
+      if (searching != null) return searching;
+    }
+    return chooseProvider(Capability.text, usable: usable, pinned: pinned);
+  }
+
+  /// Whether the provider chosen for [step] can actually look things up.
+  bool _searchable(JobStep step, ProviderChoice choice) =>
+      step.search && choice.provider.can.contains(Capability.search);
 
   @override
   ({String provider, String model}) identify(JobStep step) {
@@ -96,6 +114,21 @@ class TextExecutor implements StepExecutor {
         reason: explainUnavailable('writing'),
       );
       return;
+    }
+
+    // Wanted sources, and nothing keyed can fetch them. Said, and then the
+    // answer is given anyway — **soft**, so it does not skip anything.
+    //
+    // Failing hard here would recreate the defect this wave removes: the whole
+    // reply cancelled because a question contained the word "today". A note is
+    // the honest outcome; silence is not.
+    if (step.search && !_searchable(step, choice)) {
+      yield StepFailed(
+        step.id,
+        reason: 'None of your keys can search the web, so this was answered '
+            'without looking anything up.',
+        blocksDependents: false,
+      );
     }
 
     final credential = await access(choice.provider.id);
@@ -144,6 +177,7 @@ class TextExecutor implements StepExecutor {
           instruction: step.instruction,
           system: context,
           blocked: blocked,
+          search: _searchable(step, choice),
           history: step.history,
         ),
       'gemini' => gemini.stream(
@@ -153,6 +187,7 @@ class TextExecutor implements StepExecutor {
           instruction: step.instruction,
           system: context,
           blocked: blocked,
+          search: _searchable(step, choice),
           history: step.history,
         ),
       _ when base != null => openai.stream(
