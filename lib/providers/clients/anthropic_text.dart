@@ -279,12 +279,30 @@ class AnthropicText {
     // rather than presenting half a document as whole.
     final truncated = stopReason == 'max_tokens';
 
+    // A long server-tool turn can stop with `pause_turn`, which means *send
+    // this back to continue* rather than *finished*. Nothing here continues it
+    // yet, so what arrived is completed and labelled — the alternative is a
+    // search answer that stops mid-thought and presents itself as whole, which
+    // is the failure this file already paid for once with `max_tokens`.
+    //
+    // Resuming means re-posting the assistant's raw content blocks, which
+    // means keeping them through the fold; worth doing, and not worth guessing
+    // at without a real provider to confirm the shape is accepted.
+    final paused = stopReason == 'pause_turn';
+
     yield StepCompleted(stepId, TextOutput(text.toString()));
 
     if (truncated) {
       yield StepFailed(
         stepId,
         reason: 'The reply hit its length limit, so it stops early.',
+        blocksDependents: false,
+      );
+    } else if (paused) {
+      yield StepFailed(
+        stepId,
+        reason: 'The provider paused this reply partway through. Ask again to '
+            'carry on from here.',
         blocksDependents: false,
       );
     }

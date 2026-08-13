@@ -92,6 +92,76 @@ void main() {
     });
   });
 
+  group('a turn the provider paused', () {
+    test('a search turn asks for the tool, once, with a ceiling', () async {
+      // The whole point of the wave: this used to be a `search` step nothing
+      // could run. The wire fact worth pinning is the versioned type string —
+      // a stale one is a 400 on a turn that looks completely ordinary.
+      final body = AnthropicText.buildBody(
+        model: 'claude-opus-4-8',
+        instruction: 'what happened today',
+        search: true,
+      );
+
+      final tools = body['tools'] as List;
+      expect(tools, hasLength(1));
+      expect((tools.single as Map)['type'], AnthropicText.webSearchTool);
+      expect((tools.single as Map)['max_uses'], isA<int>());
+    });
+
+    test('a search turn reports the tool running and finishing', () async {
+      // What the chip in the transcript is driven by. Read off the frames
+      // rather than assumed: the chip keys on the tool's *name*, and a
+      // mismatch would leave a spinner that never appears or never stops.
+      final events = await run([
+        ('content_block_start',
+            '{"content_block":{"type":"server_tool_use","name":"web_search"}}'),
+        ('content_block_start',
+            '{"content_block":{"type":"web_search_tool_result"}}'),
+        _blockStart,
+        delta('It rained.'),
+        ('message_stop', '{}'),
+      ]);
+
+      expect(events.whereType<ToolUseStarted>().single.tool, 'web_search');
+      expect(events.whereType<ToolUseFinished>().single.tool, 'web_search');
+    });
+
+    test('a pause is completed and labelled, not presented as whole', () async {
+      // `pause_turn` means *send this back to continue*, not *finished*.
+      // Nothing continues it yet, so the honest outcome is what arrived plus a
+      // note — the same shape `max_tokens` already has, and for the same
+      // reason: a reply that stops mid-thought and calls itself complete is
+      // the failure this file paid for once already.
+      final events = await run([
+        _blockStart,
+        delta('I found three things, and'),
+        ('message_delta', '{"delta":{"stop_reason":"pause_turn"}}'),
+        ('message_stop', '{}'),
+      ]);
+
+      expect((events.whereType<StepCompleted>().single.output as TextOutput)
+          .text, 'I found three things, and');
+
+      final note = events.whereType<StepFailed>().single;
+      expect(note.reason, contains('paused'));
+      expect(note.blocksDependents, isFalse);
+    });
+
+    test('an ordinary stop says nothing at all', () async {
+      // The guard on the two branches above: a normal reply must not acquire
+      // a warning it does not deserve.
+      final events = await run([
+        _blockStart,
+        delta('done'),
+        ('message_delta', '{"delta":{"stop_reason":"end_turn"}}'),
+        ('message_stop', '{}'),
+      ]);
+
+      expect(events.whereType<StepFailed>(), isEmpty);
+    });
+  });
+
   group('failures', () {
     test('an error event ends the step and emits no output', () async {
       final events = await run([
