@@ -1,0 +1,97 @@
+# Deletes the deleted app's published releases and tags.
+#
+# The old app reached v0.1.33 across 32 releases, every one of them still
+# downloadable, and "published releases should all be the new app" is not true
+# while they are. There is no delete-release API in the tooling available to the
+# agent that maintains this repository, and this sandbox's git proxy refuses tag
+# pushes — so the deletion lives here, as a script that can be read before it is
+# run rather than an API call nobody sees.
+#
+# **It is deliberately hard to fire and narrow in what it can touch.** Three
+# guards, because this is irreversible:
+#
+#   1. `workflow_dispatch` only. Nothing schedules it and no push triggers it.
+#   2. An exact confirmation string, so a stray click cannot start it.
+#   3. It refuses any tag that is not `v0.1.x`. The new line is v0.2.0 and up,
+#      so a pattern that could reach it is a pattern that could delete the
+#      thing it exists to make visible.
+#
+# It also prints everything it is about to do before doing any of it, so a run
+# that goes wrong is legible afterwards rather than a count.
+name: Retire the old release line
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type delete-the-old-line to proceed'
+        required: true
+      dry_run:
+        description: 'List what would go, delete nothing'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  retire:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the confirmation
+        if: ${{ inputs.confirm != 'delete-the-old-line' }}
+        run: |
+          echo "::error::Refusing: the confirmation input did not match."
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - name: Delete the old releases and their tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DRY: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+
+          # Every release, oldest first, so the listing reads chronologically.
+          gh release list --repo "$REPO" --limit 200 --json tagName \
+            --jq '.[].tagName' | sort -V > all_tags.txt
+
+          echo "Published tags:"
+          sed 's/^/  /' all_tags.txt
+
+          # The only thing this is allowed to touch. Anchored, so `v0.10.0`
+          # cannot match by accident if the numbering ever gets that far.
+          grep -E '^v0\.1\.[0-9]+$' all_tags.txt > doomed.txt || true
+
+          kept=$(grep -vE '^v0\.1\.[0-9]+$' all_tags.txt || true)
+          echo
+          echo "Keeping:"
+          if [ -n "$kept" ]; then printf '%s\n' "$kept" | sed 's/^/  /'; else echo "  (nothing)"; fi
+          echo
+          echo "Deleting $(wc -l < doomed.txt):"
+          sed 's/^/  /' doomed.txt
+
+          if [ "$DRY" = "true" ]; then
+            echo
+            echo "Dry run — nothing was deleted."
+            exit 0
+          fi
+
+          # A last structural guard, in case the listing above ever changes
+          # shape: anything that reached this loop and is not v0.1.x stops the
+          # whole run rather than being skipped quietly.
+          while read -r tag; do
+            [ -n "$tag" ] || continue
+            case "$tag" in
+              v0.1.*) ;;
+              *) echo "::error::$tag is not part of the old line"; exit 1 ;;
+            esac
+            echo "deleting $tag"
+            gh release delete "$tag" --repo "$REPO" --cleanup-tag --yes
+          done < doomed.txt
+
+          echo
+          echo "Remaining:"
+          gh release list --repo "$REPO" --limit 200 | sed 's/^/  /'
