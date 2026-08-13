@@ -5,6 +5,33 @@ Chat, code, images, design, work and notes in one app, on six platforms.
 **[▶ Open it in your browser](https://natehale05-gif.github.io/Shift/)** — no
 install; an account is required, and creating one takes a moment.
 
+## Download it
+
+| Platform | Get | |
+|---|---|---|
+| **macOS** | [`SHIFT-AI-macos.dmg`](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-macos.dmg) | open it, drag the app across |
+| **Windows** | [`SHIFT-AI-windows-setup.exe`](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-windows-setup.exe) | installer, Start Menu entry, uninstaller |
+| **Linux** | [`SHIFT-AI-linux-amd64.deb`](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-linux-amd64.deb) | `sudo dpkg -i …`, then find it in your apps |
+| **Android** | [`SHIFT-AI-android.apk`](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-android.apk) | tap it and confirm |
+
+Portable builds — [Windows `.zip`](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-windows.zip)
+and [Linux `.tar.gz`](https://github.com/natehale05-gif/Shift/releases/latest/download/SHIFT-AI-linux-x64.tar.gz) —
+extract anywhere. On Linux the tarball is the **self-updating** one: a `.deb`
+installs into root-owned `/opt`, so that copy cannot replace itself and says so
+rather than failing an update halfway through.
+
+**Desktop keeps itself current.** It checks daily, downloads in the background
+and applies at the next launch — never quitting out from under you mid-sentence.
+macOS asks once, because replacing unsigned software re-triggers Gatekeeper
+whatever the app does.
+
+**Android tells you and stops there**, on purpose: installing an APK from
+inside the app needs a permission Google Play prohibits, and keeping it out is
+what leaves Play open later.
+
+Every build is unsigned, so each OS objects once — the release notes say
+exactly how for each.
+
 ## Why this was rebuilt rather than restructured
 
 There used to be a previous app at this path, and it has been deleted. It

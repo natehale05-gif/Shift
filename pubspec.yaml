@@ -4,7 +4,11 @@ publish_to: 'none'
 
 # Bumped per wave. The build number is what the stores order releases by, so it
 # only ever goes up, independently of whether the version string does.
-version: 0.1.0+1
+# Above every tag the deleted app ever published (it reached v0.1.33), so
+# nothing collides and no surviving install of it can mistake a release here
+# for its own line. Not 1.0.0: search, payments and the server workspace are
+# all still open.
+version: 0.2.0+2
 
 environment:
   sdk: ^3.12.0
