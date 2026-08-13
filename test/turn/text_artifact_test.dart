@@ -42,6 +42,15 @@ void main() {
         .toList();
   }
 
+  /// A citation frame, carrying the offsets Anthropic measures against its own
+  /// text — the thing that stops being valid once a fence is withheld.
+  SseEvent citation({required int end}) => SseEvent(
+        event: 'content_block_delta',
+        data: '{"delta":{"type":"citations_delta","citation":'
+            '{"title":"A source","url":"https://a.test/p",'
+            '"start_char_index":0,"end_char_index":$end}}}',
+      );
+
   List<SseEvent> stream(List<String> deltas, {String stop = 'end_turn'}) => [
         const SseEvent(
             event: 'content_block_start',
@@ -87,6 +96,39 @@ void main() {
     final shown = events.whereType<TextDelta>().map((e) => e.text).join();
     expect(shown, contains('display: flex'),
         reason: 'withholding is a presentation choice, never a deletion');
+  });
+
+  test('a withheld fence takes the citation offsets with it', () async {
+    // The offsets index the **model's** text, and the page has just been
+    // withheld from what is displayed. Applying them anyway puts a marker in
+    // the wrong sentence, which is worse than a source listed without one —
+    // and `Citation.hasSpan` exists precisely to degrade that way.
+    final frames = stream([
+      "Here's a complete coffee shop website:\n",
+      '```html\n',
+      page,
+      '\n```',
+    ])..insert(4, citation(end: 12));
+
+    final events = await runWith(frames);
+
+    expect(events.whereType<ArtifactProduced>(), hasLength(1),
+        reason: 'the fence must actually have been withheld');
+    final found = events.whereType<CitationsFound>().single;
+    expect(found.citations.single.hasSpan, isFalse);
+    expect(found.citations.single.url.host, 'a.test',
+        reason: 'the source itself is still worth listing');
+  });
+
+  test('an ordinary reply keeps its offsets', () async {
+    // The other direction, so the rule above cannot be satisfied by simply
+    // never carrying offsets.
+    final frames = stream(['It rained all day.'])..insert(2, citation(end: 10));
+
+    final events = await runWith(frames);
+
+    expect(events.whereType<ArtifactProduced>(), isEmpty);
+    expect(events.whereType<CitationsFound>().single.citations.single.end, 10);
   });
 
   test('a reply truncated mid-page still shows what arrived', () async {

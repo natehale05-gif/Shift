@@ -139,6 +139,35 @@ void main() {
     });
   });
 
+  group('sources and what is displayed', () {
+    List<(String, String)> citing(String text, int end) => [
+          ('content_block_start', '{"content_block":{"type":"text","text":""}}'),
+          ('content_block_delta',
+              '{"delta":{"type":"text_delta","text":"$text"}}'),
+          ('content_block_delta',
+              '{"delta":{"type":"citations_delta","citation":'
+                  '{"title":"A","url":"https://a.test/p",'
+                  '"start_char_index":0,"end_char_index":$end}}}'),
+          ('message_stop', '{}'),
+        ];
+
+    test('offsets survive an ordinary reply', () async {
+      final transport = FakeTransport(citing('It rained.', 10));
+      final executor = TextExecutor(
+        usable: (id) => id == 'anthropic',
+        access: (_) async => const DirectKey('k'),
+        anthropic: AnthropicText(sse: transport),
+      );
+
+      final events = await executor.run(step('main'), const {}).toList();
+      final found = events.whereType<CitationsFound>().single;
+
+      expect(found.citations.single.hasSpan, isTrue);
+      expect(found.citations.single.end, 10);
+    });
+
+  });
+
   group('choosing and paying', () {
     test('no provider at all fails with something the user can act on',
         () async {

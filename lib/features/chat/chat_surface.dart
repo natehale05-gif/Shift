@@ -17,7 +17,9 @@ import 'attached_notes.dart';
 import 'composer.dart';
 import 'private_banner.dart';
 import 'failure_card.dart';
+import 'citation_markers.dart';
 import 'markdown_view.dart';
+import 'sources_rail.dart';
 import 'message_actions.dart';
 import 'turn_controller.dart';
 
@@ -284,7 +286,13 @@ class _Item extends StatelessWidget {
               // list rendered as literal asterisks and a code block as
               // backticks — which is the first thing anyone sees after
               // "hello", because it is what a model answers with.
-              if (reply.text.isNotEmpty) MarkdownView(reply.text),
+              if (reply.searching) const SearchingChip(),
+              // Markers spliced in rather than drawn as a second layer: they
+              // are ordinary markdown links, so the view below already renders
+              // and handles them.
+              if (reply.text.isNotEmpty)
+                MarkdownView(withCitationMarkers(reply.text, reply.citations)),
+              SourcesRail(citations: reply.citations),
               if (reply.failure != null) ...[
                 if (reply.text.isNotEmpty) const SizedBox(height: Space.md),
                 FailureCard(reply: reply),

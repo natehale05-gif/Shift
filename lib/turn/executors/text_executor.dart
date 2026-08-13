@@ -233,29 +233,45 @@ class TextExecutor implements StepExecutor {
     var failed = false;
     var ended = false;
 
+    // Held back until the end, and not for tidiness: a citation's offsets index
+    // the **model's** text, and this wrapper can withhold a fenced block from
+    // what is displayed. Whether that happened is only known once the stream is
+    // over, so the decision is made once, here, rather than guessed at when the
+    // event arrives.
+    CitationsFound? citations;
+
     Stream<TurnEvent> finish() async* {
       if (ended) return;
       ended = true;
 
       final trailing = fences.flush();
       if (trailing.isNotEmpty) yield TextDelta(step.id, trailing);
-      if (!fences.sawFence) return;
 
-      // Extraction only on a clean finish: half a document previews as a
-      // broken page, and presenting one as a deliverable is worse than showing
-      // the source. The held text still comes back either way.
-      final artifact = failed
-          ? null
-          : extractArtifact(
-              reply.toString(),
-              conversationId: conversationId(),
-              request: step.instruction,
-            );
+      if (fences.sawFence) {
+        // Extraction only on a clean finish: half a document previews as a
+        // broken page, and presenting one as a deliverable is worse than
+        // showing the source. The held text still comes back either way.
+        final artifact = failed
+            ? null
+            : extractArtifact(
+                reply.toString(),
+                conversationId: conversationId(),
+                request: step.instruction,
+              );
 
-      if (artifact != null) {
-        yield ArtifactProduced(step.id, artifact);
-      } else {
-        yield TextDelta(step.id, fences.replayText());
+        if (artifact != null) {
+          yield ArtifactProduced(step.id, artifact);
+        } else {
+          yield TextDelta(step.id, fences.replayText());
+        }
+      }
+
+      if (citations case final found?) {
+        // Every offset is now wrong by however much was withheld, so they are
+        // dropped rather than applied to text they no longer describe — an
+        // inline marker in the wrong sentence is worse than a source listed
+        // without one, which is the degradation `Citation.hasSpan` exists for.
+        yield fences.sawFence ? found.withoutSpans : found;
       }
     }
 
@@ -277,6 +293,9 @@ class TextExecutor implements StepExecutor {
         case StepCompleted():
           yield* finish();
           yield event;
+
+        case CitationsFound():
+          citations = event;
 
         default:
           yield event;

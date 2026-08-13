@@ -67,6 +67,17 @@ class Reply extends ChatItem {
   /// keep the last.
   final List<String> imageIds = [];
 
+  /// Where this reply's claims came from, when it looked anything up.
+  ///
+  /// Stored with the reply rather than fetched again: a sourced answer that
+  /// loses its sources on reload is worse than one that never had them, because
+  /// the second is honest about what it is.
+  final List<Citation> citations = [];
+
+  /// Whether a search is running right now. Reset when the turn ends, so a
+  /// restored reply never shows a spinner for work that finished days ago.
+  bool searching = false;
+
   bool done = false;
 
   /// Stopped by the user rather than by the model finishing. Kept separate
@@ -87,6 +98,16 @@ class Reply extends ChatItem {
         if (failureDetail != null) 'failureDetail': failureDetail,
         if (artifactId != null) 'artifactId': artifactId,
         if (imageIds.isNotEmpty) 'imageIds': imageIds,
+        if (citations.isNotEmpty)
+          'citations': [
+            for (final c in citations)
+              {
+                'title': c.title,
+                'url': c.url.toString(),
+                if (c.start != null) 'start': c.start,
+                if (c.end != null) 'end': c.end,
+              }
+          ],
         // `|| !done` is the load-bearing half. The only way a half-written
         // reply reaches disk is a snapshot taken while it was still arriving,
         // and if that snapshot is what survives — the tab was closed, the app
@@ -111,6 +132,19 @@ class Reply extends ChatItem {
       ..artifactId = json['artifactId'] as String?
       ..interrupted = json['interrupted'] == true
       ..done = true;
+    for (final raw in json['citations'] is List
+        ? json['citations'] as List<dynamic>
+        : const []) {
+      if (raw is! Map) continue;
+      final url = Uri.tryParse('${raw['url'] ?? ''}');
+      if (url == null || url.host.isEmpty) continue;
+      reply.citations.add(Citation(
+        title: '${raw['title'] ?? url.host}',
+        url: url,
+        start: raw['start'] as int?,
+        end: raw['end'] as int?,
+      ));
+    }
     for (final id in json['imageIds'] is List
         ? json['imageIds'] as List<dynamic>
         : const []) {
@@ -641,11 +675,25 @@ class TurnController extends ChangeNotifier {
             // exactly as it would a kept one.
             images?.hold(id, image.bytes);
           }
+        case ToolUseStarted(:final tool):
+          // Only the one the reader can see the point of. A chip for every
+          // internal tool call would be a log, and this is a conversation.
+          if (tool == 'web_search') reply.searching = true;
+        case ToolUseFinished(:final tool):
+          if (tool == 'web_search') reply.searching = false;
+        case CitationsFound(:final citations):
+          reply.citations
+            ..clear()
+            ..addAll(citations);
         case StepFailed(:final reason, :final detail):
           reply.failure ??= reason;
           reply.failureDetail ??= detail;
         case TurnFinished():
           reply.done = true;
+          // Whatever the stream said, nothing is searching once the turn is
+          // over — a provider that never sends the closing event would
+          // otherwise leave a spinner running forever.
+          reply.searching = false;
           _running = false;
         default:
           return;

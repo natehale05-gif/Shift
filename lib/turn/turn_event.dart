@@ -85,6 +85,15 @@ class CitationsFound extends TurnEvent {
   final List<Citation> citations;
 
   const CitationsFound(super.stepId, this.citations);
+
+  /// The same sources with their offsets dropped.
+  ///
+  /// For when the displayed text is not the text the offsets were measured
+  /// against — which happens whenever a fenced block is withheld from the
+  /// transcript and shown as an artifact instead.
+  CitationsFound get withoutSpans => CitationsFound(stepId, [
+        for (final c in citations) Citation(title: c.title, url: c.url),
+      ]);
 }
 
 class Citation {
