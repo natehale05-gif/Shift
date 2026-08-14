@@ -54,13 +54,31 @@ class ConversationStore extends ChangeNotifier {
   /// Interrupts the in-flight generation (the Stop button). The partial reply
   /// is kept and marked complete, exactly like Claude's stop.
   void stopGeneration() {
+    _settleActiveStream();
+    notifyListeners();
+  }
+
+  /// Cancels the in-flight generation, if any, and leaves the message it was
+  /// streaming into in a finished state.
+  ///
+  /// Cancelling a subscription fires neither `onDone` nor `onError`, so
+  /// whatever was mid-reply keeps `MessageStatus.streaming` unless it is
+  /// settled here — a message that stays "streaming" shows a typing indicator
+  /// that never stops and is never persisted as finished. That is only visible
+  /// once a *second* generation starts, because the first one owns the Stop
+  /// button until then: start a long reply, open a new chat, send something
+  /// there, and the abandoned reply in the first chat spins forever.
+  ///
+  /// [except] is the message the caller is about to stream into, which must
+  /// not be marked complete on its way in.
+  void _settleActiveStream({String? except}) {
     final convId = _streamingConversationId;
     final msgId = _streamingMessageId;
     _activeSub?.cancel();
     _activeSub = null;
     _streamingConversationId = null;
     _streamingMessageId = null;
-    if (convId != null && msgId != null) {
+    if (convId != null && msgId != null && msgId != except) {
       _updateMessage(
         convId,
         msgId,
@@ -70,7 +88,6 @@ class ConversationStore extends ChangeNotifier {
       );
       _persistConversation(convId);
     }
-    notifyListeners();
   }
 
   List<Conversation> get conversations {
@@ -438,8 +455,11 @@ class ConversationStore extends ChangeNotifier {
     ChatOptions options = ChatOptions.none,
     bool extractMemory = false,
   }) async {
-    // Cancel any prior in-flight generation before starting a new one.
-    await _activeSub?.cancel();
+    // Cancel any prior in-flight generation before starting a new one, and
+    // settle the message it was streaming into — the abandoned reply belongs
+    // to a conversation the user has moved on from and nothing else will ever
+    // finish it.
+    _settleActiveStream(except: assistantMessageId);
 
     final stream = chatService.sendMessage(
       conversation: current!,

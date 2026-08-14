@@ -47,11 +47,22 @@ class _ApiKeysSectionState extends State<ApiKeysSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Where the keys actually live differs by build, and saying "browser"
+        // on the macOS, Windows, Linux and Android downloads was simply wrong —
+        // this is a warning about who else can read the keys, so it has to
+        // name the right place.
         Text(
-          'Bring your own keys to switch from simulated demos to live AI. '
-          'Keys are stored only in this browser and calls go directly from '
-          'your browser to the provider — usage bills to your account, and '
-          'anyone with access to this browser profile could read the keys.',
+          kIsWeb
+              ? 'Bring your own keys to switch from simulated demos to live '
+                  'AI. Keys are stored only in this browser and calls go '
+                  'directly from your browser to the provider — usage bills to '
+                  'your account, and anyone with access to this browser '
+                  'profile could read the keys.'
+              : 'Bring your own keys to switch from simulated demos to live '
+                  'AI. Keys are stored only on this device and calls go '
+                  'directly from this app to the provider — usage bills to '
+                  'your account, and anyone with access to this device could '
+                  'read the keys.',
           style: theme.textTheme.bodySmall,
         ),
         const SizedBox(height: AppSpacing.lg),

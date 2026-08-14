@@ -99,6 +99,13 @@ it does and why a bad signature returns 400 without touching the database — an
 endpoint that skips it is a public URL anyone can POST "this account is now a
 paying member" to.
 
+That last point needs `config.toml` to be true, not just the handler. Supabase
+puts a JWT check in front of every function by default, at the gateway, before
+the handler runs — and Stripe sends no `Authorization` header, so every webhook
+would be answered 401 and no payment would ever become a membership.
+`{requireAuth: false}` in the handler cannot switch off a gateway;
+`[functions.stripe-webhook] verify_jwt = false` in `config.toml` is what does.
+
 **The master key is an environment variable, not a hosted KMS.** The *shape* is
 a KMS's — a master that never leaves the server, a fresh IV per record, and a
 `kms_key_id` column recording which master encrypted what so a rotation can find

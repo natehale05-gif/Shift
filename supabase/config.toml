@@ -1,0 +1,28 @@
+# Deploy-time configuration for the edge functions.
+#
+# This file exists for one setting. Supabase puts a JWT check in front of every
+# function by default (`verify_jwt = true`), applied by the gateway before the
+# handler runs — so a request with no `Authorization` header is answered 401 and
+# the handler never sees it.
+#
+# Stripe does not send an `Authorization` header. It has no JWT to send. With
+# the default in force, every webhook Stripe delivers is rejected at the door,
+# `subscriptions` is never written, and nobody who pays ever becomes a member —
+# a failure that looks like nothing at all, because the endpoint answers and the
+# handler's own tests all pass.
+#
+# `stripe-webhook` handles this in code (`{requireAuth: false}`) and the
+# signature check is its real authentication, but code cannot switch off a
+# gateway. That is what this declares.
+
+[functions.provider-key]
+# The default, stated rather than assumed: this one *does* need the gateway's
+# JWT check. `withAdapter` reads the `sub` claim without verifying the
+# signature — deliberately, and only safe because something in front verified
+# it. Turning this off would make a forged token enough to write a key into
+# somebody else's vault.
+verify_jwt = true
+
+[functions.stripe-webhook]
+# The signature is the authentication. See above.
+verify_jwt = false

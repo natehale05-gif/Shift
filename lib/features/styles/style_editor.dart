@@ -49,16 +49,31 @@ Future<(String, String)?> showStyleEditorDialog(
           onPressed: () => Navigator.of(dialogContext).pop(),
           child: const Text('Cancel'),
         ),
-        FilledButton(
-          onPressed: () {
+        // Enabled only once both fields have something in them. It used to be
+        // always enabled and return early when they did not, which reads as a
+        // broken button: you press Create, nothing happens, and nothing says
+        // why. A disabled button answers the question before it is asked.
+        ListenableBuilder(
+          listenable: Listenable.merge([nameController, instructionsController]),
+          builder: (context, _) {
             final name = nameController.text.trim();
             final instructions = instructionsController.text.trim();
-            if (name.isEmpty || instructions.isEmpty) return;
-            Navigator.of(dialogContext).pop((name, instructions));
+            final complete = name.isNotEmpty && instructions.isNotEmpty;
+            return FilledButton(
+              onPressed: complete
+                  ? () => Navigator.of(dialogContext).pop((name, instructions))
+                  : null,
+              child: Text(isEdit ? 'Save' : 'Create'),
+            );
           },
-          child: Text(isEdit ? 'Save' : 'Create'),
         ),
       ],
     ),
-  );
+    // Both controllers outlive the builder, so the dialog closing is the only
+    // point at which they can be disposed. Without this every visit to the
+    // style editor leaks two ChangeNotifiers and their listeners.
+  ).whenComplete(() {
+    nameController.dispose();
+    instructionsController.dispose();
+  });
 }

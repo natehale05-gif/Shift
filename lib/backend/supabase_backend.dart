@@ -191,8 +191,38 @@ class SupabaseBackend implements ShiftBackend {
       throw const BackendException(
           BackendProblem.notSignedIn, 'Your session expired. Sign in again.');
     }
-    final renewed = _adopt(await _token({'refresh_token': refresh}, 'refresh_token'));
-    return renewed.accessToken;
+    return (await _refreshOnce(refresh)).accessToken;
+  }
+
+  /// The in-flight refresh, so concurrent callers join it instead of starting
+  /// their own.
+  Future<ShiftSession>? _refreshing;
+
+  /// Renews the session, at most once at a time.
+  ///
+  /// A refresh token is single-use — the server rotates it and forgets the old
+  /// one. Two calls that both find the token expired would spend the *same*
+  /// refresh token twice, and the second spend is rejected: one caller fails
+  /// with what reads as a credentials error, and whichever response lands last
+  /// wins, which can persist a session whose refresh token was already
+  /// consumed. The next launch then finds a dead token and signs the user out
+  /// for no reason they can see.
+  ///
+  /// This is not hypothetical — `AccountStore.refresh()` issues `membership()`
+  /// and `listProviderKeys()` through `Future.wait`, so the ordinary path into
+  /// this class is two authorized calls starting at once.
+  Future<ShiftSession> _refreshOnce(String refreshToken) {
+    final pending = _refreshing;
+    if (pending != null) return pending;
+
+    final attempt = _token({'refresh_token': refreshToken}, 'refresh_token')
+        .then(_adopt);
+    _refreshing = attempt;
+    // Cleared however it ends: a failed refresh must not pin every later call
+    // to the same failure.
+    return attempt.whenComplete(() {
+      if (identical(_refreshing, attempt)) _refreshing = null;
+    });
   }
 
   // ------------------------------------------------------------ key vault
