@@ -120,6 +120,21 @@ ProviderDescriptor? providerById(String id) {
   return null;
 }
 
+/// What to call a provider on screen.
+///
+/// **Here rather than beside a widget, and that is the whole point of moving
+/// it.** It lived at the bottom of `platform_keys_card.dart`, where its own
+/// doc comment said it existed so that card "cannot drift into calling things
+/// by different names" — and everything that did not import that card drifted.
+/// One screenshot of Settings showed the same account's providers as
+/// `anthropic` on one row, `anthropic` on a button, and **Claude** two cards
+/// down.
+///
+/// An id the registry does not know shows as itself: the vault can hold a key
+/// for a provider this app has no client for, and `heygen` says more than an
+/// empty label would.
+String providerLabel(String id) => providerById(id)?.displayName ?? id;
+
 // Text ranks are the interesting ones and they are ordered on quality of
 // written output, which is what "which model should answer this" means in an
 // app whose default mode is a conversation.

@@ -40,6 +40,31 @@ class _PlatformKeysCardState extends State<PlatformKeysCard> {
     super.dispose();
   }
 
+  /// The vault's chips. [spendable] carries the accent; the rest are drawn in
+  /// the muted neutrals, because reading identically is what made an inert key
+  /// look like coverage.
+  Widget _chips(ShiftColors c, TextTheme text, List<String> providers,
+          {required bool spendable}) =>
+      Wrap(
+        spacing: Space.sm,
+        runSpacing: Space.sm,
+        children: [
+          for (final provider in providers)
+            Container(
+              decoration: BoxDecoration(
+                color: spendable ? c.accentWash : c.surfaceSunken,
+                borderRadius: BorderRadius.circular(Radii.pill),
+                border: spendable ? null : Border.all(color: c.border),
+              ),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: Space.md, vertical: Space.xs),
+              child: Text(providerLabel(provider),
+                  style: text.labelMedium
+                      ?.copyWith(color: spendable ? c.accent : c.textMuted)),
+            ),
+        ],
+      );
+
   Future<void> _save() async {
     // Whitespace stripped, not trimmed. A key pasted with a line break in the
     // middle was stored with it and sent as a header, which the provider
@@ -84,7 +109,17 @@ class _PlatformKeysCardState extends State<PlatformKeysCard> {
     // The whole vault, not only the spendable part: this is the card that
     // manages SHIFT's keys, and one that is stored but not yet forwardable is
     // exactly what an admin needs to see rather than have hidden.
+    //
+    // Split, though, because showing them alike was its own small lie. A
+    // screenshot of this card had `heygen` and `elevenlabs` in the same accent
+    // pill as Claude and OpenAI, and v2 has no client for either — so those two
+    // could never be spent by anything, while reading as covered.
     final stored = store.storedPlatformProviders;
+    final spendable =
+        stored.where(proxyableProviders.contains).toList(growable: false);
+    final inert = stored
+        .where((p) => !proxyableProviders.contains(p))
+        .toList(growable: false);
 
     return Container(
       margin: const EdgeInsets.only(bottom: Space.lg),
@@ -107,25 +142,22 @@ class _PlatformKeysCardState extends State<PlatformKeysCard> {
             style: text.bodySmall?.copyWith(color: c.textMuted),
           ),
 
-          if (stored.isNotEmpty) ...[
+          if (spendable.isNotEmpty) ...[
             const SizedBox(height: Space.md),
-            Wrap(
-              spacing: Space.sm,
-              runSpacing: Space.sm,
-              children: [
-                for (final provider in stored)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: c.accentWash,
-                      borderRadius: BorderRadius.circular(Radii.pill),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: Space.md, vertical: Space.xs),
-                    child: Text(providerLabel(provider),
-                        style: text.labelMedium?.copyWith(color: c.accent)),
-                  ),
-              ],
+            _chips(c, text, spendable, spendable: true),
+          ],
+          if (inert.isNotEmpty) ...[
+            const SizedBox(height: Space.md),
+            Text('Stored, not spendable',
+                style: text.labelMedium?.copyWith(color: c.text)),
+            const SizedBox(height: Space.xxs),
+            Text(
+              'SHIFT holds a key, but this app has no client for it yet, so '
+              'nothing can spend it.',
+              style: text.bodySmall?.copyWith(color: c.textMuted),
             ),
+            const SizedBox(height: Space.xs),
+            _chips(c, text, inert, spendable: false),
           ],
 
           const SizedBox(height: Space.md),
@@ -211,8 +243,3 @@ class _PlatformKeysCardState extends State<PlatformKeysCard> {
 /// Sorted, because a dropdown whose order comes from a `Set`'s iteration is a
 /// dropdown that reorders itself when somebody adds an entry.
 final List<String> _addable = proxyableProviders.toList()..sort();
-
-/// A provider's display name, from the registry the rest of the app uses, so
-/// this card cannot drift into calling things by different names. An id the
-/// registry does not know shows as itself rather than as nothing.
-String providerLabel(String id) => providerById(id)?.displayName ?? id;

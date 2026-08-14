@@ -4,7 +4,22 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'backend_config.dart';
+import 'setup_probe.dart' show proxyReplyBlocked;
 import 'shift_backend.dart';
+
+/// What a call whose reply never reached Dart can still be pinned down to.
+enum _Blocked {
+  /// The function answered a bare GET, so it exists and something else ate the
+  /// real reply.
+  functionAnswers,
+
+  /// Nothing from the function, but the project is up — the shape a slug the
+  /// host does not hold makes.
+  functionMissing,
+
+  /// Nothing from anything.
+  hostSilent,
+}
 
 /// [ShiftBackend] over Supabase, spoken to as **plain HTTP** rather than
 /// through `supabase_flutter`.
@@ -500,18 +515,15 @@ class SupabaseBackend implements ShiftBackend {
     } on BackendException {
       return null;
     } catch (_) {
-      // A browser cannot see the functions host's 404 for a slug it does not
-      // hold, because that 404 carries no CORS header. So the 404 is recovered
-      // rather than reported as silence — but only after confirming the host
-      // is answering, which is what makes it an inference and not a guess.
-      //
-      // Synthesised here rather than as a seventh `ProxyOutcome` so there
-      // stays exactly one place that turns a proxy status into a sentence.
-      if (await _hostIsReachable()) return (status: 404, body: '');
-
-      // Genuinely nothing answered. The caller renders "could not reach the
-      // server", which is now the finding rather than a shrug.
-      return null;
+      // The reply never reached Dart. Which of three things that was is
+      // *asked*, not assumed — see [_afterBlockedCall].
+      return switch (await _afterBlockedCall('provider-proxy')) {
+        _Blocked.functionMissing => (status: 404, body: ''),
+        _Blocked.functionAnswers => (status: proxyReplyBlocked, body: ''),
+        // Genuinely nothing answered. The caller renders "could not reach the
+        // server", which is the finding rather than a shrug.
+        _Blocked.hostSilent => null,
+      };
     }
   }
 
@@ -534,6 +546,10 @@ class SupabaseBackend implements ShiftBackend {
       // carries no CORS header, so a browser reports it as silence. Here the
       // 404 is not an error to be swallowed — it is the answer. A server that
       // does not know this route is a server older than this check.
+      //
+      // No three-way here: a deployed build that answers this route at all
+      // answers it with CORS headers, so a blocked reply means the route is
+      // not there. Both readings land on `older`, which is the same sentence.
       if (await _hostIsReachable()) return (status: 404, body: '');
       return null;
     }
@@ -550,14 +566,12 @@ class SupabaseBackend implements ShiftBackend {
 
   @override
   List<SetupLink> setupLinks() => [
-        SetupLink(
-          title: 'Confirmation emails redirect to localhost',
-          action: 'Fix Site URL',
-          url: Uri.parse('https://supabase.com/dashboard/project/$_projectRef'
-              '/auth/url-configuration'),
-          copyLabel: 'Site URL',
-          copyValue: BackendConfig.siteUrl,
-        ),
+        // The Site URL link used to head this list. Dropped, not forgotten:
+        // sign-in works, so it is not a blocker, and it was sitting above the
+        // two that are — on a card whose whole job is to be the shortest path
+        // to a fix. It comes back the day a confirmation email points at
+        // localhost again.
+
         // These two are what keeps the deployed functions in step with the
         // app, with nobody in the loop. The titles say what they buy — but
         // note they buy more than "future" changes: this job has never run,
@@ -803,8 +817,8 @@ class SupabaseBackend implements ShiftBackend {
   /// "check your connection" to someone whose connection is fine is how the
   /// Setup card's own Grant button sent its author looking at their wifi.
   ///
-  /// So on a transport failure this asks one more question — is the host
-  /// answering at all? — and reports whichever of the two is true.
+  /// So on a transport failure this asks further questions rather than
+  /// guessing — see [_afterBlockedCall].
   Future<Map<String, dynamic>> _postFunction(
     Uri uri,
     Map<String, dynamic> body, {
@@ -819,31 +833,69 @@ class SupabaseBackend implements ShiftBackend {
   }
 
   /// Which of "not deployed" and "not reachable" the failure actually was.
-  ///
-  /// The inference is stated rather than implied: the gateway *did* answer,
-  /// the browser withheld it, and confirming the host is up is what licenses
-  /// reading the silence as a 404. If the host is also silent, nothing has
-  /// been learned and the original offline sentence stands — a diagnostic that
-  /// guesses is worse than one that says it does not know.
   Future<BackendException> _functionFailure(
       BackendException original, String slug) async {
-    if (!await _hostIsReachable()) return original;
-    return BackendException(
-      BackendProblem.notDeployed,
-      'The $slug function is not deployed on the server yet.',
-      detail: original.detail,
-    );
+    return switch (await _afterBlockedCall(slug)) {
+      _Blocked.functionMissing => BackendException(
+          BackendProblem.notDeployed,
+          'The $slug function is not deployed on the server yet.',
+          detail: original.detail,
+        ),
+      _Blocked.functionAnswers => BackendException(
+          BackendProblem.replyBlocked,
+          'The $slug function is deployed, but the browser blocked its reply. '
+          'Try another browser, or turn off any content blocker for this site.',
+          detail: original.detail,
+        ),
+      // Nothing was learned, so the original offline sentence stands — a
+      // diagnostic that guesses is worse than one that says it does not know.
+      _Blocked.hostSilent => original,
+    };
+  }
+
+  /// What a request that never reached Dart can still be made to reveal.
+  ///
+  /// **This used to be a two-way and the missing third answer was the bug.**
+  /// A function that was never deployed is answered 404 by the functions host,
+  /// and that 404 carries no CORS header, so a browser withholds it and the
+  /// app sees only "the request failed" — indistinguishable from the network
+  /// being down. The old code confirmed the project was up and then read every
+  /// such silence as a missing function, because a missing function was the
+  /// only cause it knew of.
+  ///
+  /// It is not the only cause. Asked directly, the live project reports
+  /// `provider-proxy` **ACTIVE** — deployed the whole time this app was telling
+  /// its owner to deploy it, and sending them to change repository settings
+  /// that were never the fault.
+  ///
+  /// So the difference is *asked*, with a question whose two answers cannot be
+  /// confused: a bare **GET of the function's own URL**. A deployed function
+  /// answers it — 405, 401, anything — through its own CORS headers, which the
+  /// browser hands over. A slug the host does not hold answers 404 without
+  /// them, and stays silent exactly as the original call did.
+  Future<_Blocked> _afterBlockedCall(String slug) async {
+    if (await _answers('${config.url}/functions/v1/$slug')) {
+      return _Blocked.functionAnswers;
+    }
+    // Only now is silence worth interpreting, and only if the project itself
+    // is up: two silences with nothing answering is an offline device.
+    return await _hostIsReachable()
+        ? _Blocked.functionMissing
+        : _Blocked.hostSilent;
   }
 
   /// Whether the project answers at all, asked of an endpoint that always
   /// exists and always sends CORS headers.
+  Future<bool> _hostIsReachable() => _answers('${config.url}/rest/v1/');
+
+  /// Whether anything at all came back from [url].
   ///
-  /// The status is deliberately ignored: 200, 401 and 404 all prove the same
-  /// thing, which is that something is there to answer.
-  Future<bool> _hostIsReachable() async {
+  /// The status is deliberately ignored: 200, 401, 404 and 405 all prove the
+  /// same single thing, which is that something is there to answer.
+  Future<bool> _answers(String url) async {
     try {
       await _http
-          .get(Uri.parse('${config.url}/rest/v1/'), headers: _headers())
+          .get(Uri.parse(url), headers: _headers())
           .timeout(const Duration(seconds: 5));
       return true;
     } catch (_) {

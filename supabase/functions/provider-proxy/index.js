@@ -73,9 +73,14 @@ export const handle = withAdapter(async (req, ctx) => {
   // a member can already read every path the client calls out of the app
   // bundle. It tells them nothing new and tells a stranger nothing at all.
   //
-  // A server built before this route answers 404, because `_shift` is not a
-  // provider. That is the honest signal — *this server predates the check* —
-  // and the client reports it as exactly that.
+  // **A server built before this route answers 404 or 405, and which one is
+  // not something to predict.** This comment used to say 404 — `_shift` is not
+  // a provider, so the path lookup would refuse it — and the deployed build
+  // disproved it: its first line is a method check, so a GET is rejected
+  // before the path is ever read, and it answers 405.
+  //
+  // Either way the signal is the same and honest — *this server predates the
+  // check* — and the client treats both as exactly that.
   if (url.pathname.endsWith('/provider-proxy/_shift/routes')) {
     if (req.method !== 'GET') return problem(405, 'Use GET.');
     return json({ version: routesVersion(), allow: allowedRoutes() });

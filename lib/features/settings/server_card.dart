@@ -5,6 +5,7 @@ import '../../backend/setup_probe.dart';
 import '../../core/design/metrics.dart';
 import '../../core/design/palette.dart';
 import '../../data/account_store.dart';
+import '../../providers/registry.dart';
 
 /// What SHIFT's own server is doing, and whether it is the server this app
 /// expects.
@@ -70,7 +71,10 @@ class _ServerCardState extends State<ServerCard> {
             covered.isEmpty
                 ? 'Nothing yet. A plan covers whichever providers SHIFT holds '
                     'keys for.'
-                : covered.join(', '),
+                // Labelled, not printed. These were raw ids while the vault
+                // card two cards down called the same providers Claude and
+                // OpenAI — one account, one screen, three spellings.
+                : covered.map(providerLabel).join(', '),
           ),
           const SizedBox(height: Space.md),
 
@@ -188,7 +192,9 @@ class _ServerCardState extends State<ServerCard> {
                         ? null
                         : () => _test(store, provider),
                     child: Text(
-                      _testing == provider ? 'Testing…' : provider,
+                      _testing == provider
+                          ? 'Testing…'
+                          : providerLabel(provider),
                       style: text.labelLarge?.copyWith(color: c.accent),
                     ),
                   ),

@@ -14,6 +14,16 @@ enum ProxyOutcome {
   /// The function is not deployed. A 404 from the functions host.
   notDeployed,
 
+  /// It *is* deployed, and the browser would not hand us its reply.
+  ///
+  /// Split out of [notDeployed] after the live project was asked directly:
+  /// `provider-proxy` was ACTIVE the whole time this app was telling people to
+  /// deploy it. The old code read every blocked reply as a missing function,
+  /// because a missing function was the only cause it knew about — and so it
+  /// sent the one person who could fix the real fault to change repository
+  /// settings that were not the problem.
+  replyBlocked,
+
   /// Deployed, and refusing this account: no membership, or over the ceiling.
   notEntitled,
 
@@ -56,6 +66,16 @@ class ProxyProbeResult {
   bool get isWorking => outcome == ProxyOutcome.working;
 }
 
+/// The stand-in status for "the function answered and the browser withheld it".
+///
+/// **Negative on purpose.** There is no HTTP status that means this, and the
+/// alternative — threading a second axis through every caller and every fake —
+/// buys nothing over one impossible number. Negative rather than an unassigned
+/// 4xx so it cannot collide with something a provider genuinely sends: the
+/// proxy forwards the upstream's status verbatim, and picking a real-looking
+/// code would eventually mean reading a provider's answer as our own.
+const int proxyReplyBlocked = -1;
+
 /// Turns the proxy's HTTP answer into an outcome.
 ///
 /// Pure, so every branch is testable without a network — which matters more
@@ -66,14 +86,21 @@ ProxyProbeResult readProxyResponse(int status, String body) {
   final detail = _messageIn(body);
 
   return switch (status) {
+    // Ours, never the wire's — see [proxyReplyBlocked].
+    proxyReplyBlocked => ProxyProbeResult(
+        ProxyOutcome.replyBlocked,
+        'The proxy is deployed, but the browser blocked its reply, so this '
+        'app never saw the answer. Try another browser, or turn off any '
+        'content blocker for this site.',
+        detail: detail,
+      ),
     // The functions host answers 404 for a function that was never deployed.
     // Distinguishing this from "deployed but refusing" is the single most
     // useful thing this whole card does.
     404 => ProxyProbeResult(
         ProxyOutcome.notDeployed,
-        'The proxy is not deployed on the server. Add the two GitHub '
-        'settings below and push any commit — from then on it deploys '
-        'itself.',
+        'The proxy is not deployed on the server. Use the server settings '
+        'below, then push any commit — from then on it deploys itself.',
         detail: detail,
       ),
     401 => ProxyProbeResult(
@@ -146,9 +173,16 @@ enum RoutesOutcome {
   /// last week already said.
   behind,
 
-  /// It does not know the question. A 404 here is not a failure: `_shift` is
-  /// not a provider, so a proxy built before this route existed answers exactly
-  /// this — which places it as older than the app asking.
+  /// It does not know the question, which places it as older than the app
+  /// asking. Not a failure — it is the answer.
+  ///
+  /// **Two statuses mean it, and for a while this only knew one.** A build
+  /// predating the route rejects the request at whichever check it runs first:
+  /// the one deployed to this project checks the method before it reads the
+  /// path, so a GET comes back **405**, never reaching the provider table that
+  /// would have said 404. The handler's own comment predicted 404 and the real
+  /// server disproved it — so 405 lands here too, and the row that exists to
+  /// spot a stale deploy stops reporting "unknown" against the stale deploy.
   older,
 
   /// Nothing answered, or the answer could not be read.
@@ -190,7 +224,10 @@ RoutesReport readProxyRoutes(
     return const RoutesReport(RoutesOutcome.unknown,
         'Could not ask the server what it forwards. Check your connection.');
   }
-  if (answer.status == 404) {
+  // 404 *or* 405 — see [RoutesOutcome.older]. Both are a build that predates
+  // this route saying so, and which one you get depends only on the order of
+  // the checks that build happens to run first.
+  if (answer.status == 404 || answer.status == 405) {
     return const RoutesReport(
       RoutesOutcome.older,
       'This server is older than the app and cannot say what it forwards. '

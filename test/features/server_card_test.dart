@@ -127,9 +127,9 @@ void main() {
 
       // Scoped to the button: the covered-providers row names them too, and a
       // bare text match would pass whether or not a control exists.
-      expect(find.widgetWithText(TextButton, 'anthropic'), findsOneWidget);
-      expect(find.widgetWithText(TextButton, 'openai'), findsOneWidget);
-      expect(find.widgetWithText(TextButton, 'gemini'), findsNothing);
+      expect(find.widgetWithText(TextButton, 'Claude'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'OpenAI'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'Gemini'), findsNothing);
     });
 
     testWidgets('reports what came back, in a sentence', (t) async {
@@ -144,7 +144,7 @@ void main() {
       await t.pumpWidget(host(backend));
       await t.pumpAndSettle();
 
-      await t.tap(find.widgetWithText(TextButton, 'openai'));
+      await t.tap(find.widgetWithText(TextButton, 'OpenAI'));
       await t.pumpAndSettle();
 
       // The server's own words, not advice about a key the member does not
@@ -162,10 +162,54 @@ void main() {
       await t.pumpWidget(host(backend));
       await t.pumpAndSettle();
 
-      await t.tap(find.widgetWithText(TextButton, 'openai'));
+      await t.tap(find.widgetWithText(TextButton, 'OpenAI'));
       await t.pumpAndSettle();
 
       expect(backend.probedPaths, ['/v1/chat/completions']);
+    });
+  });
+
+  group('what a provider is called', () {
+    testWidgets('is the name the rest of the app uses, everywhere on the card',
+        (t) async {
+      // One screenshot of Settings had the same two providers as `anthropic`
+      // on this row, `anthropic` on a button, and **Claude** two cards down —
+      // because `providerLabel` lived inside the vault card and only that card
+      // could see it.
+      final backend = _Host(signedIn: true, covered: ['anthropic', 'openai']);
+      await t.pumpWidget(host(backend));
+      await t.pumpAndSettle();
+
+      expect(find.text('Claude, OpenAI'), findsOneWidget);
+    });
+
+    testWidgets('so a raw id appears nowhere on it', (t) async {
+      // Asserted as an absence, because half-applying this fix — the row but
+      // not the buttons, or the reverse — leaves exactly the inconsistency it
+      // is meant to remove, and a positive check would still pass.
+      final backend = _Host(signedIn: true, covered: ['anthropic', 'openai']);
+      await t.pumpWidget(host(backend));
+      await t.pumpAndSettle();
+
+      for (final id in ['anthropic', 'openai']) {
+        expect(find.textContaining(id), findsNothing, reason: id);
+      }
+    });
+
+    testWidgets('a provider nothing can call never reaches this card at all',
+        (t) async {
+      // Written first as "an unknown id shows as itself", which could not
+      // happen: `includedProviders` filters by `proxyableProviders`, so a
+      // vault entry this app has no client for is gone before the card sees
+      // it. The label's fallback is real, but it belongs to the vault card —
+      // this one cannot reach it, and that is worth pinning rather than
+      // assuming.
+      final backend = _Host(signedIn: true, covered: ['heygen', 'anthropic']);
+      await t.pumpWidget(host(backend));
+      await t.pumpAndSettle();
+
+      expect(find.textContaining('heygen'), findsNothing);
+      expect(find.text('Claude'), findsWidgets);
     });
   });
 
@@ -174,7 +218,7 @@ void main() {
     await t.pumpWidget(host(backend));
     await t.pumpAndSettle();
 
-    for (final label in ['Check', 'anthropic', 'openai']) {
+    for (final label in ['Check', 'Claude', 'OpenAI']) {
       expect(t.getSize(find.widgetWithText(TextButton, label)).height,
           greaterThanOrEqualTo(kMinTouchTarget),
           reason: label);

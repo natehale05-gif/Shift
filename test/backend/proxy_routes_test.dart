@@ -96,6 +96,36 @@ void main() {
       expect(report.message, isNot(contains('connection')));
     });
 
+    test('a 405 is the same finding, and is what the real old server sends',
+        () {
+      // Read off the deployed function rather than imagined: its first line is
+      // a method check, so a GET is rejected before it ever reaches the
+      // provider table that would have answered 404. The handler's own comment
+      // predicted 404; the live server disproved it.
+      //
+      // This mattered because the row exists to spot a stale deploy, and
+      // against the actual stale deploy it was reporting "unknown".
+      final report = readProxyRoutes((status: 405, body: 'Use POST.'),
+          required: requiredProxyRoutes);
+
+      expect(report.outcome, RoutesOutcome.older);
+      expect(report.message, contains('older'));
+      expect(report.message, isNot(contains('405')),
+          reason: 'a status code is not a diagnosis');
+    });
+
+    test('a status that means nothing in particular still reads as unknown',
+        () {
+      // The guard on the branch above: 404 and 405 are the two shapes a build
+      // predating the route makes. Everything else has not been reasoned about
+      // and must not be claimed as "older".
+      expect(
+        readProxyRoutes((status: 500, body: ''), required: requiredProxyRoutes)
+            .outcome,
+        RoutesOutcome.unknown,
+      );
+    });
+
     test('nothing answering is a different state again', () {
       expect(readProxyRoutes(null, required: requiredProxyRoutes).outcome,
           RoutesOutcome.unknown);

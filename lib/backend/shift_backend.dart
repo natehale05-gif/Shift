@@ -241,9 +241,18 @@ enum BackendProblem {
   /// their wifi. The functions host does answer 404 for a slug it does not
   /// hold — but that 404 carries no `Access-Control-Allow-Origin`, so the
   /// browser refuses to hand it over and all the app sees is a failed request.
-  /// Recovering the distinction takes one extra call; see
-  /// `SupabaseBackend._hostIsReachable`.
+  /// Recovering the distinction takes extra calls; see
+  /// `SupabaseBackend._afterBlockedCall`.
   notDeployed,
+
+  /// The endpoint *is* on the server, and its reply never reached the app.
+  ///
+  /// The sibling [notDeployed] needed once the inference behind it was checked
+  /// rather than assumed: asked directly, the live project reported every
+  /// function ACTIVE while the app was telling its owner to deploy them. A
+  /// blocked reply and a missing function look identical from a browser, and
+  /// collapsing them meant the more common cause spoke for both.
+  replyBlocked,
 
   /// Anything else: offline, a 500, a timeout.
   unavailable,
@@ -289,6 +298,9 @@ String defaultMessageFor(BackendProblem problem) => switch (problem) {
         'You have used everything your plan covers this month.',
       BackendProblem.notDeployed =>
         'That part of the server is not deployed yet.',
+      BackendProblem.replyBlocked =>
+        'The server answered, but the browser blocked its reply. Try another '
+            'browser, or turn off any content blocker for this site.',
       BackendProblem.unavailable =>
         'Could not reach the server. Check your connection and try again.',
     };

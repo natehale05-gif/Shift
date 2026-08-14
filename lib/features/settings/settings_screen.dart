@@ -18,6 +18,7 @@ import 'erase_everything.dart';
 import 'platform_keys_card.dart';
 import 'provider_key_field.dart';
 import 'server_card.dart';
+import 'setup_card.dart';
 import 'update_card.dart';
 
 /// Where a key goes in.
@@ -63,6 +64,11 @@ class SettingsScreen extends StatelessWidget {
                 // spends.
                 const AccountCard(),
                 const ServerCard(),
+
+                // Directly under the Server card, and the order is the fix
+                // rather than a preference: that card's own sentence says the
+                // settings are "below", and for two waves they were nowhere.
+                const SetupCard(),
 
                 // Off-web only — it renders nothing in a browser, where a
                 // reload is already the newest build.

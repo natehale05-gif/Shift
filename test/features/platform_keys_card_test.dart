@@ -144,6 +144,52 @@ void main() {
     expect(proxyableProviders, isNot(contains('flux')));
   });
 
+  group('what the vault is holding', () {
+    testWidgets('a key nothing can spend is not shown as coverage', (t) async {
+      // A screenshot of this card had `heygen` and `elevenlabs` in the same
+      // accent pill as Claude and OpenAI. v2 has no client for either, so
+      // those two could never be spent by anything — while reading exactly
+      // like the two that could.
+      final backend = _Configured(signedIn: true, admin: true)
+        ..stored.addAll([
+          (provider: 'anthropic', secret: 'sk-1'),
+          (provider: 'heygen', secret: 'sk-2'),
+        ]);
+      await t.pumpWidget(host(backend));
+      await t.pumpAndSettle();
+
+      expect(find.text('Stored, not spendable'), findsOneWidget);
+      expect(find.textContaining('no client for it yet'), findsOneWidget);
+    });
+
+    testWidgets('a vault of only spendable keys has no second heading',
+        (t) async {
+      // The guard: a heading that is always there says nothing.
+      final backend = _Configured(signedIn: true, admin: true)
+        ..stored.add((provider: 'anthropic', secret: 'sk-1'));
+      await t.pumpWidget(host(backend));
+      await t.pumpAndSettle();
+
+      // `findsWidgets`, not `findsOneWidget`: the dropdown below also renders
+      // the selected provider's name, so scoping to one would be asserting
+      // something about the form rather than about the chips.
+      expect(find.text('Claude'), findsWidgets);
+      expect(find.text('Stored, not spendable'), findsNothing);
+    });
+
+    testWidgets('an id the registry does not know is shown as itself',
+        (t) async {
+      // Blank would be worse. This is the one surface the label's fallback can
+      // actually be reached from — the Server card filters these out first.
+      final backend = _Configured(signedIn: true, admin: true)
+        ..stored.add((provider: 'heygen', secret: 'sk-2'));
+      await t.pumpWidget(host(backend));
+      await t.pumpAndSettle();
+
+      expect(find.text('heygen'), findsOneWidget);
+    });
+  });
+
   testWidgets('every control clears the tap minimum', (t) async {
     await t.pumpWidget(host(_Configured(signedIn: true, admin: true)));
     await t.pumpAndSettle();

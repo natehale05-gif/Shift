@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shift/backend/backend_config.dart';
+import 'package:shift/backend/setup_probe.dart' show proxyReplyBlocked;
 import 'package:shift/backend/shift_backend.dart';
 import 'package:shift/backend/supabase_backend.dart';
 
@@ -536,6 +537,79 @@ void main() {
 
       expect(await backend.probeProxy('anthropic',
           path: '/v1/messages', body: const {'model': 'm'}), isNull);
+      backend.dispose();
+    });
+
+    /// A world where the function is deployed and only its *reply* is lost —
+    /// a bare GET of the function's own URL comes back, the real call does not.
+    ///
+    /// This is what the live project actually looks like: every function
+    /// ACTIVE, while the app insisted they were not deployed.
+    MockClient deployedButBlocked() => MockClient((request) async {
+          if (request.url.path.contains('/auth/')) {
+            return http.Response(_tokenBody(), 200);
+          }
+          if (request.url.path.endsWith('/functions/v1/provider-proxy') ||
+              request.url.path.endsWith('/functions/v1/admin-membership')) {
+            // What a deployed function answers a bare GET: a refusal, through
+            // its own CORS headers, so the browser hands it over.
+            return http.Response('Use POST.', 405);
+          }
+          if (request.url.path.contains('/functions/')) {
+            throw const SocketExceptionStub();
+          }
+          return http.Response(jsonEncode([]), 200);
+        });
+
+    test('a deployed function whose reply is blocked is not called missing',
+        () async {
+      // The whole point. Telling somebody to deploy a function that is already
+      // deployed sends them to change repository settings that were never the
+      // fault — and that is exactly where a week went.
+      final backend = await _signedIn(deployedButBlocked());
+
+      expect(
+        await backend.probeProxy('anthropic',
+            path: '/v1/messages', body: const {'model': 'm'}),
+        (status: proxyReplyBlocked, body: ''),
+      );
+      backend.dispose();
+    });
+
+    test('the same distinction reaches every function call, not just the probe',
+        () async {
+      final backend = await _signedIn(deployedButBlocked());
+
+      await expectLater(
+        backend.grantMembership(ceilingMicros: 25000000),
+        throwsA(isA<BackendException>()
+            .having((e) => e.problem, 'problem', BackendProblem.replyBlocked)
+            .having((e) => e.message, 'message', contains('admin-membership'))),
+      );
+      backend.dispose();
+    });
+
+    test('a call that succeeds asks no extra questions', () async {
+      // "It works" and "it works without two spare round trips per call" are
+      // different claims, and only counting can tell them apart.
+      final recorder = _Recorder();
+      final backend = await _signedIn(recorder.client((request) async {
+        if (request.url.path.contains('/auth/')) {
+          return http.Response(_tokenBody(), 200);
+        }
+        return http.Response('{}', 200);
+      }));
+
+      await backend.probeProxy('anthropic',
+          path: '/v1/messages', body: const {'model': 'm'});
+
+      expect(
+        recorder.requests
+            .where((r) => r.method == 'GET' && r.url.path.contains('/rest/v1/'))
+            .isEmpty,
+        isTrue,
+        reason: 'the reachability probe is a recovery, not a preflight',
+      );
       backend.dispose();
     });
   });

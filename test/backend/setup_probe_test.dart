@@ -13,6 +13,29 @@ void main() {
       expect(result.isWorking, isFalse);
     });
 
+    test('a blocked reply is not reported as a missing function', () {
+      // The bug this split exists for. Asked directly, the live project
+      // reported `provider-proxy` ACTIVE the whole time the app was telling
+      // its owner to deploy it — because a blocked reply and a missing
+      // function look identical from a browser, and the commoner cause was
+      // speaking for both.
+      final result = readProxyResponse(proxyReplyBlocked, '');
+
+      expect(result.outcome, ProxyOutcome.replyBlocked);
+      expect(result.message, contains('deployed'));
+      expect(result.message, isNot(contains('not deployed')),
+          reason: 'this is the sentence that sent someone to change '
+              'repository settings that were never the fault');
+      expect(result.isWorking, isFalse);
+    });
+
+    test('the blocked-reply status can never arrive from the wire', () {
+      // The proxy forwards the upstream's status verbatim, so a sentinel that
+      // looked like a real code would eventually read a provider's answer as
+      // our own.
+      expect(proxyReplyBlocked, lessThan(0));
+    });
+
     test('a 402 means it *is* deployed and is refusing this account', () {
       final result = readProxyResponse(402, '');
 
@@ -93,6 +116,7 @@ void main() {
       // this went wrong once already.
       final messages = [
         readProxyResponse(404, ''),
+        readProxyResponse(proxyReplyBlocked, ''),
         readProxyResponse(402, ''),
         readProxyResponse(503, ''),
         readProxyResponse(503, '{"message":"The server is missing SHIFT_KMS_KEY."}'),
@@ -102,7 +126,7 @@ void main() {
         proxyNotSignedIn,
       ].map((r) => r.message).toSet();
 
-      expect(messages, hasLength(8));
+      expect(messages, hasLength(9));
     });
 
     test('a body that is not JSON does not become the message', () {
