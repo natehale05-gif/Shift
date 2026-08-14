@@ -16,9 +16,9 @@ have disagreed, and that disagreement is the whole subject of the top task.
 |---|---|
 | Repo | `natehale05-gif/Shift`, working dir `/home/user/Shift` |
 | Branch | `claude/shiftai-flutter-chat-app-rjtgyj` — **develop and push here only** |
-| HEAD | `f4ba833` |
-| Flutter | `/opt/flutter/bin/flutter` (3.44.x) |
-| Suite | 867 tests green |
+| HEAD | `f4ba833`, plus the Task 1 deploy below |
+| Flutter | `/opt/flutter/bin/flutter` (3.44.9 — the SDK pin is `^3.12.0`, so 3.35 will not resolve) |
+| Suite | 869 tests green |
 | Server | Supabase project `xmjaqizlrlsvjbwqmtdo` (us-east-2, Postgres 17) |
 | Live app | https://natehale05-gif.github.io/Shift/ |
 
@@ -43,42 +43,64 @@ that has never existed.)
 
 ---
 
-## Task 1 — Deploy `provider-proxy`. This is the one that unblocks the product.
+## Task 1 — Deploy `provider-proxy`. ✅ Done — needs one confirmation on a phone.
 
-**A paying member cannot generate an image.** The cause is settled, from reading
-the *deployed* function source rather than the repository's:
+**Deployed via the Supabase MCP on 14 August.** `provider-proxy` is now
+**version 2** and `admin-membership` **version 2**, both from
+`tool/bundle_function.py … --deno --lean`, both still `verify_jwt = true`.
 
-- `provider-proxy` is **ACTIVE at version 1** — deployed once, ~2 August, never
-  since.
-- Its `openai.allow` is `['/v1/chat/completions', '/v1/responses']`. There is
-  **no `/v1/images/generations`**. The repository has had it for weeks.
-- It also predates the `_shift/routes` endpoint, so it cannot report its own
-  version.
+Read back from the deployed source, not from what was sent:
 
-So the client is correct and the server is old. Nothing in the app can fix this.
+- `openai.allow` now carries all five entries, **including
+  `POST /v1/images/generations`** — the missing route that meant a paying member
+  could not generate an image.
+- The `_shift/routes` branch is present, so the server can report its own
+  version from here on.
+- `heygen` and `elevenlabs` exist upstream for the first time; `GET` is a
+  permitted method, which is what makes the video-poll routes work.
 
-**Two routes to deploy, in order of preference:**
+**It also carried a second fix nobody had deployed.** `45ea926` ("One header,
+blocked before it left the phone") fixed the preflight to reflect the browser's
+own `Access-Control-Request-Headers`, and its own commit message records the
+server half as *not* deployed. It was still not deployed. So every managed
+Anthropic turn from a browser was being blocked at preflight — the CORS-shaped
+failure this project has now misreported as a network one four times — and that
+is fixed by the same version 2.
 
-1. **CI (durable).** `.github/workflows/backend.yml` has a `deploy-functions`
-   job that exits 0 when its credentials are absent — they have never been set,
-   so **it has never run once**. It needs, on the GitHub repo:
-   - secret `SUPABASE_ACCESS_TOKEN`
-   - variable `SUPABASE_PROJECT_REF` = `xmjaqizlrlsvjbwqmtdo`
+**The one thing that could not be checked from the sandbox.** `*.supabase.co` is
+proxy-blocked here, so nothing was exercised end to end; `pg_net`/`http` are
+available on the project but **not installed**, and installing an extension on
+the production database to run a test is the owner's call, not a side effect of
+a deploy. What *is* established: the deploy was accepted (so the bundle parses),
+the version and `ezbr_sha256` both changed, and the read-back source contains
+the routes above.
 
-   These are the owner's to add. The app now shows both as tappable rows with a
-   copy button (Settings → Server settings). Once set, every push deploys.
-   **This job has never executed, so expect first-contact failures** — watch the
-   run and fix, don't declare it done on dispatch.
+**Confirm on a phone, one check:** Settings → **Check** should report the server
+forwards everything, and the version it reports should be
 
-2. **Supabase MCP (immediate, if connected).** `python3 tool/bundle_function.py
-   provider-proxy --deno` writes `build/functions/provider-proxy.deno.ts`, a
-   single deployable file. Deploy that, plus `admin-membership`. The MCP
-   disconnected three times in one session, so treat it as opportunistic.
+```
+cc552813
+```
 
-**Verify by reading back what is running**, not what was sent: fetch the
-deployed source and confirm it contains `/v1/images/generations` and the
-`_shift/routes` branch. Then, on a phone: Settings → **Check** should say the
-server forwards everything, and an image request should produce a picture.
+which is `routesVersion()` computed locally from `_shared/upstream.js`. A
+different value means the deployed allowlist is not the repository's. Then send
+an image request — that is the failure this task existed to clear.
+
+**Still drifted: `provider-key`, at version 4 from 30 July.** It predates the
+same CORS change. Left alone deliberately: it is the key vault, its existing
+preflight list already covers the three headers the client sends it, and the
+durable fix is the CI job below rather than another hand deploy.
+
+**The durable fix is still not in place.** `.github/workflows/backend.yml` has a
+`deploy-functions` job that exits 0 when its credentials are absent, so **it has
+never run once**. It needs, on the GitHub repo:
+- secret `SUPABASE_ACCESS_TOKEN`
+- variable `SUPABASE_PROJECT_REF` = `xmjaqizlrlsvjbwqmtdo`
+
+These are the owner's to add (Settings → Server settings has both as tappable
+rows with a copy button). Until they are set, every deploy is a hand deploy, and
+this drift comes back. **The job has never executed, so expect first-contact
+failures** — watch the run and fix, don't declare it done on dispatch.
 
 **Do not touch `revenuecat-webhook`** — see Task 3.
 

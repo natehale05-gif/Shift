@@ -354,8 +354,42 @@ class SupabaseBackend implements ShiftBackend {
       throw const BackendException(
           BackendProblem.notSignedIn, 'Your session expired. Sign in again.');
     }
-    final renewed = _adopt(await _token({'refresh_token': refresh}, 'refresh_token'));
-    return renewed.accessToken;
+    return (await _refreshOnce(refresh)).accessToken;
+  }
+
+  /// The in-flight refresh, so concurrent callers join it instead of each
+  /// starting their own.
+  Future<ShiftSession>? _refreshing;
+
+  /// Renews the session, at most once at a time.
+  ///
+  /// A refresh token is single-use: the server rotates it and forgets the one
+  /// just spent. Two callers that both find the token expired would spend the
+  /// *same* refresh token twice, and the second spend is refused — so one
+  /// caller fails with what reads as a credentials problem, and whichever
+  /// reply lands last wins, which can store a session whose refresh token is
+  /// already dead. The next launch then signs the member out for a reason
+  /// nothing on screen can explain.
+  ///
+  /// Concurrent is the normal case here, not an edge one. `AccountStore
+  /// .refresh()` asks for membership, keys, included providers and admin
+  /// through one `Future.wait`; `JobRunner` runs a turn's independent steps the
+  /// same way, and every managed step resolves its proxy endpoint through
+  /// [_freshToken]. So an expired token plus one ordinary multi-step turn is
+  /// already several refreshes racing — and the losers fall back to the
+  /// member's own key, which a member spending a membership may not have.
+  Future<ShiftSession> _refreshOnce(String refreshToken) {
+    final pending = _refreshing;
+    if (pending != null) return pending;
+
+    final attempt =
+        _token({'refresh_token': refreshToken}, 'refresh_token').then(_adopt);
+    _refreshing = attempt;
+    // Cleared however it ends. A failed refresh that stayed cached would pin
+    // every later call to the same failure for the life of the app.
+    return attempt.whenComplete(() {
+      if (identical(_refreshing, attempt)) _refreshing = null;
+    });
   }
 
   // ------------------------------------------------------------ key vault

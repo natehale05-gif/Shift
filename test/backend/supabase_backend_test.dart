@@ -356,6 +356,90 @@ void main() {
       backend.dispose();
     });
 
+    test('calls that start together spend the refresh token once, not once '
+        'each', () async {
+      // A refresh token is single-use — the server rotates it and forgets the
+      // one just spent. Concurrent is the normal case here: `AccountStore
+      // .refresh()` asks four questions through one `Future.wait`, and
+      // `JobRunner` resolves a managed endpoint per parallel step. Every
+      // renewal below also lands already-expiring, so each call needs one —
+      // which is what puts two refreshes in flight together.
+      final recorder = _Recorder();
+      var refreshes = 0;
+      var counting = false;
+      final backend = _backend(
+        recorder.client((request) async {
+          if (request.url.path.contains('/auth/')) {
+            if (counting && ++refreshes > 1) {
+              // What GoTrue answers for a refresh token already spent.
+              return http.Response(jsonEncode({'error': 'invalid_grant'}), 400);
+            }
+            return http.Response(
+                _tokenBody(expiresIn: 0, token: 'access-2'), 200);
+          }
+          return http.Response(jsonEncode([]), 200);
+        }),
+        stored: ShiftSession(
+          account: const ShiftAccount(id: 'u1'),
+          accessToken: 'nearly-dead',
+          refreshToken: 'r',
+          expiresAt: DateTime.now().add(const Duration(seconds: 30)),
+        ),
+      );
+      await backend.restore();
+      counting = true;
+
+      await Future.wait([
+        backend.listProviderKeys(),
+        backend.membership(),
+      ]);
+
+      expect(refreshes, 1,
+          reason: 'the second caller joins the refresh already in flight');
+      for (final request
+          in recorder.requests.where((r) => !r.url.path.contains('/auth/'))) {
+        expect(request.headers['Authorization'], 'Bearer access-2',
+            reason: 'both calls carry the renewed token');
+      }
+      backend.dispose();
+    });
+
+    test('a refresh that failed is not cached — the retry gets its own attempt',
+        () async {
+      var refreshes = 0;
+      var counting = false;
+      final backend = _backend(
+        MockClient((request) async {
+          if (request.url.path.contains('/auth/')) {
+            // Down for the first attempt after the test takes over, healthy
+            // afterwards. A single-flight guard that kept the failed future
+            // would pin every later call to it for the life of the app.
+            if (counting && ++refreshes == 1) {
+              return http.Response(jsonEncode({'message': 'nope'}), 500);
+            }
+            return http.Response(
+                _tokenBody(expiresIn: 0, token: 'access-2'), 200);
+          }
+          return http.Response(jsonEncode([]), 200);
+        }),
+        stored: ShiftSession(
+          account: const ShiftAccount(id: 'u1'),
+          accessToken: 'nearly-dead',
+          refreshToken: 'r',
+          expiresAt: DateTime.now().add(const Duration(seconds: 30)),
+        ),
+      );
+      await backend.restore();
+      counting = true;
+
+      await expectLater(
+          backend.listProviderKeys(), throwsA(isA<BackendException>()));
+      await backend.listProviderKeys();
+
+      expect(refreshes, 2);
+      backend.dispose();
+    });
+
     test('a call while signed out says so rather than sending an anonymous '
         'request', () async {
       final backend = _backend(MockClient((_) async => http.Response('[]', 200)));
