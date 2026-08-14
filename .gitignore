@@ -1,36 +1,68 @@
-# See https://www.dartlang.org/guides/libraries/private-files
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
 
-# Files and directories created by pub
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
 .dart_tool/
-.packages
-build/
-# If you're building an application, you may want to check-in your pubspec.lock
-pubspec.lock
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+/coverage/
 
-# Directory created by dartdoc
-# If you don't generate documentation locally you can remove this line.
-doc/api/
+# Symbolication related
+app.*.symbols
 
-# dotenv environment variables file
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# The upload keystore and its passwords. CI writes these from secrets; a
+# keystore in version control is one anyone with read access can ship updates
+# with.
+android/key.properties
+android/app/upload-keystore.jks
+**/*.jks
+**/*.keystore
+
+# dotenv environment variables file.
+#
+# Carried over when the old app was deleted and the app moved up to the root:
+# its `.gitignore` had this and the app's did not, so the move would have
+# silently unprotected every `.env` in the repository. A key travels from the
+# owner's clipboard to the encrypting endpoint — never through a file that a
+# commit could pick up.
 .env*
 # …but the example, which lists names only and no values, is the documentation
 # of what those names are.
 !.env.example
 
-# Avoid committing generated Javascript files (build/ output only —
-# web/flutter_bootstrap.js is a real source file, so this project can't
-# blanket-ignore *.js the way the default template does).
-*.dart.js
-# Produced by the --dump-info flag.
-*.info.json
-
-.flutter-plugins
-.flutter-plugins-dependencies
-
-# IDE
-.idea/
-*.iml
-.vscode/
-
-# macOS
-.DS_Store
+# Node, for the edge-function test runner.
+node_modules/

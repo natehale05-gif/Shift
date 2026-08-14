@@ -48,11 +48,27 @@ export const handle = withAdapter(async (req, ctx) => {
   // which sends a 401 and blames the key. Same fix the client made in F3.
   const secret = String(body?.secret ?? '').replace(/\s+/g, '');
 
+  // 'user'     — the caller's own key, spent on their own bill
+  // 'platform' — SHIFT's key, spent by anyone with an active membership
+  const scope = body?.scope === 'platform' ? 'platform' : 'user';
+
   if (!KNOWN_PROVIDERS.has(provider)) {
     return problem(400, `Unknown provider "${provider}".`);
   }
   if (secret.length < 8) {
     return problem(400, 'That does not look like a key.');
+  }
+
+  if (scope === 'platform') {
+    // Checked here, against a column no client can write. `is_admin` is not in
+    // the columns `authenticated` may update, so an account cannot promote
+    // itself and then post a platform key.
+    if (!(await isAdmin(ctx))) {
+      // 403 and nothing else. Saying "you are not an admin" to someone who
+      // guessed at this confirms the scope exists and is worth attacking.
+      return problem(403, 'Not allowed.');
+    }
+    return storePlatformKey(ctx, provider, secret);
   }
 
   const sealed = await seal(secret, masterKeyBytes(ctx.env));
@@ -95,4 +111,57 @@ function readEnv() {
   // eslint-disable-next-line no-undef
   if (typeof Deno !== 'undefined') return Deno.env.toObject();
   return globalThis.process?.env ?? {};
+}
+
+/**
+ * Whether the caller may manage SHIFT's own keys.
+ *
+ * Read with the service role rather than trusted from the token: a JWT claim
+ * is whatever the issuer put there, and admin is not something we want riding
+ * in a token that lives for an hour on a device. One row read is cheap, and it
+ * means revoking admin takes effect on the next request rather than on the
+ * next sign-in.
+ */
+async function isAdmin(ctx) {
+  const response = await serviceRequest(
+    ctx,
+    `/profiles?id=eq.${encodeURIComponent(ctx.userId)}&select=is_admin`,
+  );
+  const rows = await response.json();
+  return Array.isArray(rows) && rows[0]?.is_admin === true;
+}
+
+/**
+ * Stores one of SHIFT's own keys.
+ *
+ * Upsert on `provider`, because there is exactly one key per provider: adding
+ * a second would silently create two sources of truth for who is paying.
+ * Re-posting is how a key is rotated, and it re-enables a provider that was
+ * switched off, which is what someone pasting a fresh key means by it.
+ */
+async function storePlatformKey(ctx, provider, secret) {
+  const sealed = await seal(secret, masterKeyBytes(ctx.env));
+
+  const response = await serviceRequest(ctx, '/platform_keys?on_conflict=provider', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+    body: JSON.stringify({
+      provider,
+      ciphertext: bytesToHex(sealed),
+      kms_key_id: masterKeyId(ctx.env),
+      last_four: lastFour(secret),
+      enabled: true,
+      updated_at: new Date().toISOString(),
+    }),
+  });
+
+  const rows = await response.json();
+  const row = Array.isArray(rows) ? rows[0] : rows;
+
+  return json({
+    id: row?.id ?? '',
+    provider,
+    scope: 'platform',
+    last_four: row?.last_four ?? lastFour(secret),
+  });
 }

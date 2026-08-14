@@ -67,6 +67,28 @@ class ShiftSession {
   }
 }
 
+/// The identity providers the app can sign in with.
+///
+/// **Apple and Google are one decision, not two.** App Store guideline 4.8
+/// requires that an app offering a third-party login also offer one that limits
+/// collection to name and email and can hide the address — Sign in with Apple
+/// is the option that qualifies. Shipping Google alone on iOS is a rejection,
+/// so they are added together or not at all, and this enum having exactly two
+/// members is that rule written where it cannot be forgotten.
+enum OAuthProvider {
+  apple,
+  google;
+
+  /// What the host calls it. Kept here rather than at the call site because it
+  /// is part of the wire, and the wire is this folder's business.
+  String get id => name;
+
+  String get label => switch (this) {
+        OAuthProvider.apple => 'Apple',
+        OAuthProvider.google => 'Google',
+      };
+}
+
 /// What a client is allowed to know about a stored provider key.
 ///
 /// Never the key. The server encrypts it, uses it, and returns only enough to
@@ -148,6 +170,39 @@ class ScheduledTask {
   });
 }
 
+/// A place the operator has to go that this app cannot change for them.
+///
+/// These exist because two things are settings on the *host*, not rows in its
+/// database: where confirmation emails redirect to, and the credentials CI
+/// needs to deploy. No amount of UI reaches them.
+///
+/// They live behind the backend interface for the same reason everything else
+/// does — the URLs name a vendor, and `tool/scan_backend_boundary.py` caught
+/// the first attempt at putting them in the widget. That was the scan working:
+/// a Settings card that hardcodes `supabase.com` is a Settings card that has
+/// to be rewritten when the host changes.
+class SetupLink {
+  /// What is wrong or missing, in the user's terms.
+  final String title;
+
+  /// The button. A verb.
+  final String action;
+
+  final Uri url;
+
+  /// What to put on the clipboard, so nothing has to be typed on a phone.
+  final String copyLabel;
+  final String copyValue;
+
+  const SetupLink({
+    required this.title,
+    required this.action,
+    required this.url,
+    required this.copyLabel,
+    required this.copyValue,
+  });
+}
+
 /// Why a backend call did not work, in terms the UI can say out loud.
 ///
 /// Deliberately few. "The network is down", "you are not signed in", "that
@@ -165,8 +220,39 @@ enum BackendProblem {
   /// Wrong email or password, or an account that already exists.
   credentials,
 
+  /// The account was created and cannot be used until the emailed link is
+  /// followed.
+  ///
+  /// Its own member rather than a [credentials] failure, because it is not a
+  /// failure at all — the sign-up worked. Reported as an error it reaches the
+  /// user in red under a form that just did what they asked, which reads as
+  /// "that did not work" and invites them to try again with a different
+  /// password.
+  confirmationRequired,
+
   /// The account is over its ceiling, or has no membership to spend under.
   overLimit,
+
+  /// The server is up, but the endpoint being asked for is not on it.
+  ///
+  /// Its own member because from a browser it is indistinguishable from being
+  /// offline, and answering "check your connection" is how tapping **Grant**
+  /// against a function that had never been deployed sent someone to look at
+  /// their wifi. The functions host does answer 404 for a slug it does not
+  /// hold — but that 404 carries no `Access-Control-Allow-Origin`, so the
+  /// browser refuses to hand it over and all the app sees is a failed request.
+  /// Recovering the distinction takes extra calls; see
+  /// `SupabaseBackend._afterBlockedCall`.
+  notDeployed,
+
+  /// The endpoint *is* on the server, and its reply never reached the app.
+  ///
+  /// The sibling [notDeployed] needed once the inference behind it was checked
+  /// rather than assumed: asked directly, the live project reported every
+  /// function ACTIVE while the app was telling its owner to deploy them. A
+  /// blocked reply and a missing function look identical from a browser, and
+  /// collapsing them meant the more common cause spoke for both.
+  replyBlocked,
 
   /// Anything else: offline, a 500, a timeout.
   unavailable,
@@ -205,8 +291,16 @@ String defaultMessageFor(BackendProblem problem) => switch (problem) {
         'This build has no server behind it. Keys stay on this device.',
       BackendProblem.notSignedIn => 'Sign in to do that.',
       BackendProblem.credentials => 'That email and password did not match.',
+      BackendProblem.confirmationRequired =>
+        'Account created. Check your email for the confirmation link, then '
+            'sign in.',
       BackendProblem.overLimit =>
         'You have used everything your plan covers this month.',
+      BackendProblem.notDeployed =>
+        'That part of the server is not deployed yet.',
+      BackendProblem.replyBlocked =>
+        'The server answered, but the browser blocked its reply. Try another '
+            'browser, or turn off any content blocker for this site.',
       BackendProblem.unavailable =>
         'Could not reach the server. Check your connection and try again.',
     };
@@ -236,6 +330,46 @@ abstract class ShiftBackend {
 
   Future<ShiftSession> signUp({required String email, required String password});
 
+  /// Where to send the browser to sign in with [provider], or null when this
+  /// build has no server.
+  ///
+  /// A URL rather than a `Future<ShiftSession>`, because the sign-in does not
+  /// happen here: the page navigates away to the provider, the person types a
+  /// password this app never sees, and they come back. Returning a session
+  /// would mean this layer owned a redirect, and redirecting is the platform's
+  /// job — this folder does not import one.
+  ///
+  /// [redirectTo] must be a URL the host has been told to allow. One that has
+  /// not been fails at the *provider*, with a page this app never gets to
+  /// render, so there is nothing here that can explain it.
+  Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo});
+
+  /// Which providers the host actually has configured.
+  ///
+  /// Asked because the alternative is what happened the first time these
+  /// shipped: the button navigated away and the person landed on
+  /// `{"code":400,...,"msg":"Unsupported provider: provider is not enabled"}`
+  /// on a domain they had never heard of, with the Back button as the only way
+  /// out. The app had everything it needed to know better — it just never
+  /// asked.
+  ///
+  /// **Unknown is treated as available by every caller, deliberately.** Hiding
+  /// a working sign-in because one request failed is worse than the rare bad
+  /// redirect: one is a feature that vanished, the other is a page with a Back
+  /// button. So this returns every provider when it cannot find out, and the
+  /// empty set only when the host says so.
+  Future<Set<OAuthProvider>> enabledProviders();
+
+  /// Adopts a session handed back on a callback URL, if there is one.
+  ///
+  /// Returns null for every ordinary load, which is the common case and not an
+  /// error — the app calls this on boot with whatever URL it was opened at.
+  ///
+  /// **Whatever this returns, the caller must clear the URL afterwards.** The
+  /// tokens arrive in the fragment, and a fragment stays in the address bar,
+  /// in browser history, and in any screenshot taken of either.
+  Future<ShiftSession?> adoptCallback(Uri url);
+
   Future<void> signOut();
 
   /// Metadata only — the secrets themselves never come back.
@@ -250,7 +384,111 @@ abstract class ShiftBackend {
 
   Future<void> deleteProviderKey(String id);
 
+  /// Stores one of SHIFT's own keys, which every paying member spends.
+  ///
+  /// Refused unless the caller is an admin, and refused *server-side* — the
+  /// flag is a column only the server can write, not a claim in a token.
+  /// Throws [BackendProblem.notSignedIn] when the caller is not allowed,
+  /// which is deliberately the same answer an unauthenticated caller gets.
+  Future<void> putPlatformKey({
+    required String provider,
+    required String secret,
+  });
+
+  /// Which providers a membership currently covers. Names only — a member has
+  /// no use for the keys and never sees them.
+  Future<List<String>> includedProviders();
+
+  /// Whether the signed-in account may manage SHIFT's own keys.
+  ///
+  /// Asked of the server rather than read from the token: admin is a column
+  /// only the server can write, and a claim baked into a token that lives for
+  /// an hour on a device would keep working for that hour after it was
+  /// revoked. False whenever the answer is not a clear yes — including when
+  /// the request fails, since a network error is not a promotion.
+  ///
+  /// This gates *presentation only*. The endpoint checks the same column
+  /// itself and refuses regardless, so a client that lied here would gain
+  /// nothing but a form that returns 403.
+  Future<bool> isAdmin();
+
   Future<Membership> membership();
+
+  /// Where to send a provider call that the membership pays for, and what
+  /// authorises it — or null when this account cannot spend one.
+  ///
+  /// Returns the *target and headers* rather than a token, for two reasons.
+  /// The session may need refreshing first, and only this layer knows how; and
+  /// a method that handed back a raw token would invite callers to build their
+  /// own requests with it, which is how a token ends up somewhere it should not
+  /// be. The caller gets something it can only use for this.
+  ///
+  /// Null is an ordinary answer — signed out, no membership, or a provider
+  /// SHIFT does not cover — and means "use your own key, or the mock". The
+  /// server checks entitlement again regardless; this is so the app can decide
+  /// without a round trip, not so the app can be trusted.
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  );
+
+  /// Grants or adjusts a membership. Admin only, checked on the server.
+  ///
+  /// Exists because until payments do, nothing else can make an account paid —
+  /// and the alternative was typing SQL into a phone. [email] names another
+  /// account; omitted, it is the caller's own.
+  Future<void> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  });
+
+  /// Sends one small call through the proxy and reports what came back.
+  ///
+  /// The status matters more than the body: a 404 means the function was never
+  /// deployed, a 402 means it is running and refusing, and from inside a chat
+  /// those look identical. Returns null when there is nothing to ask — no
+  /// backend, or signed out.
+  ///
+  /// [extraHeaders] is what makes this a test rather than a reassurance. A
+  /// probe that sends fewer headers than a real turn triggers a *different*
+  /// CORS preflight, and that is not hypothetical: this reported the proxy
+  /// working while every turn failed, because Anthropic's client sends
+  /// `anthropic-version` and the probe did not. The caller passes the headers
+  /// the real client would, so the browser asks the same question.
+  ///
+  /// It arrives as a parameter rather than being built here because naming a
+  /// provider's wire format is the provider layer's job, and `lib/backend/`
+  /// does not import the app.
+  ///
+  /// **[path] and [body] arrive for exactly that reason, and used not to.**
+  /// They were hardcoded to Claude's `/v1/messages` and sent at whatever
+  /// provider was named — so for the other five the proxy's allowlist refused
+  /// the path, and the one control built to tell these states apart answered
+  /// 403 for a provider that was set up perfectly.
+  Future<({int status, String body})?> probeProxy(
+    String provider, {
+    required String path,
+    required Map<String, dynamic> body,
+    Map<String, String> extraHeaders,
+  });
+
+  /// Asks the deployed proxy which routes it will forward.
+  ///
+  /// The status and body are returned raw, exactly as [probeProxy] does, for
+  /// the same reason: deciding what an answer *means* is a pure function's job,
+  /// and there should be one of those rather than one per surface.
+  ///
+  /// Three answers matter to the caller and all three are statuses. **200** is
+  /// the list. **404** is a server built before this route existed — which is
+  /// itself the finding, not an error, because a server that cannot say what it
+  /// forwards is by definition older than the app asking. **null** is nothing
+  /// answered at all.
+  Future<({int status, String body})?> proxyRoutes();
+
+  /// The host settings that cannot be changed from here. Empty when there is
+  /// no host, or nothing left to do.
+  List<SetupLink> setupLinks();
 
   /// A URL to open to start or manage a subscription. The app never handles
   /// card details; it hands off to the payment provider's own page.

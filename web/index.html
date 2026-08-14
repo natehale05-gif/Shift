@@ -1,78 +1,52 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <!--
-    Without this, mobile browsers lay the page out at a ~980px desktop width and
-    scale it down, which makes the whole app render tiny on a phone. Flutter's
-    bootstrap does not inject one, so it has to live here.
-    `viewport-fit=cover` lets the app paint under iOS safe areas.
-  -->
+
+  <!-- Without this, every phone lays the app out at ~980px and scales it down,
+       so a responsive layout never gets to apply. This was missing from the
+       stock Flutter template in 3.35 and is *still* missing in 3.44 — checked,
+       not assumed. It is the single highest-value line in this file. -->
   <meta name="viewport"
         content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#F5F4EF" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#1A1A1C" media="(prefers-color-scheme: dark)">
+
+  <!-- Which app this is.
+       Two builds are published from this repo and they share a name, an icon
+       and a splash screen, so "which one am I looking at" was not answerable
+       from the page. `tool/verify_site.sh` asserts on this, because the check
+       it replaces — that the base href matches the path — stays true for
+       either app at the root and so could not tell them apart at all.
+       That gap cost three rounds of investigation. -->
+  <meta name="shift-app" content="v2">
+
   <meta name="description"
-        content="SHIFT AI — one studio, every AI tool. A middleware AI that routes your request to the right specialized studio.">
+        content="SHIFT AI — chat, code, images, design, work and notes in one app.">
 
-  <!--
-    iOS meta tags & icons. "Add to Home Screen" does NOT use manifest.json —
-    Safari uses the apple-touch-icon link below, and it has its own rules:
-    the image must be opaque (iOS paints transparent pixels black), full-bleed
-    square (iOS applies its own rounding), and 180x180.
+  <!-- Both, so the browser chrome matches whichever theme the visitor is in.
+       A single theme-color paints the wrong ground for half of them. -->
+  <meta name="theme-color" media="(prefers-color-scheme: light)" content="#FBFAFD">
+  <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0714">
 
-    The filename is versioned on purpose. iOS caches apple-touch-icons by URL
-    and never revalidates, and the service worker caches by URL too — so
-    replacing the bytes behind an existing path leaves both caches serving the
-    old icon indefinitely. Bump the number whenever the icon changes.
-
-    Built by tool/make_apple_touch_icon.py.
-  -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="SHIFT AI">
-  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180.png">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
-  <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
 
   <title>SHIFT AI</title>
   <link rel="manifest" href="manifest.json">
 
   <style>
-    /*
-      Boot splash. Flutter on the web ships a CanvasKit engine plus the compiled
-      app before it can paint its first frame, which on a phone is several
-      seconds of otherwise-blank white page. This markup is plain HTML/CSS, so
-      the browser paints it on the very first frame and the app never looks
-      broken while it loads. `main.dart` removes it once Flutter is up.
-    */
-    html, body {
-      margin: 0;
-      padding: 0;
-      height: 100%;
-      background: #F5F4EF;
-      overflow: hidden;
-    }
+    /* The engine takes seconds to take over on a cold visit and there is no
+       removing that floor in Flutter. What *is* removable is the blank white
+       page in front of it: this paints in one frame, and main.dart takes it
+       down once the first real frame is up. */
+    html, body { margin: 0; padding: 0; height: 100%; background: #FBFAFD; }
     @media (prefers-color-scheme: dark) {
-      html, body { background: #1A1A1C; }
+      html, body { background: #0A0714; }
     }
 
     #boot {
@@ -83,121 +57,104 @@
       align-items: center;
       justify-content: center;
       gap: 20px;
-      background: #F5F4EF;
-      color: #1D1D1F;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-                   Helvetica, Arial, sans-serif;
-      /* Fade out rather than snapping, so the handoff to Flutter is calm. */
-      transition: opacity 340ms ease;
-      z-index: 9999;
+      font: 500 15px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            Helvetica, Arial, sans-serif;
+      color: #6B6280;
+      transition: opacity .28s ease;
     }
-    @media (prefers-color-scheme: dark) {
-      #boot { background: #1A1A1C; color: #F5F5F7; }
-    }
-    #boot.boot--done { opacity: 0; pointer-events: none; }
+    @media (prefers-color-scheme: dark) { #boot { color: #A79CBF; } }
+    #boot.away { opacity: 0; pointer-events: none; }
 
-    .boot__mark {
-      width: 56px;
-      height: 56px;
-      border-radius: 16px;
-      background: linear-gradient(135deg, #AF52DE, #8944CC);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 8px 24px rgba(175, 82, 222, 0.28);
-      animation: boot-pulse 1.8s ease-in-out infinite;
-    }
-    .boot__mark svg { width: 30px; height: 30px; }
-
-    @keyframes boot-pulse {
-      0%, 100% { transform: scale(1); }
-      50%      { transform: scale(1.06); }
+    #boot .mark {
+      width: 76px; height: 76px;
+      border-radius: 22px;
+      background: linear-gradient(140deg, #D648E8, #4A7DFF);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 40px; font-weight: 700; letter-spacing: -1px;
     }
 
-    .boot__name {
-      font-size: 19px;
-      font-weight: 600;
-      letter-spacing: 0.24em;
-      text-indent: 0.24em;
-      margin: 0;
-    }
-
-    .boot__track {
-      width: 168px;
-      height: 3px;
-      border-radius: 999px;
-      background: rgba(0, 0, 0, 0.10);
+    #boot .bar {
+      width: 132px; height: 3px; border-radius: 2px;
+      background: rgba(128, 118, 150, .22);
       overflow: hidden;
     }
-    @media (prefers-color-scheme: dark) {
-      .boot__track { background: rgba(255, 255, 255, 0.14); }
+    #boot .bar i {
+      display: block; width: 40%; height: 100%; border-radius: 2px;
+      background: linear-gradient(90deg, #D648E8, #4A7DFF);
+      animation: slide 1.15s ease-in-out infinite;
     }
-    .boot__fill {
-      width: 40%;
-      height: 100%;
-      border-radius: 999px;
-      background: #AF52DE;
-      animation: boot-slide 1.25s ease-in-out infinite;
-    }
-    @keyframes boot-slide {
+    @keyframes slide {
       0%   { transform: translateX(-100%); }
-      100% { transform: translateX(320%); }
+      100% { transform: translateX(330%); }
     }
-
-    .boot__hint {
-      font-size: 12.5px;
-      opacity: 0.55;
-      margin: 0;
-      text-align: center;
-      padding: 0 24px;
-      max-width: 300px;
-      line-height: 1.45;
-    }
-
-    /* Respect users who ask for less motion. */
+    /* Someone who asked the OS for less motion gets a static bar rather than
+       no feedback at all. */
     @media (prefers-reduced-motion: reduce) {
-      .boot__mark, .boot__fill { animation: none; }
-      #boot { transition: none; }
+      #boot .bar i { animation: none; width: 100%; opacity: .55; }
+    }
+
+    #boot-help { text-align: center; max-width: 28rem; padding: 0 1.5rem; }
+    #boot-help a { font-weight: 600; }
+    #boot-help .detail {
+      margin-top: .75rem;
+      font: 400 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+      opacity: .7;
+      word-break: break-word;
     }
   </style>
 </head>
 <body>
   <div id="boot">
-    <div class="boot__mark" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M12 2.6l1.9 5.1 5.1 1.9-5.1 1.9L12 16.6l-1.9-5.1L5 9.6l5.1-1.9L12 2.6z"
-              fill="#fff"/>
-        <path d="M18.4 14.4l.85 2.25 2.25.85-2.25.85-.85 2.25-.85-2.25-2.25-.85 2.25-.85.85-2.25z"
-              fill="#fff" opacity="0.85"/>
-      </svg>
-    </div>
-    <p class="boot__name">SHIFT AI</p>
-    <div class="boot__track" role="progressbar" aria-label="Loading SHIFT AI">
-      <div class="boot__fill"></div>
-    </div>
-    <p class="boot__hint">Starting up — the first visit loads the engine, then it's cached.</p>
+    <div class="mark">S</div>
+    <div class="bar"><i></i></div>
+    <div id="boot-status">Starting SHIFT AI…</div>
+    <div id="boot-help"></div>
   </div>
 
   <script>
-    // Flutter's service worker serves the PREVIOUS build on the first visit
-    // after a deploy, and only swaps the new one in on the visit after that.
-    // That is normally invisible, but it breaks "Add to Home Screen": Safari
-    // reads the apple-touch-icon link out of whatever HTML it was served, so a
-    // stale index.html pins a stale icon — and iOS then caches that icon by
-    // URL essentially forever.
+    // If the engine never takes over, say so.
     //
-    // Reload once, the moment a new worker takes control, so a visitor is
-    // never more than a beat behind the deployed build. The guard makes the
-    // reload strictly once per page load, so this cannot loop.
-    if ('serviceWorker' in navigator) {
-      var shiftReloading = false;
-      navigator.serviceWorker.addEventListener('controllerchange', function () {
-        if (shiftReloading) return;
-        shiftReloading = true;
-        window.location.reload();
+    // Without this the splash spins forever and the page is indistinguishable
+    // from a slow connection — which is exactly what happened while working out
+    // why the app "wasn't showing up". Measured, not assumed: serving
+    // `main.dart.wasm` with the wrong MIME type makes the loader throw
+    // `WebAssembly.compile` errors and stop, and it does **not** fall back to
+    // the JavaScript build even though one is shipped beside it.
+    //
+    // main.dart removes #boot on its first frame, so this only ever fires when
+    // something genuinely failed.
+    (function () {
+      var errors = [];
+      window.addEventListener('error', function (e) {
+        if (e && e.message) errors.push(e.message);
       });
-    }
+      window.addEventListener('unhandledrejection', function (e) {
+        if (e && e.reason) errors.push(String(e.reason));
+      });
+
+      setTimeout(function () {
+        var boot = document.getElementById('boot');
+        if (!boot || boot.classList.contains('away')) return;
+
+        var wasm = errors.some(function (m) {
+          return m.indexOf('WebAssembly') >= 0 || m.indexOf('wasm') >= 0;
+        });
+
+        document.getElementById('boot-status').textContent =
+          wasm ? 'This browser or host could not start the app engine.'
+               : 'This is taking longer than it should.';
+
+        document.getElementById('boot-help').innerHTML =
+          '<a href="?" style="color:inherit">Reload</a>' +
+          (errors.length
+            ? '<div class="detail">' +
+              errors[0].replace(/[<>&]/g, '') +
+              '</div>'
+            : '');
+      }, 25000);
+    })();
   </script>
+
   <script src="flutter_bootstrap.js" async></script>
 </body>
 </html>

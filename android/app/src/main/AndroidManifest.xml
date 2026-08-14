@@ -1,16 +1,4 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- The app updates itself from its GitHub releases: it needs the network
-         to fetch the APK, and permission to ask the system package installer
-         to install it. Sideloaded builds have no other update path, and this
-         build is debug-signed rather than Play-ready anyway. The user still
-         confirms every install. -->
-    <uses-permission android:name="android.permission.INTERNET"/>
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
-    <!-- Dictation and voice mode. The mic was inert off-web before: the whole
-         feature was a browser API behind a conditional import, so on a phone
-         it did nothing at all. -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-
     <application
         android:label="SHIFT AI"
         android:name="${applicationName}"
@@ -37,19 +25,6 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Exposes the downloaded APK to the package installer as a
-             content:// URI. Android has rejected file:// URIs across app
-             boundaries since Nougat. -->
-        <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="${applicationId}.fileprovider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-            <meta-data
-                android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/file_paths" />
-        </provider>
-
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
@@ -65,15 +40,6 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
-        </intent>
-        <!-- Android 11+ package visibility: without these the speech and
-             text-to-speech services are invisible to the app and both
-             silently report "unavailable" rather than failing loudly. -->
-        <intent>
-            <action android:name="android.speech.RecognitionService"/>
-        </intent>
-        <intent>
-            <action android:name="android.intent.action.TTS_SERVICE"/>
         </intent>
     </queries>
 </manifest>

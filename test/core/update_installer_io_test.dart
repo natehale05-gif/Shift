@@ -2,8 +2,8 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/core/update/update_installer.dart' show InstallOutcome;
-import 'package:shift_ai/core/update/update_installer_io.dart';
+import 'package:shift/core/update/update_installer.dart' show InstallOutcome;
+import 'package:shift/core/update/update_installer_io.dart';
 
 const _executable = 'shift_ai';
 
@@ -26,7 +26,7 @@ List<int> _bundleTarGz({
   for (final name in extra) {
     archive.addFile(ArchiveFile(name, 1, [0]));
   }
-  return GZipEncoder().encode(TarEncoder().encode(archive))!;
+  return GZipEncoder().encode(TarEncoder().encode(archive));
 }
 
 void main() {

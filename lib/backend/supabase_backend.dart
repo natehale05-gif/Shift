@@ -4,7 +4,22 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import 'backend_config.dart';
+import 'setup_probe.dart' show proxyReplyBlocked;
 import 'shift_backend.dart';
+
+/// What a call whose reply never reached Dart can still be pinned down to.
+enum _Blocked {
+  /// The function answered a bare GET, so it exists and something else ate the
+  /// real reply.
+  functionAnswers,
+
+  /// Nothing from the function, but the project is up — the shape a slug the
+  /// host does not hold makes.
+  functionMissing,
+
+  /// Nothing from anything.
+  hostSilent,
+}
 
 /// [ShiftBackend] over Supabase, spoken to as **plain HTTP** rather than
 /// through `supabase_flutter`.
@@ -80,11 +95,14 @@ class SupabaseBackend implements ShiftBackend {
   Future<ShiftSession> signIn({
     required String email,
     required String password,
-  }) async =>
-      _adopt(await _token(
-        {'email': email, 'password': password},
-        'password',
-      ));
+  }) async {
+    final session = _adopt(await _token(
+      {'email': email, 'password': password},
+      'password',
+    ));
+    await _ensureProfile(session);
+    return session;
+  }
 
   @override
   Future<ShiftSession> signUp({
@@ -101,10 +119,155 @@ class SupabaseBackend implements ShiftBackend {
       // Projects with email confirmation on return a user and no token. That
       // is a success, not a failure, and the caller has to be told which it
       // was — so it is an exception carrying the reason rather than a null.
-      throw const BackendException(BackendProblem.credentials,
-          'Check your email to confirm the account, then sign in.');
+      throw BackendException(
+        BackendProblem.confirmationRequired,
+        defaultMessageFor(BackendProblem.confirmationRequired),
+      );
     }
-    return _adopt(parsed);
+    final session = _adopt(parsed);
+    await _ensureProfile(session);
+    return session;
+  }
+
+  @override
+  Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo}) =>
+      Uri.parse('${config.url}/auth/v1/authorize').replace(
+        queryParameters: {
+          'provider': provider.id,
+          'redirect_to': redirectTo.toString(),
+        },
+      );
+
+  @override
+  Future<Set<OAuthProvider>> enabledProviders() async {
+    try {
+      final response = await _http.get(
+        Uri.parse('${config.url}/auth/v1/settings'),
+        headers: _headers(),
+      );
+      if (response.statusCode >= 400) return OAuthProvider.values.toSet();
+
+      final external = (jsonDecode(response.body)
+          as Map<String, dynamic>)['external'] as Map<String, dynamic>?;
+      // A body without `external` is a shape this does not recognise, which is
+      // not the same as a host with nothing enabled. Same rule as a failed
+      // request: do not hide a sign-in on a guess.
+      if (external == null) return OAuthProvider.values.toSet();
+
+      return {
+        for (final provider in OAuthProvider.values)
+          if (external[provider.id] == true) provider,
+      };
+    } catch (_) {
+      return OAuthProvider.values.toSet();
+    }
+  }
+
+  /// Reads a session out of a callback URL's **fragment**.
+  ///
+  /// The tokens come back after the `#`, which is deliberate on the host's part
+  /// and useful on ours: a fragment is never sent to a server, so the access
+  /// token does not appear in the web server's logs the way a query parameter
+  /// would. It does appear in the address bar, which is why the caller clears
+  /// it immediately.
+  ///
+  /// A callback carrying `error` is a real answer — the person pressed cancel,
+  /// or the provider refused — and becomes an exception rather than a silent
+  /// null, because a null here is indistinguishable from an ordinary page load
+  /// and the button would appear to have done nothing at all.
+  @override
+  Future<ShiftSession?> adoptCallback(Uri url) async {
+    final fragment = url.fragment;
+    if (fragment.isEmpty) return null;
+
+    final params = Uri.splitQueryString(fragment);
+
+    if (params['error'] case final error?) {
+      throw BackendException(
+        BackendProblem.credentials,
+        // `access_denied` is what cancelling looks like, and it is not a
+        // failure worth alarming anybody about.
+        error == 'access_denied'
+            ? 'Sign-in was cancelled.'
+            : 'That sign-in did not complete. Try again.',
+        detail: '$error: ${params['error_description'] ?? ''}',
+      );
+    }
+
+    final token = params['access_token'];
+    if (token == null) return null;
+
+    // Built from the fragment rather than from a `/user` round trip: the
+    // account id is in the token's own payload, and one fewer request on the
+    // path back from a redirect is one fewer thing to fail while the app is
+    // still painting its first frame.
+    final expiresIn = int.tryParse(params['expires_in'] ?? '') ?? 3600;
+    final session = ShiftSession(
+      account: ShiftAccount(id: _subjectOf(token) ?? ''),
+      accessToken: token,
+      refreshToken: params['refresh_token'],
+      expiresAt: DateTime.now().add(Duration(seconds: expiresIn)),
+    );
+    if (session.account.id.isEmpty) return null;
+
+    final adopted = _adopt(session);
+    // The same provisioning an email sign-up gets. **Apple hands over a name
+    // exactly once, on the first authorization ever**, so the row has to be
+    // written on this pass or that name is gone for good — there is no API to
+    // ask again.
+    await _ensureProfile(adopted);
+    return adopted;
+  }
+
+  /// The account id out of a JWT's payload.
+  ///
+  /// Not verified here, and it does not need to be: the token is only useful
+  /// if the server accepts it, and the server verifies it on every call. This
+  /// is reading a field, not trusting a claim.
+  static String? _subjectOf(String jwt) {
+    final parts = jwt.split('.');
+    if (parts.length != 3) return null;
+    try {
+      final payload = parts[1];
+      final padded = payload.padRight((payload.length + 3) ~/ 4 * 4, '=');
+      final json = jsonDecode(utf8.decode(base64Url.decode(padded)));
+      return (json as Map<String, dynamic>)['sub'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Creates the account's own `profiles` row if it has none.
+  ///
+  /// Nothing else does. The schema deliberately does not reference the auth
+  /// tables — that is what lets the identity provider be swapped — so there is
+  /// no trigger to hang this on, and without it an account signs up
+  /// successfully and then has no profile: no display name, and no row for
+  /// `is_admin` to be read from.
+  ///
+  /// `ignore-duplicates` rather than an upsert on purpose: an upsert would
+  /// need UPDATE on `email`, which a member does not have and should not,
+  /// since it is the address the account was confirmed at. Existing row, do
+  /// nothing, and the migration's column grant means this insert cannot carry
+  /// `is_admin` even if this code tried to.
+  ///
+  /// Failure is swallowed: someone who just typed the right password should be
+  /// signed in whether or not a bookkeeping row was written. The next sign-in
+  /// tries again.
+  Future<void> _ensureProfile(ShiftSession session) async {
+    try {
+      await _http.post(
+        Uri.parse('${config.url}/rest/v1/profiles'),
+        headers: _headers(
+          token: session.accessToken,
+          prefer: 'resolution=ignore-duplicates,return=minimal',
+        ),
+        body: jsonEncode({
+          'id': session.account.id,
+          'email': session.account.email,
+        }),
+      );
+    } catch (_) {}
   }
 
   @override
@@ -191,8 +354,42 @@ class SupabaseBackend implements ShiftBackend {
       throw const BackendException(
           BackendProblem.notSignedIn, 'Your session expired. Sign in again.');
     }
-    final renewed = _adopt(await _token({'refresh_token': refresh}, 'refresh_token'));
-    return renewed.accessToken;
+    return (await _refreshOnce(refresh)).accessToken;
+  }
+
+  /// The in-flight refresh, so concurrent callers join it instead of each
+  /// starting their own.
+  Future<ShiftSession>? _refreshing;
+
+  /// Renews the session, at most once at a time.
+  ///
+  /// A refresh token is single-use: the server rotates it and forgets the one
+  /// just spent. Two callers that both find the token expired would spend the
+  /// *same* refresh token twice, and the second spend is refused — so one
+  /// caller fails with what reads as a credentials problem, and whichever
+  /// reply lands last wins, which can store a session whose refresh token is
+  /// already dead. The next launch then signs the member out for a reason
+  /// nothing on screen can explain.
+  ///
+  /// Concurrent is the normal case here, not an edge one. `AccountStore
+  /// .refresh()` asks for membership, keys, included providers and admin
+  /// through one `Future.wait`; `JobRunner` runs a turn's independent steps the
+  /// same way, and every managed step resolves its proxy endpoint through
+  /// [_freshToken]. So an expired token plus one ordinary multi-step turn is
+  /// already several refreshes racing — and the losers fall back to the
+  /// member's own key, which a member spending a membership may not have.
+  Future<ShiftSession> _refreshOnce(String refreshToken) {
+    final pending = _refreshing;
+    if (pending != null) return pending;
+
+    final attempt =
+        _token({'refresh_token': refreshToken}, 'refresh_token').then(_adopt);
+    _refreshing = attempt;
+    // Cleared however it ends. A failed refresh that stayed cached would pin
+    // every later call to the same failure for the life of the app.
+    return attempt.whenComplete(() {
+      if (identical(_refreshing, attempt)) _refreshing = null;
+    });
   }
 
   // ------------------------------------------------------------ key vault
@@ -225,9 +422,10 @@ class SupabaseBackend implements ShiftBackend {
     // Through an edge function, never straight into the table: the row holds
     // ciphertext, and the key that encrypts it is not something a client is
     // allowed to hold.
-    final json = await _post(
+    final json = await _postFunction(
       Uri.parse('${config.url}/functions/v1/provider-key'),
       {'provider': provider, 'secret': secret},
+      slug: 'provider-key',
     );
     return ProviderKeyInfo(
       id: json['id'] as String? ?? '',
@@ -242,6 +440,208 @@ class SupabaseBackend implements ShiftBackend {
   Future<void> deleteProviderKey(String id) => _delete(
         Uri.parse('${config.url}/rest/v1/provider_keys?id=eq.$id'),
       );
+
+  @override
+  Future<void> putPlatformKey({
+    required String provider,
+    required String secret,
+  }) async {
+    // Same endpoint as a personal key, with a scope. One encrypting front door
+    // rather than two — a second one is a second place to get the crypto or
+    // the authorization wrong.
+    await _postFunction(
+      Uri.parse('${config.url}/functions/v1/provider-key'),
+      {'provider': provider, 'secret': secret, 'scope': 'platform'},
+      slug: 'provider-key',
+    );
+  }
+
+  @override
+  Future<List<String>> includedProviders() async {
+    final rows = await _get(
+      Uri.parse('${config.url}/rest/v1/included_providers?select=provider'),
+      allowFailure: true,
+    );
+    return [
+      for (final row in rows)
+        if (row is Map<String, dynamic> && row['provider'] is String)
+          row['provider'] as String,
+    ];
+  }
+
+  @override
+  Future<bool> isAdmin() async {
+    // No `id` filter needed: row security already narrows `profiles` to the
+    // caller's own row, so this asks "am I an admin" in the only way the
+    // database can answer it.
+    final rows = await _get(
+      Uri.parse('${config.url}/rest/v1/profiles?select=is_admin'),
+      allowFailure: true,
+    );
+    return rows.isNotEmpty &&
+        rows.first is Map<String, dynamic> &&
+        (rows.first as Map<String, dynamic>)['is_admin'] == true;
+  }
+
+  @override
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  ) async {
+    if (_session == null) return null;
+    try {
+      // Refreshed here rather than at the call site: a chat turn can start
+      // minutes after the screen was opened, and a token that dies in flight
+      // reads as the provider failing.
+      final token = await _freshToken();
+      return (
+        base: Uri.parse('${config.url}/functions/v1/provider-proxy/$provider'),
+        headers: {
+          'apikey': config.anonKey,
+          'Authorization': 'Bearer $token',
+        },
+      );
+    } on BackendException {
+      // Signed out, or a refresh that failed. Falling back to the member's own
+      // key is better than failing the turn.
+      return null;
+    }
+  }
+
+  @override
+  Future<void> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  }) async {
+    await _postFunction(
+      Uri.parse('${config.url}/functions/v1/admin-membership'),
+      {
+        if (email != null && email.trim().isNotEmpty) 'email': email.trim(),
+        'status': status,
+        'plan': plan,
+        'ceilingMicros': ceilingMicros,
+      },
+      slug: 'admin-membership',
+    );
+  }
+
+  @override
+  Future<({int status, String body})?> probeProxy(
+    String provider, {
+    required String path,
+    required Map<String, dynamic> body,
+    Map<String, String> extraHeaders = const {},
+  }) async {
+    if (_session == null) return null;
+
+    try {
+      final token = await _freshToken();
+      final response = await _http.post(
+        Uri.parse('${config.url}/functions/v1/provider-proxy/$provider$path'),
+        // The real client's headers too, not just ours. A probe that sends
+        // fewer headers triggers a different CORS preflight, and that is how
+        // this card reported the proxy working while every turn failed.
+        headers: {..._headers(token: token), ...extraHeaders},
+        body: jsonEncode(body),
+      );
+      return (status: response.statusCode, body: response.body);
+    } on BackendException {
+      return null;
+    } catch (_) {
+      // The reply never reached Dart. Which of three things that was is
+      // *asked*, not assumed — see [_afterBlockedCall].
+      return switch (await _afterBlockedCall('provider-proxy')) {
+        _Blocked.functionMissing => (status: 404, body: ''),
+        _Blocked.functionAnswers => (status: proxyReplyBlocked, body: ''),
+        // Genuinely nothing answered. The caller renders "could not reach the
+        // server", which is the finding rather than a shrug.
+        _Blocked.hostSilent => null,
+      };
+    }
+  }
+
+  @override
+  Future<({int status, String body})?> proxyRoutes() async {
+    if (_session == null) return null;
+
+    try {
+      final token = await _freshToken();
+      final response = await _http.get(
+        Uri.parse('${config.url}/functions/v1/provider-proxy/_shift/routes'),
+        headers: _headers(token: token),
+      );
+      return (status: response.statusCode, body: response.body);
+    } on BackendException {
+      return null;
+    } catch (_) {
+      // Same recovery as [probeProxy], and needed for the same reason: the
+      // functions host answers 404 for a slug it does not hold, and that 404
+      // carries no CORS header, so a browser reports it as silence. Here the
+      // 404 is not an error to be swallowed — it is the answer. A server that
+      // does not know this route is a server older than this check.
+      //
+      // No three-way here: a deployed build that answers this route at all
+      // answers it with CORS headers, so a blocked reply means the route is
+      // not there. Both readings land on `older`, which is the same sentence.
+      if (await _hostIsReachable()) return (status: 404, body: '');
+      return null;
+    }
+  }
+
+  /// The project ref, which is the first path segment of the project URL.
+  ///
+  /// Derived rather than stored so there is one place the project is named.
+  String get _projectRef {
+    final host = Uri.parse(config.url).host;
+    final dot = host.indexOf('.');
+    return dot > 0 ? host.substring(0, dot) : host;
+  }
+
+  @override
+  List<SetupLink> setupLinks() => [
+        // The Site URL link used to head this list. Dropped, not forgotten:
+        // sign-in works, so it is not a blocker, and it was sitting above the
+        // two that are — on a card whose whole job is to be the shortest path
+        // to a fix. It comes back the day a confirmation email points at
+        // localhost again.
+
+        // These two are what keeps the deployed functions in step with the
+        // app, with nobody in the loop. The titles say what they buy — but
+        // note they buy more than "future" changes: this job has never run,
+        // so every deploy so far has been by hand through whichever tool
+        // happened to be connected, and the live proxy spent a week five
+        // commits behind while the app sent it a route it had never heard of.
+        // The Server card is what makes that visible; these are what fix it.
+        SetupLink(
+          title: 'So the server keeps up with the app: an access token',
+          action: 'Add secret',
+          url: Uri.parse(
+              '${BackendConfig.repoUrl}/settings/secrets/actions/new'),
+          copyLabel: 'Secret name',
+          copyValue: 'SUPABASE_ACCESS_TOKEN',
+        ),
+        SetupLink(
+          title: 'So the server keeps up with the app: the project ref',
+          action: 'Add variable',
+          url: Uri.parse(
+              '${BackendConfig.repoUrl}/settings/variables/actions/new'),
+          copyLabel: 'Project ref',
+          copyValue: _projectRef,
+        ),
+        // The third, added after a migration sat in the repository — correct
+        // and tested — while the live schema went without it and the feature
+        // it unblocked looked broken. CI proves the migrations; this is what
+        // lets CI apply them.
+        SetupLink(
+          title: 'So schema changes apply themselves: the database password',
+          action: 'Add secret',
+          url: Uri.parse(
+              '${BackendConfig.repoUrl}/settings/secrets/actions/new'),
+          copyLabel: 'Secret name',
+          copyValue: 'SUPABASE_DB_PASSWORD',
+        ),
+      ];
 
   // ----------------------------------------------------------- membership
 
@@ -282,9 +682,10 @@ class SupabaseBackend implements ShiftBackend {
 
   @override
   Future<Uri> billingPortal({String? plan}) async {
-    final json = await _post(
+    final json = await _postFunction(
       Uri.parse('${config.url}/functions/v1/billing-portal'),
-      {if (plan != null) 'plan': plan},
+      {'plan': ?plan},
+      slug: 'billing-portal',
     );
     final url = json['url'] as String?;
     if (url == null) {
@@ -363,7 +764,7 @@ class SupabaseBackend implements ShiftBackend {
         'apikey': config.anonKey,
         if (token != null) 'Authorization': 'Bearer $token',
         'Content-Type': 'application/json',
-        if (prefer != null) 'Prefer': prefer,
+        'Prefer': ?prefer,
       };
 
   Future<List<dynamic>> _get(Uri uri, {bool allowFailure = false}) async {
@@ -438,6 +839,101 @@ class SupabaseBackend implements ShiftBackend {
       rethrow;
     } catch (e) {
       throw _offline(e);
+    }
+  }
+
+  /// Like [_post], but for an edge function rather than a table.
+  ///
+  /// The two fail differently and it matters. A function that was never
+  /// deployed is answered 404 by the functions host — but that 404 carries no
+  /// CORS header, so a browser withholds it and the app sees only "the request
+  /// failed", which is the same thing it sees when the network is down. Saying
+  /// "check your connection" to someone whose connection is fine is how the
+  /// Setup card's own Grant button sent its author looking at their wifi.
+  ///
+  /// So on a transport failure this asks further questions rather than
+  /// guessing — see [_afterBlockedCall].
+  Future<Map<String, dynamic>> _postFunction(
+    Uri uri,
+    Map<String, dynamic> body, {
+    required String slug,
+  }) async {
+    try {
+      return await _post(uri, body);
+    } on BackendException catch (e) {
+      if (e.problem != BackendProblem.unavailable) rethrow;
+      throw await _functionFailure(e, slug);
+    }
+  }
+
+  /// Which of "not deployed" and "not reachable" the failure actually was.
+  Future<BackendException> _functionFailure(
+      BackendException original, String slug) async {
+    return switch (await _afterBlockedCall(slug)) {
+      _Blocked.functionMissing => BackendException(
+          BackendProblem.notDeployed,
+          'The $slug function is not deployed on the server yet.',
+          detail: original.detail,
+        ),
+      _Blocked.functionAnswers => BackendException(
+          BackendProblem.replyBlocked,
+          'The $slug function is deployed, but the browser blocked its reply. '
+          'Try another browser, or turn off any content blocker for this site.',
+          detail: original.detail,
+        ),
+      // Nothing was learned, so the original offline sentence stands — a
+      // diagnostic that guesses is worse than one that says it does not know.
+      _Blocked.hostSilent => original,
+    };
+  }
+
+  /// What a request that never reached Dart can still be made to reveal.
+  ///
+  /// **This used to be a two-way and the missing third answer was the bug.**
+  /// A function that was never deployed is answered 404 by the functions host,
+  /// and that 404 carries no CORS header, so a browser withholds it and the
+  /// app sees only "the request failed" — indistinguishable from the network
+  /// being down. The old code confirmed the project was up and then read every
+  /// such silence as a missing function, because a missing function was the
+  /// only cause it knew of.
+  ///
+  /// It is not the only cause. Asked directly, the live project reports
+  /// `provider-proxy` **ACTIVE** — deployed the whole time this app was telling
+  /// its owner to deploy it, and sending them to change repository settings
+  /// that were never the fault.
+  ///
+  /// So the difference is *asked*, with a question whose two answers cannot be
+  /// confused: a bare **GET of the function's own URL**. A deployed function
+  /// answers it — 405, 401, anything — through its own CORS headers, which the
+  /// browser hands over. A slug the host does not hold answers 404 without
+  /// them, and stays silent exactly as the original call did.
+  Future<_Blocked> _afterBlockedCall(String slug) async {
+    if (await _answers('${config.url}/functions/v1/$slug')) {
+      return _Blocked.functionAnswers;
+    }
+    // Only now is silence worth interpreting, and only if the project itself
+    // is up: two silences with nothing answering is an offline device.
+    return await _hostIsReachable()
+        ? _Blocked.functionMissing
+        : _Blocked.hostSilent;
+  }
+
+  /// Whether the project answers at all, asked of an endpoint that always
+  /// exists and always sends CORS headers.
+  Future<bool> _hostIsReachable() => _answers('${config.url}/rest/v1/');
+
+  /// Whether anything at all came back from [url].
+  ///
+  /// The status is deliberately ignored: 200, 401, 404 and 405 all prove the
+  /// same single thing, which is that something is there to answer.
+  Future<bool> _answers(String url) async {
+    try {
+      await _http
+          .get(Uri.parse(url), headers: _headers())
+          .timeout(const Duration(seconds: 5));
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

@@ -1,13 +1,13 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shift_ai/core/update/update_check.dart';
-import 'package:shift_ai/data/persistence/persistence_service.dart';
-import 'package:shift_ai/data/stores/update_store.dart';
+import 'package:shift/core/update/update_check.dart';
+import 'package:shift/data/kv_store.dart';
+import 'package:shift/data/update_store.dart';
 
 String _releaseJson(String tag) => jsonEncode({
       'tag_name': tag,
@@ -19,15 +19,19 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late int requests;
+  // A real file, not a fake map: the store persists its throttle and its
+  // dismissal, and the tests below reload from it. A fake that forgot would
+  // make "the throttle survives a restart" untestable, which is the only
+  // interesting thing about the throttle.
+  late Directory dir;
 
   /// A store running [version], answering every check with [tag].
   Future<UpdateStore> store(
     String version, {
     String tag = 'v0.1.1',
     int statusCode = 200,
-    PersistenceService? persistence,
+    KvStore? kv,
   }) async {
-    SharedPreferences.setMockInitialValues({});
     PackageInfo.setMockInitialValues(
       appName: 'SHIFT AI',
       packageName: 'club.shiftai.app',
@@ -40,14 +44,18 @@ void main() {
       return http.Response(_releaseJson(tag), statusCode);
     });
     final s = UpdateStore(
-      persistence: persistence ?? PersistenceService(),
+      kv ?? KvStore(path: '${dir.path}/kv.json'),
       check: UpdateCheck(clientFactory: () => client),
     );
     await s.load();
     return s;
   }
 
-  setUp(() => requests = 0);
+  setUp(() {
+    requests = 0;
+    dir = Directory.systemTemp.createTempSync('shift_update_test');
+  });
+  tearDown(() => dir.deleteSync(recursive: true));
 
   test('reads the running version off the packaged manifest', () async {
     final s = await store('0.1.0');
@@ -85,8 +93,8 @@ void main() {
   });
 
   test('dismissing hides this version only', () async {
-    final persistence = PersistenceService();
-    final s = await store('0.1.0', tag: 'v0.1.1', persistence: persistence);
+    final kv = KvStore(path: '${dir.path}/kv.json');
+    final s = await store('0.1.0', tag: 'v0.1.1', kv: kv);
     await s.checkNow();
     expect(s.shouldPrompt, isTrue);
 
@@ -95,20 +103,21 @@ void main() {
     expect(s.status, UpdateStatus.available, reason: 'Settings still reports it');
 
     // A later release prompts again rather than inheriting the dismissal.
-    final next = await store('0.1.0', tag: 'v0.2.0', persistence: persistence);
+    final next =
+        await store('0.1.0', tag: 'v0.2.0', kv: KvStore(path: '${dir.path}/kv.json'));
     await next.checkNow();
     expect(next.shouldPrompt, isTrue);
   });
 
   test('an automatic check is throttled but the manual one is not', () async {
-    final persistence = PersistenceService();
-    final s = await store('0.1.0', persistence: persistence);
+    final s = await store('0.1.0', kv: KvStore(path: '${dir.path}/kv.json'));
 
     await s.checkIfDue();
     expect(requests, 1);
 
     // Same day, fresh launch: the stored timestamp suppresses the request.
-    final relaunched = await store('0.1.0', persistence: persistence);
+    final relaunched =
+        await store('0.1.0', kv: KvStore(path: '${dir.path}/kv.json'));
     await relaunched.checkIfDue();
     expect(requests, 1, reason: 'ten launches a day cost one request');
 
@@ -117,14 +126,14 @@ void main() {
   });
 
   test('a stale timestamp lets the automatic check through', () async {
-    final persistence = PersistenceService();
-    await persistence.saveUpdateState({
-      'checkedAt': DateTime.now()
-          .subtract(UpdateStore.checkInterval * 2)
-          .toIso8601String(),
-    });
+    final stale = KvStore(path: '${dir.path}/kv.json');
+    await stale.load();
+    await stale.put(
+      'update.checkedAt',
+      DateTime.now().subtract(UpdateStore.checkInterval * 2).toIso8601String(),
+    );
 
-    final s = await store('0.1.0', persistence: persistence);
+    final s = await store('0.1.0', kv: KvStore(path: '${dir.path}/kv.json'));
     await s.checkIfDue();
     expect(requests, 1);
   });

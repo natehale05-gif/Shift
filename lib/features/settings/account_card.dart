@@ -1,169 +1,110 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_theme.dart';
-import '../../data/stores/account_store.dart';
-import '../account/sign_in_sheet.dart';
+import '../../core/design/metrics.dart';
+import '../../core/design/palette.dart';
+import '../../data/account_store.dart';
+import '../../shell/sign_in_gate.dart';
 
-/// The account surface in Settings: sign in, see the membership, sign out.
+/// Who is signed in, and what the account currently buys.
 ///
-/// Renders nothing at all when no server is configured. That is not a
-/// degraded state — it is what every build has been so far and what the public
-/// demo stays. Offering a sign-in that cannot work would be worse than not
-/// mentioning accounts.
-class AccountCard extends StatelessWidget {
+/// **Signing in is not here.** [SignInGate] stands in front of the whole app,
+/// so nobody signed out ever reaches Settings — a form on this card would be a
+/// second way in that nothing could ever open. The card is signed-in only, and
+/// its one control that changes state is Sign out.
+///
+/// **Renders nothing when the build has no server behind it.** That build is
+/// not gated, so it is the one case where a signed-out person can be looking
+/// at this — and there is nothing to sign in to, so there is nothing to show.
+class AccountCard extends StatefulWidget {
   const AccountCard({super.key});
 
   @override
+  State<AccountCard> createState() => _AccountCardState();
+}
+
+class _AccountCardState extends State<AccountCard> {
+  @override
   Widget build(BuildContext context) {
     final store = context.watch<AccountStore>();
-    if (!store.isConfigured) return const SizedBox.shrink();
 
-    final theme = Theme.of(context);
-    final colors = theme.extension<AppSemanticColors>()!;
+    // Signed out means either a build with no host, or the one frame between
+    // Sign out and the gate taking the screen back. Neither wants a card
+    // describing an account that is not there.
+    if (!store.isConfigured || !store.isSignedIn) return const SizedBox.shrink();
 
-    return Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Account', style: theme.textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.sm),
-            switch (store.phase) {
-              // Not "signed out" — we have not looked yet. Saying the wrong
-              // one for half a second is how an app tells you you are logged
-              // out every time it launches.
-              AccountPhase.checking => Row(
-                  children: [
-                    const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Text('Checking…',
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: colors.textSecondary)),
-                  ],
-                ),
-              AccountPhase.signedIn => _SignedIn(store: store),
-              _ => _SignedOut(store: store),
-            },
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: Space.lg),
+      decoration: BoxDecoration(
+        color: c.surfaceRaised,
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: c.border),
+      ),
+      padding: const EdgeInsets.all(Space.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Account', style: text.titleMedium?.copyWith(color: c.text)),
+          const SizedBox(height: Space.xxs),
+
+          ..._signedIn(store, c, text),
+
+          // Signed in, the only failure this card can report is a sign-out or
+          // a refresh that did not work.
+          if (store.problem case final problem?) ...[
+            const SizedBox(height: Space.sm),
+            Text(problem, style: text.bodySmall?.copyWith(color: c.danger)),
           ],
-        ),
+        ],
       ),
     );
   }
-}
 
-class _SignedOut extends StatelessWidget {
-  final AccountStore store;
-  const _SignedOut({required this.store});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<AppSemanticColors>()!;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Sign in to keep your provider keys on the server instead of this '
-          'device, and to use a membership. Everything works without one.',
-          style:
-              theme.textTheme.bodySmall?.copyWith(color: colors.textSecondary),
-        ),
-        const SizedBox(height: AppSpacing.md),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton(
-            onPressed: () => showSignInSheet(context),
-            child: const Text('Sign in'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SignedIn extends StatelessWidget {
-  final AccountStore store;
-  const _SignedIn({required this.store});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<AppSemanticColors>()!;
+  List<Widget> _signedIn(AccountStore store, ShiftColors c, TextTheme text) {
     final membership = store.membership;
+    return [
+      Text(
+        store.account?.email ?? 'Signed in',
+        style: text.bodyMedium?.copyWith(color: c.textMuted),
+      ),
+      const SizedBox(height: Space.sm),
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                store.account?.email ?? 'Signed in',
-                style: theme.textTheme.bodyMedium,
-                overflow: TextOverflow.ellipsis,
-              ),
+      // The plan and the meter together. Either alone misleads: spend with no
+      // ceiling looks unbounded, a ceiling with no spend looks unused.
+      Text(
+        membership.isActive
+            ? '${membership.plan ?? 'Plan'} · '
+                '\$${(membership.spentMicros / 1000000).toStringAsFixed(2)} of '
+                '\$${(membership.ceilingMicros / 1000000).toStringAsFixed(2)} used'
+            : 'No plan. Turns use the keys on this device.',
+        style: text.bodySmall?.copyWith(color: c.textMuted),
+      ),
+
+      const SizedBox(height: Space.md),
+      Row(
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+            child: TextButton(
+              onPressed: store.isBusy ? null : store.signOut,
+              child: Text('Sign out',
+                  style: text.labelLarge?.copyWith(color: c.textMuted)),
             ),
-            TextButton(
-              onPressed: store.signOut,
-              child: const Text('Sign out'),
-            ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          membership.isActive
-              ? '${membership.plan ?? 'Member'} · '
-                  '${_dollars(membership.spentMicros)} of '
-                  '${_dollars(membership.ceilingMicros)} used this month'
-              : 'No membership — SHIFT AI uses the keys you add.',
-          style:
-              theme.textTheme.bodySmall?.copyWith(color: colors.textSecondary),
-        ),
-        if (membership.isActive) ...[
-          const SizedBox(height: AppSpacing.sm),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(AppSpacing.radiusSm),
-            child: LinearProgressIndicator(
-              value: membership.fractionUsed,
-              minHeight: 6,
-              backgroundColor: colors.surfaceAlt,
+          ),
+          const Spacer(),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+            child: TextButton(
+              onPressed: store.isBusy ? null : store.refresh,
+              child: Text('Refresh',
+                  style: text.labelLarge?.copyWith(color: c.accent)),
             ),
           ),
         ],
-        if (store.serverKeys.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.md),
-          Text(
-            'Keys on the server',
-            style: theme.textTheme.labelMedium,
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          for (final key in store.serverKeys)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Text(
-                // The last four is all the server will ever tell a client
-                // about a stored key, which is the point of storing it there.
-                '${key.provider} · ····${key.lastFour}'
-                '${key.managed ? ' · included' : ''}',
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: colors.textSecondary),
-              ),
-            ),
-        ],
-      ],
-    );
+      ),
+    ];
   }
-
-  /// Micros are millionths of a dollar; people read dollars.
-  static String _dollars(int micros) =>
-      '\$${(micros / 1000000).toStringAsFixed(2)}';
 }

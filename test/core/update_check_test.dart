@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:shift_ai/core/update/update_check.dart';
+import 'package:shift/core/update/update_check.dart';
 
 String _releaseJson({
   String tag = 'v0.1.1',

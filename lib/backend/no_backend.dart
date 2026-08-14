@@ -45,6 +45,21 @@ class NoBackend implements ShiftBackend {
   }) async =>
       throw _unconfigured;
 
+  /// Null rather than a throw, in both cases. There is no host to sign in to,
+  /// and the caller's question — "is there somewhere to send them?", "did they
+  /// come back with a session?" — has a true answer of "no" either way. A throw
+  /// would make the boot path handle an exception on every ordinary load.
+  @override
+  Uri? oauthUrl(OAuthProvider provider, {required Uri redirectTo}) => null;
+
+  /// Empty, and here the empty set is the truth rather than a failure to ask:
+  /// there is no host, so nothing is configured on one.
+  @override
+  Future<Set<OAuthProvider>> enabledProviders() async => const {};
+
+  @override
+  Future<ShiftSession?> adoptCallback(Uri url) async => null;
+
   @override
   Future<void> signOut() async {}
 
@@ -60,6 +75,49 @@ class NoBackend implements ShiftBackend {
 
   @override
   Future<void> deleteProviderKey(String id) async => throw _unconfigured;
+
+  @override
+  Future<void> putPlatformKey({
+    required String provider,
+    required String secret,
+  }) async =>
+      throw _unconfigured;
+
+  @override
+  Future<List<String>> includedProviders() async => const [];
+
+  @override
+  Future<bool> isAdmin() async => false;
+
+  @override
+  Future<void> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  }) async =>
+      throw _unconfigured;
+
+  @override
+  Future<({int status, String body})?> probeProxy(
+    String provider, {
+    required String path,
+    required Map<String, dynamic> body,
+    Map<String, String> extraHeaders = const {},
+  }) async =>
+      null;
+
+  @override
+  Future<({int status, String body})?> proxyRoutes() async => null;
+
+  @override
+  List<SetupLink> setupLinks() => const [];
+
+  @override
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  ) async =>
+      null;
 
   @override
   Future<Membership> membership() async => Membership.none;

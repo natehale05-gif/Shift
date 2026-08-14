@@ -1,4 +1,14 @@
-name: Deploy Flutter web to GitHub Pages
+# One GitHub Pages site, one app.
+#
+#   https://natehale05-gif.github.io/Shift/   the app
+#
+# It used to build two: v1 at the root and the rebuild under /v2/, then the
+# other way round after the swap. v1 has been deleted, so both of those jobs
+# and the assembly that arranged them are gone with it. What is left of that
+# arrangement is one redirect — /Shift/v2/ is in this repo's history, in the
+# README and in a browser history or two, and leaving it to 404 would trade one
+# wrong destination for another.
+name: Deploy to GitHub Pages
 
 on:
   push:
@@ -25,54 +35,80 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
-          flutter-version: 3.35.5
+          flutter-version: 3.44.9
 
-      - name: Install dependencies
-        run: flutter pub get
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: python3 tool/scan_conditional_imports.py
+      - run: python3 tool/scan_backend_boundary.py
+      - run: python3 tool/scan_proxy_providers.py
 
-      - name: Analyze
-        run: flutter analyze
-
-      - name: Run tests
-        run: flutter test
-
-      # The analyzer only resolves the default branch of a conditional import,
-      # so a stale `if (dart.library.html)` path passes analysis and fails only
-      # at build. And an interface alone does not keep a backend swappable —
-      # one direct import from a widget re-welds it, quietly.
-      - name: Check conditional imports and the backend boundary
-        run: |
-          python3 tool/scan_conditional_imports.py
-          python3 tool/scan_backend_boundary.py
-
-      # --no-web-resources-cdn bundles CanvasKit locally instead of loading it
-      # from gstatic, so the app boots even where that CDN is blocked or slow —
-      # consistent with the app's CDN-free design (bundled fonts + mermaid).
+      # The base href has to match where the app is actually served from, or
+      # every asset request 404s against the site root.
+      #
+      # `--no-web-resources-cdn` bundles the engine instead of fetching it from
+      # gstatic at runtime — a third-party request on first paint, and a build
+      # that fails closed offline.
       - name: Build web
-        # SHIFT_SUPABASE_URL and SHIFT_SUPABASE_ANON_KEY are public by
-        # design — they ship inside the downloaded app, and row security is
-        # what protects the data, not their secrecy. They are repository
-        # *variables* rather than secrets for exactly that reason: a secret
-        # here would imply a protection it does not provide, and GitHub masks
-        # secrets in logs, which makes a misconfigured build harder to debug
-        # for no gain. With them unset the app builds on NoBackend and works
-        # signed out, which is what the public demo does.
         run: |
-          flutter build web --release --no-web-resources-cdn \
-            --base-href "/${{ github.event.repository.name }}/" \
-            --dart-define=SHIFT_SUPABASE_URL="${{ vars.SHIFT_SUPABASE_URL }}" \
-            --dart-define=SHIFT_SUPABASE_ANON_KEY="${{ vars.SHIFT_SUPABASE_ANON_KEY }}"
+          flutter build web --wasm --release --no-web-resources-cdn \
+            --base-href "/${{ github.event.repository.name }}/"
 
-      # Belt-and-suspenders SPA fallback. The app itself never changes the
-      # browser URL (single-route IndexedStack navigation), so this normally
-      # shouldn't matter, but it protects against a stray deep link 404-ing
-      # on GitHub Pages' static hosting.
-      - name: Add SPA fallback
-        run: cp build/web/index.html build/web/404.html
+      - name: Assert the shipped HTML is actually shippable
+        run: |
+          set -euo pipefail
+
+          grep -q 'name="viewport"' build/web/index.html \
+            || { echo "::error::no viewport meta tag — every phone will render at ~980px"; exit 1; }
+
+          grep -q '<base href="/${{ github.event.repository.name }}/"' build/web/index.html \
+            || { echo "::error::wrong base href — every asset will 404 under the subpath"; exit 1; }
+
+          grep -q '"useLocalCanvasKit":true' build/web/flutter_bootstrap.js \
+            || { echo "::error::build config does not use a local engine — it will fetch from gstatic at runtime"; exit 1; }
+
+          test -f build/web/canvaskit/skwasm.wasm \
+            || { echo "::error::the engine is not in the build output"; exit 1; }
+
+      - name: Assemble the site
+        run: |
+          set -euo pipefail
+          rm -rf site && cp -r build/web site
+
+          # A 404 that looks like a 404.
+          #
+          # This used to be `cp site/index.html site/404.html`, an SPA
+          # fallback, and it was how "/Shift/v2/ shows the old app" reached a
+          # phone and stayed unexplained for days: Actions-deployed Pages
+          # serves the site-root 404 for every missing path, so a missing page
+          # answered with a working app's HTML and booted it. The app does not
+          # rewrite its own URL, so the fallback was never load-bearing. The
+          # failure mode it created was.
+          cp .github/pages/404.html site/404.html
+
+          # The old address, kept alive rather than left to 404.
+          mkdir -p site/v2
+          cat > site/v2/index.html <<'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <meta http-equiv="refresh" content="0; url=/Shift/">
+            <title>SHIFT AI moved here</title>
+          </head>
+          <body style="font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:2rem">
+            <p>SHIFT AI is now at <a href="/Shift/">/Shift/</a>.</p>
+          </body>
+          </html>
+          HTML
+
+          echo "site $(du -sh site | cut -f1)"
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: site
 
   deploy:
     needs: build
@@ -80,6 +116,24 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Everything above this job checks the *artifact*. All of it passed while
+  # "the site shows the old app" was live on a phone, because none of it can
+  # see the published site — and the sandbox those checks were written in
+  # cannot reach *.github.io, which was allowed to stand as "unverifiable" when
+  # this runner has no such restriction and was simply never asked.
+  #
+  # So: ask. Each of `verify_site.sh`'s assertions was broken on purpose
+  # against a local replica of this tree before it was trusted here.
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify the live site
+        run: tool/verify_site.sh "${{ needs.deploy.outputs.url }}"

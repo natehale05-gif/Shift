@@ -1,152 +1,203 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'core/design/theme.dart';
 import 'backend/backend_config.dart';
 import 'backend/no_backend.dart';
 import 'backend/shift_backend.dart';
 import 'backend/supabase_backend.dart';
-import 'core/shell/home_shell.dart';
-import 'features/memory/memory_service.dart';
-import 'turn/backends/mock_backend.dart';
-import 'data/persistence/persistence_service.dart';
-import 'turn/backends/live_backend.dart';
-import 'data/stores/account_store.dart';
-import 'data/stores/api_keys_store.dart';
-import 'data/stores/app_settings_store.dart';
-import 'core/state/artifact_panel_store.dart';
-import 'data/stores/conversation_store.dart';
-import 'data/stores/memory_store.dart';
-import 'data/stores/styles_store.dart';
-import 'data/stores/usage_store.dart';
-import 'data/stores/ecopay_calculator_store.dart';
-import 'data/stores/project_store.dart';
-import 'data/stores/update_store.dart';
-import 'data/stores/user_prefs_store.dart';
-import 'core/theme/app_theme.dart';
+import 'data/account_store.dart';
+import 'data/api_keys_store.dart';
+import 'data/agent_run_store.dart';
+import 'data/agent_store.dart';
+import 'data/artifact_store.dart';
+import 'data/conversation_store.dart';
+import 'data/image_store.dart';
+import 'data/kv_store.dart';
+import 'data/update_store.dart';
+import 'data/note_store.dart';
+import 'features/chat/turn_controller.dart';
+import 'features/code/agent_runner.dart';
+import 'features/notes/note_cleaner.dart';
+import 'features/design/design_turns.dart';
+import 'features/visual/visual_turns.dart';
+import 'features/work/work_runner.dart';
+import 'shell/app_shell.dart';
+import 'shell/shell_controller.dart';
+import 'shell/sign_in_gate.dart';
 
-class ShiftAiApp extends StatefulWidget {
-  const ShiftAiApp({super.key});
+class ShiftApp extends StatelessWidget {
+  final ApiKeysStore keys;
+  final ConversationStore conversations;
+  final ArtifactStore artifacts;
+  final AgentStore agents;
+  final AgentRunStore runs;
 
-  @override
-  State<ShiftAiApp> createState() => _ShiftAiAppState();
-}
+  /// Work mode's folders and jobs, kept apart from Code's: a repository has no
+  /// business appearing in a list of somebody's documents.
+  final WorkAgents folders;
+  final AgentRunStore jobRuns;
+  final NoteStore notes;
+  final ImageStore images;
 
-class _ShiftAiAppState extends State<ShiftAiApp> {
-  late final PersistenceService _persistence;
-  late final ApiKeysStore _apiKeysStore;
-  late final ConversationStore _conversationStore;
-  late final AppSettingsStore _appSettingsStore;
-  late final ProjectStore _projectStore;
-  late final UserPrefsStore _userPrefsStore;
-  late final ArtifactPanelStore _artifactPanelStore;
-  late final MemoryStore _memoryStore;
-  late final StylesStore _stylesStore;
-  late final UsageStore _usageStore;
-  late final UpdateStore _updateStore;
-  late final ShiftBackend _backend;
-  late final AccountStore _accountStore;
+  /// The store behind every other store. Provided so Settings can offer the
+  /// one action that has to reach all of them at once.
+  final KvStore kv;
+  final UpdateStore updates;
 
-  @override
-  void initState() {
-    super.initState();
-    _persistence = PersistenceService();
-    _apiKeysStore = ApiKeysStore(persistence: _persistence)..load();
-    // The selector decides per message: live provider calls when the user
-    // has added an API key, the fully-functional mock otherwise. Nothing
-    // else in the app branches on which one is active.
-    final chatService = ChatServiceSelector(
-      keys: _apiKeysStore,
-      // Both need the asset store to reuse an image the user generated in an
-      // earlier session: the in-memory bytes are gone by then, and only the
-      // asset id survives in the transcript.
-      real: RealChatService(
-          keys: _apiKeysStore, loadAsset: _persistence.loadAsset),
-      mock: MockChatService(loadAsset: _persistence.loadAsset),
-    );
-    _artifactPanelStore = ArtifactPanelStore();
-    _memoryStore = MemoryStore(persistence: _persistence)..load();
-    _stylesStore = StylesStore(persistence: _persistence)..load();
-    _usageStore = UsageStore(persistence: _persistence)..load();
-    _conversationStore = ConversationStore(
-      chatService: chatService,
-      persistence: _persistence,
-    )
-      ..onArtifactCreated = _artifactPanelStore.open
-      // Extract durable facts from each user turn into cross-chat memory.
-      ..onUserTurnComplete = ((userText) {
-        for (final fact in MemoryService.extractFacts(userText)) {
-          _memoryStore.addFact(fact);
-        }
-      })
-      ..load();
-    _appSettingsStore = AppSettingsStore(persistence: _persistence)..load();
-    _projectStore = ProjectStore(persistence: _persistence)..load();
-    _userPrefsStore = UserPrefsStore(persistence: _persistence)..load();
-    // Reads the running version and the stored check state, then looks for a
-    // newer release once the first frame is up — never on the boot path.
-    _updateStore = UpdateStore(persistence: _persistence);
-    _updateStore.load().then((_) => _updateStore.checkIfDue());
-
-    // The one place that knows which backend is in use. Everything above this
-    // line talks to `ShiftBackend` and cannot tell — enforced by
-    // `tool/scan_backend_boundary.py`, which allows the concrete names only
-    // here.
-    //
-    // No configuration compiled in means `NoBackend`, which is not a failure
-    // state: the app runs on keys kept on the device exactly as it always has,
-    // and the public demo has no account at all.
+  /// Which host is behind the app, chosen here and nowhere else.
+  ///
+  /// The composition root is the one place `tool/scan_backend_boundary.py`
+  /// allows to name an implementation — everything above talks to
+  /// [ShiftBackend].
+  ///
+  /// [NoBackend] is what a build with no configured host gets, and such a build
+  /// is **not** put behind [SignInGate] — there would be nothing to sign in to,
+  /// so the gate would be an app that never opens. Shipped builds all carry a
+  /// host, so in practice this arm is a local build without the defines.
+  static ShiftBackend backendFor(KvStore kv) {
     final config = BackendConfig.fromEnvironment();
-    _backend = config == null
-        ? NoBackend()
-        : SupabaseBackend(
-            config: config,
-            loadStoredSession: () async =>
-                ShiftSession.fromJson(await _persistence.loadSession()),
-            onSessionChanged: (session) =>
-                _persistence.saveSession(session?.toJson()),
-          );
-    _accountStore =
-        AccountStore(backend: _backend, persistence: _persistence)..restore();
+    if (config == null) return NoBackend();
+
+    return SupabaseBackend(
+      config: config,
+      // The session is a short string like everything else this store holds,
+      // and it has to survive a reload — otherwise signing in would be a
+      // per-tab act, and on a phone that is every time the browser is
+      // reclaimed.
+      onSessionChanged: (session) async {
+        if (session == null) {
+          await kv.remove(_sessionKey);
+        } else {
+          await kv.put(_sessionKey, jsonEncode(session.toJson()));
+        }
+      },
+      loadStoredSession: () async {
+        final stored = kv.get(_sessionKey);
+        if (stored == null) return null;
+        try {
+          return ShiftSession.fromJson(
+              jsonDecode(stored) as Map<String, dynamic>);
+        } catch (_) {
+          // A session written by an older build, or a truncated write. Treated
+          // as signed out rather than as a crash: the remedy is signing in,
+          // which is one tap, and the alternative is an app that will not open.
+          return null;
+        }
+      },
+    );
   }
 
-  @override
-  void dispose() {
-    _backend.dispose();
-    super.dispose();
-  }
+  static const _sessionKey = 'account.session';
+
+  const ShiftApp({
+    super.key,
+    required this.keys,
+    required this.conversations,
+    required this.artifacts,
+    required this.agents,
+    required this.runs,
+    required this.folders,
+    required this.jobRuns,
+    required this.notes,
+    required this.images,
+    required this.kv,
+    required this.updates,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // Not a store, but the asset store behind it is how generated media
-        // survives a reload — the audio card reads spoken voiceovers back
-        // from it the same way images are re-read.
-        Provider<PersistenceService>.value(value: _persistence),
-        ChangeNotifierProvider.value(value: _conversationStore),
-        ChangeNotifierProvider.value(value: _appSettingsStore),
-        ChangeNotifierProvider(create: (_) => EcopayCalculatorStore()),
-        ChangeNotifierProvider.value(value: _artifactPanelStore),
-        ChangeNotifierProvider.value(value: _projectStore),
-        ChangeNotifierProvider.value(value: _userPrefsStore),
-        ChangeNotifierProvider.value(value: _memoryStore),
-        ChangeNotifierProvider.value(value: _stylesStore),
-        ChangeNotifierProvider.value(value: _usageStore),
-        ChangeNotifierProvider.value(value: _apiKeysStore),
-        ChangeNotifierProvider.value(value: _updateStore),
-        ChangeNotifierProvider.value(value: _accountStore),
+        Provider<KvStore>.value(value: kv),
+        ChangeNotifierProvider(create: (_) => ShellController()),
+
+        // Built in `main` so its version is read before the first frame, and
+        // its check fires after it — a launch that waits on GitHub is a launch
+        // that is slow whenever GitHub is.
+        ChangeNotifierProvider.value(value: updates),
+        ChangeNotifierProvider(
+          create: (_) => AccountStore(backend: backendFor(kv))..start(Uri.base),
+        ),
+        ChangeNotifierProvider.value(value: keys),
+        ChangeNotifierProvider.value(value: conversations),
+        ChangeNotifierProvider.value(value: artifacts),
+        ChangeNotifierProvider.value(value: agents),
+        ChangeNotifierProvider.value(value: folders),
+        ChangeNotifierProvider.value(value: notes),
+        ChangeNotifierProvider.value(value: images),
+        // Everything below takes the account, and that is the whole of what
+        // makes a membership buy anything: without it these resolve
+        // credentials from this device's keys alone, so a member with SHIFT's
+        // keys on the server is told no provider is set up. `context` rather
+        // than `_` because MultiProvider nests — `AccountStore` above is
+        // already in scope for each of these.
+        ChangeNotifierProvider(
+          create: (context) => NoteCleaner(
+            keys: keys,
+            account: context.read<AccountStore>(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => AgentRunner(
+            agents: agents,
+            runs: runs,
+            keys: keys,
+            account: context.read<AccountStore>(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => WorkRunner(
+            agents: folders,
+            runs: jobRuns,
+            keys: keys,
+            account: context.read<AccountStore>(),
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => VisualTurns(
+            keys: keys,
+            account: context.read<AccountStore>(),
+            images: images,
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => DesignTurns(
+            keys: keys,
+            account: context.read<AccountStore>(),
+            conversations: conversations,
+            artifacts: artifacts,
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (context) => TurnController(
+            keys: keys,
+            account: context.read<AccountStore>(),
+            conversations: conversations,
+            artifacts: artifacts,
+            notes: notes,
+            images: images,
+          ),
+        ),
       ],
-      child: Consumer<AppSettingsStore>(
-        builder: (context, settings, _) {
-          return MaterialApp(
-            title: 'SHIFT AI',
-            debugShowCheckedModeBanner: false,
-            theme: AppTheme.light(),
-            darkTheme: AppTheme.dark(),
-            themeMode: settings.themeMode,
-            home: const HomeShell(),
-          );
-        },
+      child: MaterialApp(
+        title: 'SHIFT AI',
+        debugShowCheckedModeBanner: false,
+        theme: shiftTheme(Brightness.light, defaultTargetPlatform),
+        darkTheme: shiftTheme(Brightness.dark, defaultTargetPlatform),
+
+        // Follow the system until there is a setting to override it. Both
+        // themes are built to the same standard, so neither is a fallback.
+        themeMode: ThemeMode.system,
+
+        // The app is behind an account. The gate is here rather than inside
+        // the shell so nothing below it has to ask whether it is allowed to
+        // exist — every mode, store and surface runs only for a signed-in
+        // person, or not at all.
+        home: const SignInGate(child: AppShell()),
       ),
     );
   }

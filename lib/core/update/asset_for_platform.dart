@@ -9,8 +9,8 @@ import 'update_check.dart';
 /// matters here is the wrong file, not the missing one.
 ///
 /// [platform] is `Platform.operatingSystem`: `linux`, `windows`, `macos`,
-/// `android`. Anything else (including `ios`, which this project does not
-/// package) returns null.
+/// `android`. Anything else (including `ios`, which cannot be distributed this
+/// way at all) returns null.
 ReleaseAsset? assetForPlatform(List<ReleaseAsset> assets, String platform) {
   final suffixes = _suffixes[platform];
   if (suffixes == null) return null;
@@ -23,9 +23,13 @@ ReleaseAsset? assetForPlatform(List<ReleaseAsset> assets, String platform) {
   return null;
 }
 
-/// Accepted endings per platform, most specific first. `.tar.gz` is listed
-/// ahead of `.tgz` and `.zip` so a release carrying both hands Linux the
-/// bundle the workflow actually builds.
+/// Accepted endings per platform, most specific first.
+///
+/// Linux and Windows each publish two: an installer people download once, and
+/// a portable archive. The **portable one is what an update uses**, and that is
+/// not a preference — a `.deb` installs into `/opt` and an all-users `.exe`
+/// into `Program Files`, both root-owned, so neither can replace itself.
+/// `canReplaceInPlace` detects that case before spending the bandwidth.
 const _suffixes = <String, List<String>>{
   'linux': ['.tar.gz', '.tgz'],
   'windows': ['.zip'],
@@ -33,16 +37,29 @@ const _suffixes = <String, List<String>>{
   'android': ['.apk'],
 };
 
-/// Whether a platform can install without the user confirming anything.
+/// How far this platform can take an update on its own.
 ///
-/// Linux and Windows ship as a self-contained directory that the app can
-/// swap and relaunch. macOS and Android cannot: replacing an *unsigned*
-/// `.app` still re-triggers Gatekeeper, and Android has no silent sideload
-/// path at all — both hand the file to the OS and the user confirms once.
-/// This is OS policy for unsigned software, not a shortcut taken here.
+/// Linux and Windows ship as a self-contained directory the app can swap and
+/// relaunch. The other two cannot, for reasons that are OS policy rather than
+/// effort here:
+///
+/// * **macOS** — replacing an *unsigned* `.app` re-triggers Gatekeeper anyway,
+///   so an in-place swap would trade one click for a scarier one. The `.dmg`
+///   is downloaded and opened; the user drags it across once.
+/// * **Android** — handing an APK to the package installer needs
+///   `REQUEST_INSTALL_PACKAGES`, which Play's Device and Network Abuse policy
+///   prohibits for an app like this one. It was in the app this rebuild
+///   replaced, and it is one of the reasons there was a rebuild. So the app
+///   says a new version exists and opens the release page; the download and
+///   the install are Android's own, with its own confirmation.
+///
+/// Keeping that permission out is a decision with a guard on it:
+/// `app.yml` fails the build if it appears in the manifest, and a test asserts
+/// no code here names it.
 InstallMode installModeFor(String platform) => switch (platform) {
       'linux' || 'windows' => InstallMode.replaceAndRelaunch,
-      'macos' || 'android' => InstallMode.handOffToSystem,
+      'macos' => InstallMode.handOffToSystem,
+      'android' => InstallMode.handOffToPage,
       _ => InstallMode.unsupported,
     };
 
@@ -50,9 +67,14 @@ enum InstallMode {
   /// Swap the install directory and restart. No interaction.
   replaceAndRelaunch,
 
-  /// Open the downloaded installer and let the OS take over.
+  /// Download the installer and open it. The OS takes over from there.
   handOffToSystem,
 
-  /// Nothing to do — the web build updates itself via its service worker.
+  /// Do not download anything — open the release page and let the platform's
+  /// own install flow handle it.
+  handOffToPage,
+
+  /// Nothing to do. The web build is never cached, so a reload is already the
+  /// newest version.
   unsupported,
 }

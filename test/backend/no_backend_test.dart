@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/backend/no_backend.dart';
-import 'package:shift_ai/backend/shift_backend.dart';
+import 'package:shift/backend/no_backend.dart';
+import 'package:shift/backend/shift_backend.dart';
 
 void main() {
   group('NoBackend — the state every build is in today', () {

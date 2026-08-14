@@ -1,6 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/core/update/asset_for_platform.dart';
-import 'package:shift_ai/core/update/update_check.dart';
+import 'package:shift/core/update/asset_for_platform.dart';
+import 'package:shift/core/update/update_check.dart';
 
 ReleaseAsset _a(String name) =>
     ReleaseAsset(name: name, downloadUrl: 'https://x/$name', size: 1);
@@ -66,11 +68,40 @@ void main() {
       expect(installModeFor('windows'), InstallMode.replaceAndRelaunch);
     });
 
-    test('macOS and Android hand off to the OS', () {
-      // Not a shortcut: an unsigned .app replacement re-triggers Gatekeeper,
-      // and Android has no silent sideload path at all.
+    test('macOS hands the download to the OS', () {
+      // Not a shortcut: replacing an unsigned .app re-triggers Gatekeeper, so
+      // an in-place swap would trade one click for a more alarming one.
       expect(installModeFor('macos'), InstallMode.handOffToSystem);
-      expect(installModeFor('android'), InstallMode.handOffToSystem);
+    });
+
+    test('Android goes to the page and downloads nothing', () {
+      // The decision this wave turns on. The app this replaced handed an APK
+      // to the package installer, which needs `REQUEST_INSTALL_PACKAGES` —
+      // prohibited by Play's Device and Network Abuse policy, and one of the
+      // reasons there was a rebuild. Asserted as `handOffToPage` and not
+      // merely "not handOffToSystem", so a later edit cannot drift back into
+      // downloading an APK it may not install.
+      expect(installModeFor('android'), InstallMode.handOffToPage);
+      expect(installModeFor('android'), isNot(InstallMode.handOffToSystem));
+    });
+
+    test('no code here asks for the permission that would allow it', () async {
+      // The manifest is guarded in CI; this guards the Dart, because the
+      // permission would arrive with the code that needed it. A grep, because
+      // the property is an absence and there is nothing to call.
+      final dir = Directory('lib');
+      final offenders = <String>[];
+      await for (final entry in dir.list(recursive: true)) {
+        if (entry is! File || !entry.path.endsWith('.dart')) continue;
+        final text = await entry.readAsString();
+        // This file names the permission in prose to explain why it is absent;
+        // what must not appear is a call that uses it.
+        if (text.contains('installApk') ||
+            text.contains('android.permission.REQUEST_INSTALL_PACKAGES')) {
+          offenders.add(entry.path);
+        }
+      }
+      expect(offenders, isEmpty);
     });
 
     test('everything else, including web, is unsupported', () {

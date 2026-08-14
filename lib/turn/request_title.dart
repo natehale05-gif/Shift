@@ -1,19 +1,15 @@
 /// How a request becomes a short human label for what it produced.
 ///
-/// One rule, three consumers: both backends naming an artifact, and the
-/// conversation store naming a chat. All three used to do it themselves and
-/// all three did it differently — demo mode used the raw prompt ("build me a
-/// landing page for my bakery"), the live path used the constant "Generated
-/// page" for everything, and a conversation was the first message chopped at
-/// 40 characters.
+/// Carried from v1, where it replaced three different answers to the same
+/// question: demo mode named an artifact with the raw prompt ("build me a
+/// landing page for my bakery"), the live path called every one of them
+/// "Generated page", and a conversation was the first message chopped at 40
+/// characters. Two of those made the title useless as a filename — the prompt
+/// version lost its subject to a word cap, and the constant collided with
+/// every other download.
 ///
-/// For artifacts this is not decoration: the title becomes the download
-/// filename via `DownloadService.slugify`, which keeps only the first six
-/// words, so the prompt version lost its subject and the live version collided
-/// with every other download.
-///
-/// Lives in `turn/` rather than with the artifact code because `data/` needs it
-/// too and `data/` does not import `features/`.
+/// Lives in `turn/` rather than beside the artifact code because `data/` needs
+/// it too, and `data/` does not import `features/`.
 library;
 
 /// Politeness and request framing that carries no information about the thing
@@ -60,8 +56,8 @@ String titleFromRequest(String userInput, {String fallback = 'Untitled page'}) {
   text = text.replaceFirst(_trailing, '').trim();
   if (text.isEmpty) return fallback;
 
-  // Cap on a word boundary, comfortably under slugify's six-word cut so the
-  // filename keeps the subject rather than trailing off mid-phrase.
+  // Cap on a word boundary rather than mid-phrase, and short enough that a
+  // filename derived from it still carries the subject.
   var words = text.split(RegExp(r'\s+'));
   if (words.length > _maxWords) words = words.sublist(0, _maxWords);
   var title = words.join(' ');
@@ -148,3 +144,23 @@ bool _usable(String text) {
 
 String _cap(String text) =>
     text.isEmpty ? text : text[0].toUpperCase() + text.substring(1);
+
+/// A title reduced to a filename stem: lower case, hyphenated, eight words.
+///
+/// Shared rather than reimplemented per surface, because two rules for one
+/// thing is one that drifts — and this one has a defect in its history worth
+/// not repeating: v1 named every download from a raw prompt and truncated it
+/// at six words, so `build me a landing page for my bakery` saved as
+/// `build_me_a_landing_page` and dropped the only word that identified it.
+/// Run over a title from [titleFromRequest] rather than over the request, the
+/// subject survives.
+String fileStem(String title, {String fallback = 'file'}) {
+  final stem = title
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9\s-]'), '')
+      .split(RegExp(r'\s+'))
+      .where((w) => w.isNotEmpty)
+      .take(8)
+      .join('-');
+  return stem.isEmpty ? fallback : stem;
+}

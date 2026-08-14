@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:shift_ai/core/update/release_version.dart';
+import 'package:shift/core/update/release_version.dart';
 
 void main() {
   group('isNewerRelease', () {

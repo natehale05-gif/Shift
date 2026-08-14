@@ -3,9 +3,10 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:shift_ai/backend/backend_config.dart';
-import 'package:shift_ai/backend/shift_backend.dart';
-import 'package:shift_ai/backend/supabase_backend.dart';
+import 'package:shift/backend/backend_config.dart';
+import 'package:shift/backend/setup_probe.dart' show proxyReplyBlocked;
+import 'package:shift/backend/shift_backend.dart';
+import 'package:shift/backend/supabase_backend.dart';
 
 const _config = BackendConfig(url: 'https://x.test', anonKey: 'anon-key');
 
@@ -38,6 +39,13 @@ class _Recorder {
 
   http.Request get last => requests.last;
   Iterable<String> get paths => requests.map((r) => r.url.path);
+
+  /// The first request whose path ends with [suffix]. Named rather than
+  /// positional because sign-in now makes more than one call, and asserting on
+  /// "the last request" would silently start testing a different one every
+  /// time a step is added.
+  http.Request to(String suffix) =>
+      requests.firstWhere((r) => r.url.path.endsWith(suffix));
 }
 
 SupabaseBackend _backend(
@@ -72,7 +80,46 @@ void main() {
       expect(session.account.displayName, 'Nate');
       expect(session.accessToken, 'access-1');
       expect(backend.session, isNotNull);
-      expect(recorder.last.url.queryParameters['grant_type'], 'password');
+      expect(recorder.to('/token').url.queryParameters['grant_type'],
+          'password');
+      backend.dispose();
+    });
+
+    test('provisions the account its profile row, which nothing else creates',
+        () async {
+      // Not a trigger: the schema deliberately never names the auth tables, so
+      // that the identity provider stays replaceable. Without this call an
+      // account signs up successfully and has no profile — and `is_admin` has
+      // no row to live in.
+      final recorder = _Recorder();
+      final backend = _backend(
+          recorder.client((_) async => http.Response(_tokenBody(), 200)));
+
+      await backend.signIn(email: 'a@test', password: 'pw');
+
+      final profile = recorder.to('/profiles');
+      expect(profile.method, 'POST');
+      expect(profile.headers['Prefer'], contains('ignore-duplicates'));
+      expect(profile.body, contains('11111111-1111-1111-1111-111111111111'));
+      // Never sent, because the column grant would refuse it anyway — but a
+      // client that tried would be a client that believed it could.
+      expect(profile.body, isNot(contains('is_admin')));
+      backend.dispose();
+    });
+
+    test('a profile that cannot be written does not fail the sign-in',
+        () async {
+      // Someone who typed the right password is signed in. A bookkeeping row
+      // is not their problem, and the next sign-in tries again.
+      final backend = _backend(MockClient((request) async {
+        if (request.url.path.endsWith('/profiles')) {
+          return http.Response('{"message":"nope"}', 500);
+        }
+        return http.Response(_tokenBody(), 200);
+      }));
+
+      final session = await backend.signIn(email: 'a@test', password: 'pw');
+      expect(session.accessToken, 'access-1');
       backend.dispose();
     });
 
@@ -171,9 +218,55 @@ void main() {
       await expectLater(
         backend.signUp(email: 'a@test', password: 'pw'),
         throwsA(isA<BackendException>()
-            .having((e) => e.message, 'message', contains('confirm'))),
+            .having((e) => e.message, 'message', contains('confirm'))
+            // Its own problem, not `credentials`: the account was created, and
+            // the UI shows it as a notice rather than in red under a form that
+            // just did what it was asked.
+            .having((e) => e.problem, 'problem',
+                BackendProblem.confirmationRequired)),
       );
       backend.dispose();
+    });
+  });
+
+  group('admin', () {
+    test('is read from the server, never from the token', () async {
+      final recorder = _Recorder();
+      final backend = _backend(
+        recorder.client((request) async =>
+            request.url.path.endsWith('/profiles')
+                ? http.Response('[{"is_admin":true}]', 200)
+                : http.Response(_tokenBody(), 200)),
+      );
+      await backend.signIn(email: 'a@test', password: 'pw');
+
+      expect(await backend.isAdmin(), isTrue);
+      expect(
+        recorder.requests.any((r) =>
+            r.method == 'GET' && r.url.query.contains('select=is_admin')),
+        isTrue,
+      );
+      backend.dispose();
+    });
+
+    test('a profile with no row, or a request that fails, is not an admin',
+        () async {
+      final empty = _backend(MockClient((request) async =>
+          request.url.path.endsWith('/profiles')
+              ? http.Response('[]', 200)
+              : http.Response(_tokenBody(), 200)));
+      await empty.signIn(email: 'a@test', password: 'pw');
+      expect(await empty.isAdmin(), isFalse);
+      empty.dispose();
+
+      // The important half: a network failure must not read as a promotion.
+      final broken = _backend(MockClient((request) async =>
+          request.url.path.endsWith('/profiles') && request.method == 'GET'
+              ? throw Exception('offline')
+              : http.Response(_tokenBody(), 200)));
+      await broken.signIn(email: 'a@test', password: 'pw');
+      expect(await broken.isAdmin(), isFalse);
+      broken.dispose();
     });
   });
 
@@ -263,6 +356,90 @@ void main() {
       backend.dispose();
     });
 
+    test('calls that start together spend the refresh token once, not once '
+        'each', () async {
+      // A refresh token is single-use — the server rotates it and forgets the
+      // one just spent. Concurrent is the normal case here: `AccountStore
+      // .refresh()` asks four questions through one `Future.wait`, and
+      // `JobRunner` resolves a managed endpoint per parallel step. Every
+      // renewal below also lands already-expiring, so each call needs one —
+      // which is what puts two refreshes in flight together.
+      final recorder = _Recorder();
+      var refreshes = 0;
+      var counting = false;
+      final backend = _backend(
+        recorder.client((request) async {
+          if (request.url.path.contains('/auth/')) {
+            if (counting && ++refreshes > 1) {
+              // What GoTrue answers for a refresh token already spent.
+              return http.Response(jsonEncode({'error': 'invalid_grant'}), 400);
+            }
+            return http.Response(
+                _tokenBody(expiresIn: 0, token: 'access-2'), 200);
+          }
+          return http.Response(jsonEncode([]), 200);
+        }),
+        stored: ShiftSession(
+          account: const ShiftAccount(id: 'u1'),
+          accessToken: 'nearly-dead',
+          refreshToken: 'r',
+          expiresAt: DateTime.now().add(const Duration(seconds: 30)),
+        ),
+      );
+      await backend.restore();
+      counting = true;
+
+      await Future.wait([
+        backend.listProviderKeys(),
+        backend.membership(),
+      ]);
+
+      expect(refreshes, 1,
+          reason: 'the second caller joins the refresh already in flight');
+      for (final request
+          in recorder.requests.where((r) => !r.url.path.contains('/auth/'))) {
+        expect(request.headers['Authorization'], 'Bearer access-2',
+            reason: 'both calls carry the renewed token');
+      }
+      backend.dispose();
+    });
+
+    test('a refresh that failed is not cached — the retry gets its own attempt',
+        () async {
+      var refreshes = 0;
+      var counting = false;
+      final backend = _backend(
+        MockClient((request) async {
+          if (request.url.path.contains('/auth/')) {
+            // Down for the first attempt after the test takes over, healthy
+            // afterwards. A single-flight guard that kept the failed future
+            // would pin every later call to it for the life of the app.
+            if (counting && ++refreshes == 1) {
+              return http.Response(jsonEncode({'message': 'nope'}), 500);
+            }
+            return http.Response(
+                _tokenBody(expiresIn: 0, token: 'access-2'), 200);
+          }
+          return http.Response(jsonEncode([]), 200);
+        }),
+        stored: ShiftSession(
+          account: const ShiftAccount(id: 'u1'),
+          accessToken: 'nearly-dead',
+          refreshToken: 'r',
+          expiresAt: DateTime.now().add(const Duration(seconds: 30)),
+        ),
+      );
+      await backend.restore();
+      counting = true;
+
+      await expectLater(
+          backend.listProviderKeys(), throwsA(isA<BackendException>()));
+      await backend.listProviderKeys();
+
+      expect(refreshes, 2);
+      backend.dispose();
+    });
+
     test('a call while signed out says so rather than sending an anonymous '
         'request', () async {
       final backend = _backend(MockClient((_) async => http.Response('[]', 200)));
@@ -336,6 +513,187 @@ void main() {
       expect(recorder.paths.any((p) => p.contains('/rest/v1/provider_keys')),
           isFalse);
       expect(stored.lastFour, 'wxyz');
+      backend.dispose();
+    });
+  });
+
+  group('a function that is not there', () {
+    // The bug this group exists for: tapping Grant against a function that had
+    // never been deployed answered "check your connection", because a browser
+    // cannot see the functions host's 404 — that 404 carries no CORS header,
+    // so the request just fails. The fix is one extra question, and these
+    // tests pin both of its answers.
+
+    /// A world where the functions host refuses and everything else answers.
+    MockClient client({required bool hostUp}) => MockClient((request) async {
+          if (request.url.path.contains('/auth/')) {
+            return http.Response(_tokenBody(), 200);
+          }
+          if (request.url.path.contains('/functions/')) {
+            throw const SocketExceptionStub();
+          }
+          if (!hostUp) throw const SocketExceptionStub();
+          return http.Response(jsonEncode([]), 200);
+        });
+
+    test('is named, when the host itself is answering', () async {
+      final backend = await _signedIn(client(hostUp: true));
+
+      await expectLater(
+        backend.grantMembership(ceilingMicros: 25000000),
+        throwsA(isA<BackendException>()
+            .having((e) => e.problem, 'problem', BackendProblem.notDeployed)
+            .having((e) => e.message, 'message', contains('admin-membership'))),
+      );
+      backend.dispose();
+    });
+
+    test('is still just "offline" when nothing answers at all', () async {
+      // The regression guard, and the more important half. A diagnostic that
+      // upgrades every outage into "not deployed" would send someone to
+      // redeploy a server that was never broken.
+      final backend = await _signedIn(client(hostUp: false));
+
+      await expectLater(
+        backend.grantMembership(ceilingMicros: 25000000),
+        throwsA(isA<BackendException>()
+            .having((e) => e.problem, 'problem', BackendProblem.unavailable)),
+      );
+      backend.dispose();
+    });
+
+    test('a 4xx from a deployed function is reported as itself', () async {
+      // The other regression: the extra question must only be asked when there
+      // was no answer. A function that replied 403 has plainly been deployed.
+      final backend = await _signedIn(MockClient((request) async {
+        if (request.url.path.contains('/auth/')) {
+          return http.Response(_tokenBody(), 200);
+        }
+        return http.Response('{"message":"Not allowed."}', 403);
+      }));
+
+      await expectLater(
+        backend.grantMembership(ceilingMicros: 25000000),
+        throwsA(isA<BackendException>()
+            .having((e) => e.problem, 'problem', BackendProblem.notSignedIn)
+            .having((e) => e.message, 'message', 'Not allowed.')),
+      );
+      backend.dispose();
+    });
+
+    test('the probe sends what a real turn sends', () async {
+      // The probe reported the proxy working while every turn failed, because
+      // it sent fewer headers than the client does: no `anthropic-version`, so
+      // a different — and easier — CORS preflight. A test call that asks a
+      // smaller question than the product is not a test, it is a reassurance.
+      final recorder = _Recorder();
+      final backend = await _signedIn(recorder.client((request) async {
+        if (request.url.path.contains('/auth/')) {
+          return http.Response(_tokenBody(), 200);
+        }
+        return http.Response('{}', 200);
+      }));
+
+      await backend.probeProxy('anthropic',
+          path: '/v1/messages',
+          body: const {'model': 'm'},
+          extraHeaders: const {'anthropic-version': '2023-06-01'});
+
+      final probe = recorder.to('/v1/messages');
+      expect(probe.headers['anthropic-version'], '2023-06-01');
+      expect(probe.headers['Authorization'], isNotNull,
+          reason: 'our own headers must survive the merge');
+      backend.dispose();
+    });
+
+    test('the proxy probe reports the 404 the browser withheld', () async {
+      // Synthesised rather than given a seventh outcome, so there stays
+      // exactly one place that turns a proxy status into a sentence.
+      final backend = await _signedIn(client(hostUp: true));
+
+      expect(await backend.probeProxy('anthropic',
+          path: '/v1/messages', body: const {'model': 'm'}), (status: 404, body: ''));
+      backend.dispose();
+    });
+
+    test('the proxy probe reports nothing when nothing answers', () async {
+      final backend = await _signedIn(client(hostUp: false));
+
+      expect(await backend.probeProxy('anthropic',
+          path: '/v1/messages', body: const {'model': 'm'}), isNull);
+      backend.dispose();
+    });
+
+    /// A world where the function is deployed and only its *reply* is lost —
+    /// a bare GET of the function's own URL comes back, the real call does not.
+    ///
+    /// This is what the live project actually looks like: every function
+    /// ACTIVE, while the app insisted they were not deployed.
+    MockClient deployedButBlocked() => MockClient((request) async {
+          if (request.url.path.contains('/auth/')) {
+            return http.Response(_tokenBody(), 200);
+          }
+          if (request.url.path.endsWith('/functions/v1/provider-proxy') ||
+              request.url.path.endsWith('/functions/v1/admin-membership')) {
+            // What a deployed function answers a bare GET: a refusal, through
+            // its own CORS headers, so the browser hands it over.
+            return http.Response('Use POST.', 405);
+          }
+          if (request.url.path.contains('/functions/')) {
+            throw const SocketExceptionStub();
+          }
+          return http.Response(jsonEncode([]), 200);
+        });
+
+    test('a deployed function whose reply is blocked is not called missing',
+        () async {
+      // The whole point. Telling somebody to deploy a function that is already
+      // deployed sends them to change repository settings that were never the
+      // fault — and that is exactly where a week went.
+      final backend = await _signedIn(deployedButBlocked());
+
+      expect(
+        await backend.probeProxy('anthropic',
+            path: '/v1/messages', body: const {'model': 'm'}),
+        (status: proxyReplyBlocked, body: ''),
+      );
+      backend.dispose();
+    });
+
+    test('the same distinction reaches every function call, not just the probe',
+        () async {
+      final backend = await _signedIn(deployedButBlocked());
+
+      await expectLater(
+        backend.grantMembership(ceilingMicros: 25000000),
+        throwsA(isA<BackendException>()
+            .having((e) => e.problem, 'problem', BackendProblem.replyBlocked)
+            .having((e) => e.message, 'message', contains('admin-membership'))),
+      );
+      backend.dispose();
+    });
+
+    test('a call that succeeds asks no extra questions', () async {
+      // "It works" and "it works without two spare round trips per call" are
+      // different claims, and only counting can tell them apart.
+      final recorder = _Recorder();
+      final backend = await _signedIn(recorder.client((request) async {
+        if (request.url.path.contains('/auth/')) {
+          return http.Response(_tokenBody(), 200);
+        }
+        return http.Response('{}', 200);
+      }));
+
+      await backend.probeProxy('anthropic',
+          path: '/v1/messages', body: const {'model': 'm'});
+
+      expect(
+        recorder.requests
+            .where((r) => r.method == 'GET' && r.url.path.contains('/rest/v1/'))
+            .isEmpty,
+        isTrue,
+        reason: 'the reachability probe is a recovery, not a preflight',
+      );
       backend.dispose();
     });
   });

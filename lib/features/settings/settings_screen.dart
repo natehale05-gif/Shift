@@ -1,659 +1,218 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/models/memory_entry.dart';
-import '../../data/models/writing_style.dart';
-import 'app_data_export.dart';
-import '../../data/stores/app_settings_store.dart';
-import '../../data/stores/conversation_store.dart';
-import '../../data/stores/memory_store.dart';
-import '../../data/stores/project_store.dart';
-import '../../data/stores/styles_store.dart';
-import '../../data/stores/user_prefs_store.dart';
-import '../styles/style_editor.dart';
-import '../../core/theme/app_spacing.dart';
+import '../../core/design/metrics.dart';
+import '../../core/design/palette.dart';
+import '../../data/agent_store.dart';
+import '../../data/api_keys_store.dart';
+import '../../data/artifact_store.dart';
+import '../../data/conversation_store.dart';
+import '../../data/image_store.dart';
+import '../../data/kv_store.dart';
+import '../../data/note_store.dart';
+import '../../providers/registry.dart';
+import '../chat/turn_controller.dart';
+import '../work/work_runner.dart';
 import 'account_card.dart';
-import 'api_keys_section.dart';
+import 'erase_everything.dart';
+import 'platform_keys_card.dart';
+import 'provider_key_field.dart';
+import 'server_card.dart';
+import 'setup_card.dart';
 import 'update_card.dart';
-import '../../core/theme/app_theme.dart';
-import '../../core/widgets/glass_app_bar.dart';
-import '../../core/shell/home_menu_button.dart';
-import '../../core/platform/open_url.dart';
 
+/// Where a key goes in.
+///
+/// Until this existed the app answered every message with "Add a key in
+/// Settings, or start a plan" — naming a place that did not exist. The
+/// sentence was honest about the state and dishonest about the remedy, and it
+/// meant the app could not answer anything at all.
+///
+/// The list is built from [kProviders] rather than from a second hardcoded
+/// list. The registry already carries the label, the URL where a key is
+/// obtained, the shape a key of that kind takes, and what it unlocks — so a
+/// provider added there appears here with no further work, and the two cannot
+/// drift apart.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final settings = context.watch<AppSettingsStore>();
-    final colors = Theme.of(context).extension<AppSemanticColors>()!;
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+    final keys = context.watch<ApiKeysStore>();
 
     return Scaffold(
-      appBar: GlassAppBar(
-        title: const Text('Settings'),
-        leading: const HomeMenuButton(),
+      backgroundColor: c.ground,
+      appBar: AppBar(
+        backgroundColor: c.ground,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: Text('Settings', style: text.headlineSmall),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        children: [
-          _SectionCard(
-            title: 'Appearance',
-            child: SegmentedButton<ThemeMode>(
-              segments: const [
-                ButtonSegment(value: ThemeMode.system, label: Text('System'), icon: Icon(Icons.brightness_auto_rounded)),
-                ButtonSegment(value: ThemeMode.light, label: Text('Light'), icon: Icon(Icons.light_mode_rounded)),
-                ButtonSegment(value: ThemeMode.dark, label: Text('Dark'), icon: Icon(Icons.dark_mode_rounded)),
-              ],
-              selected: {settings.themeMode},
-              onSelectionChanged: (selection) => settings.setThemeMode(selection.first),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          // Above the keys, because where a key is *stored* is the first
-          // decision — on this device, or on the server behind an account.
-          const AccountCard(),
-          const SizedBox(height: AppSpacing.lg),
-          const _SectionCard(
-            title: 'API keys (live AI)',
-            child: ApiKeysSection(),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          const _PersonalizationCard(),
-          const SizedBox(height: AppSpacing.lg),
-          const _StylesCard(),
-          const SizedBox(height: AppSpacing.lg),
-          const _MemoryCard(),
-          const SizedBox(height: AppSpacing.lg),
-          const _GetTheAppCard(),
-          const UpdateCard(),
-          const SizedBox(height: AppSpacing.lg),
-          const _FeaturePreviewCard(),
-          const SizedBox(height: AppSpacing.lg),
-          _SectionCard(
-            title: 'Data',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 640),
+            child: ListView(
+              padding: const EdgeInsets.all(Space.lg),
               children: [
+                // Above the personal keys, and only ever visible to a
+                // signed-in admin — it renders nothing for everyone else. It
+                // sits first because for the person who has it, it is the more
+                // consequential of the two: these are the keys every member
+                // spends.
+                const AccountCard(),
+                const ServerCard(),
+
+                // Directly under the Server card, and the order is the fix
+                // rather than a preference: that card's own sentence says the
+                // settings are "below", and for two waves they were nowhere.
+                const SetupCard(),
+
+                // Off-web only — it renders nothing in a browser, where a
+                // reload is already the newest build.
+                const UpdateCard(),
+                const PlatformKeysCard(),
+
+                Text('Provider keys', style: text.titleMedium),
+                const SizedBox(height: Space.xs),
                 Text(
-                  'Everything — chats, projects, memory, preferences, and keys — '
-                  'is stored only in this browser. There\'s no account and no '
-                  'server. Export a full copy, or sign out to wipe it all.',
-                  style: Theme.of(context).textTheme.bodySmall,
+                  'Add a key and SHIFT talks to that provider directly. '
+                  'Nothing is sent through a server.',
+                  style: text.bodySmall?.copyWith(color: c.textMuted),
                 ),
-                const SizedBox(height: AppSpacing.md),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  runSpacing: AppSpacing.sm,
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _exportAll(context),
-                      icon: const Icon(Icons.download_rounded),
-                      label: const Text('Export all data (.zip)'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _confirmClear(context),
-                      icon: const Icon(Icons.delete_outline_rounded),
-                      label: const Text('Clear chat history'),
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: () => _confirmSignOut(context),
-                      icon: const Icon(Icons.logout_rounded),
-                      label: const Text('Sign out & erase everything'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpacing.lg),
-          _SectionCard(
-            title: 'About',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('SHIFT AI', style: Theme.of(context).textTheme.titleMedium),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  'A middleware AI that routes your requests to specialized studios — Image, Video, Voice & Avatar, Music, Copy & Scripts, and Code. '
-                  'This build is a local prototype: chat replies and studio results are simulated. Images, audio, and code are downloadable as real files. '
-                  'Membership/EcoPay screens are illustrative demos only — no real purchases, credits, or payouts occur anywhere in this app.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text('shiftai.club', style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.textSecondary)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                const SizedBox(height: Space.md),
 
-  void _confirmClear(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Clear chat history?'),
-        content: const Text('This removes every conversation stored in this browser. This can\'t be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () {
-              context.read<ConversationStore>().clearAllHistory();
-              Navigator.of(context).pop();
-            },
-            child: const Text('Clear'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _exportAll(BuildContext context) {
-    AppDataExport.download(
-      conversations: context.read<ConversationStore>().conversations,
-      projects: context.read<ProjectStore>().projects,
-      preferences: {
-        'nickname': context.read<UserPrefsStore>().nickname,
-        'role': context.read<UserPrefsStore>().role,
-        'traits': context.read<UserPrefsStore>().traits,
-        'responseStyle': context.read<UserPrefsStore>().responseStyle,
-        'customInstructions':
-            context.read<UserPrefsStore>().customInstructions,
-      },
-      memory: context.read<MemoryStore>().entries,
-      memoryEnabled: context.read<MemoryStore>().enabled,
-    );
-  }
-
-  void _confirmSignOut(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Sign out & erase everything?'),
-        content: const Text(
-          'This permanently deletes every chat, project, memory, and '
-          'preference stored in this browser. Export your data first if you '
-          'want to keep it. This can\'t be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Theme.of(dialogContext).colorScheme.error,
-            ),
-            onPressed: () {
-              final prefs = context.read<UserPrefsStore>();
-              final projects = context.read<ProjectStore>();
-              context.read<ConversationStore>().clearAllHistory();
-              for (final p in [...projects.projects]) {
-                projects.deleteProject(p.id);
-              }
-              context.read<MemoryStore>().clearAll();
-              prefs.setNickname('');
-              prefs.setRole('');
-              prefs.setTraits('');
-              prefs.setCustomInstructions('');
-              prefs.setResponseStyle('normal');
-              Navigator.of(dialogContext).pop();
-            },
-            child: const Text('Erase everything'),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Feature-preview toggles (Claude's "Feature preview" settings).
-/// Desktop and Android downloads, for people who found the app in a browser.
-/// Hidden on the desktop/Android builds themselves — you already have it.
-class _GetTheAppCard extends StatelessWidget {
-  const _GetTheAppCard();
-
-  static const _releases =
-      'https://github.com/natehale05-gif/Shift/releases/latest';
-
-  @override
-  Widget build(BuildContext context) {
-    if (!kIsWeb) return const SizedBox.shrink();
-    return _SectionCard(
-      title: 'Get the app',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Native builds for macOS, Windows, Linux and Android. Chats are '
-            'kept on your device between launches.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: [
-              for (final (label, icon) in const [
-                ('macOS', Icons.laptop_mac_rounded),
-                ('Windows', Icons.desktop_windows_rounded),
-                ('Linux', Icons.dns_rounded),
-                ('Android', Icons.phone_android_rounded),
-              ])
-                OutlinedButton.icon(
-                  onPressed: () => openUrl(_releases),
-                  icon: Icon(icon, size: 18),
-                  label: Text(label),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FeaturePreviewCard extends StatelessWidget {
-  const _FeaturePreviewCard();
-
-  @override
-  Widget build(BuildContext context) {
-    final settings = context.watch<AppSettingsStore>();
-    return _SectionCard(
-      title: 'Feature preview',
-      child: SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        title: const Text('Show usage & token counts'),
-        subtitle: Text(
-          'Display the model and input/output token tally under each reply.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        value: settings.showUsage,
-        onChanged: settings.setShowUsage,
-      ),
-    );
-  }
-}
-
-/// The "memory" layer: nickname, response style, and standing custom
-/// instructions, folded into every turn's system prompt.
-class _PersonalizationCard extends StatefulWidget {
-  const _PersonalizationCard();
-
-  @override
-  State<_PersonalizationCard> createState() => _PersonalizationCardState();
-}
-
-class _PersonalizationCardState extends State<_PersonalizationCard> {
-  late final TextEditingController _nicknameController;
-  late final TextEditingController _roleController;
-  late final TextEditingController _traitsController;
-  late final TextEditingController _instructionsController;
-
-  @override
-  void initState() {
-    super.initState();
-    final prefs = context.read<UserPrefsStore>();
-    _nicknameController = TextEditingController(text: prefs.nickname);
-    _roleController = TextEditingController(text: prefs.role);
-    _traitsController = TextEditingController(text: prefs.traits);
-    _instructionsController =
-        TextEditingController(text: prefs.customInstructions);
-  }
-
-  @override
-  void dispose() {
-    _nicknameController.dispose();
-    _roleController.dispose();
-    _traitsController.dispose();
-    _instructionsController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final prefs = context.watch<UserPrefsStore>();
-    return _SectionCard(
-      title: 'Personalization',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'SHIFT AI carries these preferences into every conversation.',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: _nicknameController,
-            decoration: const InputDecoration(
-              labelText: 'What should SHIFT AI call you?',
-            ),
-            onChanged: prefs.setNickname,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: _roleController,
-            decoration: const InputDecoration(
-              labelText: 'What do you do?',
-              hintText: 'e.g. product designer, high-school teacher, founder',
-            ),
-            onChanged: prefs.setRole,
-          ),
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: _traitsController,
-            minLines: 1,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'What traits should SHIFT AI have?',
-              hintText: 'e.g. direct, encouraging, uses analogies',
-            ),
-            onChanged: prefs.setTraits,
-          ),
-          // The response style is picked in the Response styles card below —
-          // one control for one setting. A segmented button here offered the
-          // built-ins only, so a custom style could be selected below and
-          // leave this control showing nothing selected.
-          const SizedBox(height: AppSpacing.md),
-          TextField(
-            controller: _instructionsController,
-            minLines: 2,
-            maxLines: 5,
-            decoration: const InputDecoration(
-              labelText: 'Custom instructions',
-              hintText:
-                  'Standing guidance for every chat (tone, interests, context)…',
-            ),
-            onChanged: prefs.setCustomInstructions,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// One selectable style — built-in or custom, the same row either way.
-///
-/// Only a custom style offers Edit and Delete; a built-in has nothing to edit.
-/// That is the only difference the UI draws between them, which is the point:
-/// they are the same kind of thing.
-class _StyleTile extends StatelessWidget {
-  final WritingStyle style;
-  final bool custom;
-  final VoidCallback onEdit;
-
-  const _StyleTile({
-    required this.style,
-    required this.custom,
-    required this.onEdit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.extension<AppSemanticColors>()!;
-    final prefs = context.watch<UserPrefsStore>();
-    final selected = prefs.responseStyle == style.id;
-
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      leading: IconButton(
-        tooltip: selected ? 'In use' : 'Use this style',
-        iconSize: 18,
-        icon: Icon(
-          selected
-              ? Icons.radio_button_checked
-              : Icons.radio_button_unchecked,
-          color: selected ? theme.colorScheme.primary : colors.textSecondary,
-        ),
-        // Tapping the one already in use does nothing. Un-selecting a style
-        // has no meaning when Normal is itself a style in the list.
-        onPressed: selected
-            ? null
-            : () => context.read<UserPrefsStore>().setResponseStyle(style.id),
-      ),
-      title: Text(style.name),
-      subtitle: style.instructions.isEmpty
-          ? null
-          : Text(
-              style.instructions,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelSmall,
-            ),
-      trailing: custom
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  tooltip: 'Edit',
-                  iconSize: 16,
-                  icon: const Icon(Icons.edit_outlined),
-                  onPressed: onEdit,
-                ),
-                IconButton(
-                  tooltip: 'Delete',
-                  iconSize: 16,
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () {
-                    // Deleting the style in use would leave the preference
-                    // pointing at an id nothing resolves.
-                    if (selected) {
-                      context.read<UserPrefsStore>().setResponseStyle('normal');
-                    }
-                    context.read<StylesStore>().remove(style.id);
-                  },
-                ),
-              ],
-            )
-          : null,
-    );
-  }
-}
-
-/// Response styles: the built-in set plus user-created ones, in one list, with
-/// the selection that decides how every chat is written.
-class _StylesCard extends StatelessWidget {
-  const _StylesCard();
-
-  Future<void> _create(BuildContext context) async {
-    final result = await showStyleEditorDialog(context);
-    if (result == null || !context.mounted) return;
-    context.read<StylesStore>().create(result.$1, result.$2);
-  }
-
-  Future<void> _edit(BuildContext context, String id, String name,
-      String instructions) async {
-    final result = await showStyleEditorDialog(
-      context,
-      initialName: name,
-      initialInstructions: instructions,
-    );
-    if (result == null || !context.mounted) return;
-    context
-        .read<StylesStore>()
-        .update(id, name: result.$1, instructions: result.$2);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final styles = context.watch<StylesStore>();
-    final theme = Theme.of(context);
-    return _SectionCard(
-      title: 'Response styles',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'How SHIFT AI writes in every chat. Pick one, or write your '
-                  'own.',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-              TextButton.icon(
-                onPressed: () => _create(context),
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('New style'),
-              ),
-            ],
-          ),
-          // Built-in and custom styles in one list, because they are one
-          // thing: a name and the instructions it adds. Two controls for one
-          // setting is how a custom style could be selected while the
-          // built-in picker showed nothing chosen.
-          for (final style in styles.allStyles)
-            _StyleTile(
-              style: style,
-              custom: !isBuiltInStyle(style.id),
-              onEdit: () =>
-                  _edit(context, style.id, style.name, style.instructions),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Cross-chat memory: a master switch plus the list of remembered facts, each
-/// toggleable, editable, and removable (Claude's Memory settings).
-class _MemoryCard extends StatelessWidget {
-  const _MemoryCard();
-
-  Future<void> _edit(BuildContext context, MemoryEntry entry) async {
-    final store = context.read<MemoryStore>();
-    final controller = TextEditingController(text: entry.text);
-    final text = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Edit memory'),
-        content: TextField(controller: controller, autofocus: true),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (text != null && text.trim().isNotEmpty) {
-      store.editEntry(entry.id, text.trim());
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final memory = context.watch<MemoryStore>();
-    final theme = Theme.of(context);
-    final colors = theme.extension<AppSemanticColors>()!;
-    return _SectionCard(
-      title: 'Memory',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  'SHIFT AI remembers useful facts about you across chats and '
-                  'brings them into future replies.',
-                  style: theme.textTheme.bodySmall,
-                ),
-              ),
-              Switch(value: memory.enabled, onChanged: memory.setEnabled),
-            ],
-          ),
-          if (memory.entries.isEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.sm),
-              child: Text(
-                'Nothing remembered yet. Tell SHIFT AI something about '
-                'yourself — like your name, where you live, or what you do — '
-                'and it\'ll appear here.',
-                style: theme.textTheme.bodySmall,
-              ),
-            ),
-          for (final entry in memory.entries)
-            ListTile(
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-              leading: Checkbox(
-                value: entry.enabled,
-                onChanged: (_) => memory.toggleEntry(entry.id),
-              ),
-              title: Text(
-                entry.text,
-                style: entry.enabled
-                    ? theme.textTheme.bodyMedium
-                    : theme.textTheme.bodyMedium
-                        ?.copyWith(color: colors.textSecondary),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  IconButton(
-                    tooltip: 'Edit',
-                    iconSize: 16,
-                    icon: const Icon(Icons.edit_outlined),
-                    onPressed: () => _edit(context, entry),
+                // Said on screen rather than in a document nobody opens. This
+                // is the honest argument for the subscription — there the key
+                // is held server-side and never reaches the device — and it
+                // would be a bad trade to hide it in order to make this path
+                // look better than it is.
+                Container(
+                  decoration: BoxDecoration(
+                    color: c.surface,
+                    borderRadius: BorderRadius.circular(Radii.md),
                   ),
-                  IconButton(
-                    tooltip: 'Forget',
-                    iconSize: 16,
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () => memory.removeEntry(entry.id),
+                  padding: const EdgeInsets.all(Space.md),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.lock_outline_rounded,
+                          size: 18, color: c.textMuted),
+                      const SizedBox(width: Space.sm),
+                      Expanded(
+                        child: Text(
+                          'Keys are stored on this device only. In a browser '
+                          'that means the browser\'s own storage, which any '
+                          'script on this site could read. A subscription will '
+                          'keep keys on the server instead.',
+                          style:
+                              text.bodySmall?.copyWith(color: c.textMuted),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: Space.lg),
+
+                for (final provider in kProviders) ...[
+                  ProviderKeyField(
+                    provider: provider,
+                    saved: keys.masked(provider.id),
+                    onSave: (value) => keys.set(provider.id, value),
+                    onRemove: () => keys.remove(provider.id),
+                    readKey: () => keys.get(provider.id),
+                  ),
+                  const SizedBox(height: Space.md),
+                ],
+
+                const SizedBox(height: Space.xl),
+                const _EraseEverything(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The way out.
+///
+/// At the foot of Settings, in the danger ink, because it is the last thing
+/// anyone should reach and the first thing they should be able to find when
+/// they want it — handing someone the app, or leaving a shared machine.
+class _EraseEverything extends StatelessWidget {
+  const _EraseEverything();
+
+  @override
+  Widget build(BuildContext context) {
+    final c = context.colors;
+    final text = Theme.of(context).textTheme;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Your data',
+            style: text.titleSmall?.copyWith(color: c.text)),
+        const SizedBox(height: Space.xs),
+        Text(
+          'Everything this app knows is on this device. Nothing is sent to a '
+          'server of ours, and nothing is kept once you remove it.',
+          style: text.bodySmall?.copyWith(color: c.textMuted),
+        ),
+        const SizedBox(height: Space.md),
+        Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(Radii.md),
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: () async {
+              if (!await confirmErase(context)) return;
+              if (!context.mounted) return;
+              await eraseEverything(
+                folders: context.read<WorkAgents>(),
+                kv: context.read<KvStore>(),
+                conversations: context.read<ConversationStore>(),
+                artifacts: context.read<ArtifactStore>(),
+                notes: context.read<NoteStore>(),
+                agents: context.read<AgentStore>(),
+                keys: context.read<ApiKeysStore>(),
+                images: context.read<ImageStore>(),
+                turn: context.read<TurnController>(),
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Everything has been removed.')),
+                );
+              }
+            },
+            child: Container(
+              constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: Space.md, vertical: Space.sm),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(Radii.md),
+                border: Border.all(color: c.danger.withValues(alpha: 0.4)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.delete_forever_outlined,
+                      size: 18, color: c.danger),
+                  const SizedBox(width: Space.sm),
+                  Flexible(
+                    child: Text('Delete everything on this device',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: text.titleMedium?.copyWith(color: c.danger)),
                   ),
                 ],
               ),
             ),
-          if (memory.entries.isNotEmpty)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton.icon(
-                onPressed: memory.clearAll,
-                icon: const Icon(Icons.delete_sweep_outlined, size: 18),
-                label: const Text('Clear all'),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SectionCard extends StatelessWidget {
-  final String title;
-  final Widget child;
-
-  const _SectionCard({required this.title, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).extension<AppSemanticColors>()!;
-    return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-        border: Border.all(color: colors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.sm),
-          child,
-        ],
-      ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks every `if (dart.library.html)` import pair in lib/.
+"""Checks every conditional import pair in `lib/`.
 
 The analyzer only ever resolves the **default** branch of a conditional
 import. A stale path or a drifted name in the other branch therefore passes
@@ -22,7 +22,15 @@ import re
 import sys
 from pathlib import Path
 
-LIB = Path(__file__).resolve().parent.parent / "lib"
+ROOT = Path(__file__).resolve().parent.parent
+
+# One app, at the root. It scanned two trees while v1 was still here, and
+# before that only v1 -- so every "N pairs clean" reported during the rebuild
+# was true of the frozen app and silent about the one being written. Worth
+# keeping in mind now that there is only one: these pairs key on
+# `dart.library.js_interop`, and `dart.library.html` is *false* under dart2wasm,
+# so picking the wrong arm raises nothing at all.
+LIBS = [ROOT / "lib"]
 
 # Both keywords: `export` facades (open_url, file_intake) re-expose the whole
 # branch, so they need a stricter check than `import` ones do. Captures the
@@ -44,7 +52,13 @@ DECLARATION = re.compile(
     # The return type must begin with a word character, so an indented call
     # cannot pass its own leading spaces off as one.
     rf"|^(?:[\w$<>?][\w$<>,?\[\] \t]*?{H}+)(\w+){H}*(?:<[\w\s,]+>)?{H}*\("
-    rf"|^(?:const|final|late){H}+(?:[\w$<>,?\[\] \t]+{H}+)?(\w+){H}*=",
+    rf"|^(?:const|final|late){H}+(?:[\w$<>,?\[\] \t]+{H}+)?(\w+){H}*="
+    # Top-level getters. Without this the scanner cannot see one at all — and
+    # a name it cannot see is a name it cannot report as missing, which is a
+    # false pass rather than a gap. Found when one arm of a platform facade
+    # declared a `const` and the other a getter: it flagged the getter as
+    # absent, which was the right complaint for the wrong reason.
+    rf"|^(?:[\w$<>?][\w$<>,?\[\] \t]*{H}+)?get{H}+(\w+)",
     re.MULTILINE,
 )
 
@@ -70,13 +84,16 @@ def main() -> int:
     problems = []
     pairs = 0
 
-    for source in sorted(LIB.rglob("*.dart")):
+    for lib in LIBS:
+      if not lib.is_dir():
+          continue
+      for source in sorted(lib.rglob("*.dart")):
         text = source.read_text()
         for keyword, default_path, other_path, prefix in CONDITIONAL.findall(text):
             pairs += 1
             default = (source.parent / default_path).resolve()
             other = (source.parent / other_path).resolve()
-            rel = source.relative_to(LIB)
+            rel = source.relative_to(ROOT)
 
             missing = [p for p in (default, other) if not p.is_file()]
             if missing:

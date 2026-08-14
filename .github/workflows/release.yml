@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 env:
-  FLUTTER_VERSION: 3.35.5
+  FLUTTER_VERSION: 3.44.9
 
 jobs:
   macos:
@@ -84,7 +84,7 @@ jobs:
           }
           if (-not (Test-Path $iscc)) { $iscc = "iscc" }
           $version = "${{ github.event.inputs.tag || github.ref_name }}" -replace '^v',''
-          & $iscc "/DAppVersion=$version" windows\installer\shift_ai.iss
+          & $iscc "/DAppVersion=$version" windows\installer\shift.iss
           if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with $LASTEXITCODE" }
 
       - name: Package portable .zip
@@ -203,12 +203,19 @@ jobs:
             root-owned `/opt`, so that copy cannot replace itself and will
             point you back here instead.
 
-            **You only have to download once.** The app checks for new releases
-            daily and installs them itself — silently on Linux and Windows,
-            applied the next time you open it. On macOS and Android it downloads
-            the update and hands it to the system installer, which asks you to
-            confirm, because unsigned software cannot install without that
-            prompt. Turn it off in Settings → Updates.
+            **You only have to download once, on desktop.** The app checks
+            for new releases daily and installs them itself — silently on Linux
+            and Windows, applied the next time you open it. On macOS it
+            downloads the update and opens it for you to drag across, because
+            replacing unsigned software re-triggers Gatekeeper either way. Turn
+            it off in Settings → Updates.
+
+            **Android is different, and deliberately so.** The app will tell you
+            a new version exists and open this page, but it will not install the
+            APK itself: doing that requires a permission Google Play prohibits
+            for an app like this one, and keeping it out is what leaves the door
+            open to shipping through Play later. Download the new APK here and
+            tap it; Android asks for the confirmation.
 
             ### First launch
 
@@ -220,18 +227,17 @@ jobs:
               `xattr -dr com.apple.quarantine "/Applications/SHIFT AI.app"`.
             - **Windows** — SmartScreen shows a blue box: **More info** →
               **Run anyway**.
-            - **Android** — allow installs from unknown sources for your file
-              manager when prompted.
-            - **Linux** — extract the archive and run `./shift_ai`.
+            - **Android** — allow installs from unknown sources for your
+              browser or file manager when prompted.
+            - **Linux** — extract the archive and run `./shift`.
 
             ### What differs from the web version
 
-            Dictation, live voice, paste/drag-drop intake and printing are
-            browser APIs and stay browser-only. Artifact previews and generated
-            audio open in your system browser and audio player rather than
-            inline. Everything else — chats, projects, artifacts, downloads,
-            bring-your-own-key providers — works the same, and chats now persist
-            between launches.
+            Your chats, keys and settings live on the device rather than in the
+            browser's storage, and they survive a restart. Artifact previews
+            open in your system browser rather than inline, because there is no
+            embedded web view on every desktop platform. Everything else is the
+            same app.
 
   verify:
     needs: release

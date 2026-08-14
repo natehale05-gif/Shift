@@ -109,7 +109,9 @@ unexpected=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
     and grantee in ('anon', 'authenticated')
     and (grantee, table_name, privilege_type) not in (
       ('authenticated', 'profiles', 'SELECT'),
+      ('authenticated', 'profiles', 'INSERT'),
       ('authenticated', 'profiles', 'UPDATE'),
+      ('authenticated', 'included_providers', 'SELECT'),
       ('authenticated', 'provider_keys', 'SELECT'),
       ('authenticated', 'provider_keys', 'DELETE'),
       ('authenticated', 'provider_key_metadata', 'SELECT'),
@@ -148,6 +150,55 @@ if [ -n "$secret" ]; then
 fi
 echo "no client role can read a ciphertext column"
 
+# Every `/rpc/` the app or an edge function calls must exist in `public`.
+#
+# The gap this closes, which nothing in this repository covered before: these
+# functions were asserted by calling them as SQL — `select
+# shift.within_ceiling(…)` — which works perfectly and says nothing about
+# whether an HTTP client can reach them. PostgREST exposes `public` and nothing
+# else, so `shift.within_ceiling` answered every SQL test and 404'd every real
+# request. `provider-proxy` failed closed and reported it as the member's plan
+# not covering them, which was the one thing that was fine.
+#
+# Read out of the source rather than listed here, so a function added later is
+# covered without anyone remembering to add it.
+called=$(grep -rho "rpc/[a-z_][a-z0-9_]*" \
+  "$(dirname "$0")/../lib" "$(dirname "$0")/../supabase/functions" \
+  --include='*.dart' --include='*.js' 2>/dev/null |
+  sed 's|rpc/||' | sort -u)
+
+for fn in $called; do
+  found=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+    select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = '$fn'")
+  if [ "$found" = "0" ]; then
+    echo "FAIL: $fn is called over /rest/v1/rpc/ but is not in the public" >&2
+    echo "      schema, which is the only one PostgREST exposes. Every call" >&2
+    echo "      to it 404s, however correct the SQL is." >&2
+    exit 1
+  fi
+done
+echo "every /rpc/ the code calls exists in public ($(echo "$called" | tr '\n' ' '))"
+
+# An entitlement check that names an account must not be callable by a client.
+#
+# `public.within_ceiling(uuid)` takes the account to ask about, so a client
+# holding it could ask about anybody. The member-facing wrapper takes no
+# argument for exactly this reason. Supabase grants EXECUTE on new public
+# functions to both client roles by default, so this asserts the revoke in
+# `0011` actually happened.
+leaked=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(grantee, ', ')
+  from information_schema.routine_privileges
+  where routine_schema = 'public' and routine_name = 'within_ceiling'
+    and grantee in ('anon', 'authenticated', 'PUBLIC')")
+
+if [ -n "$leaked" ]; then
+  echo "FAIL: a client role can ask about another account's entitlement: $leaked" >&2
+  exit 1
+fi
+echo "only the service role may ask whether a named account may spend"
+
 # Every function must pin its search_path.
 #
 # Without one, the schemas a function resolves names in are chosen by whoever
@@ -158,7 +209,16 @@ echo "no client role can read a ciphertext column"
 unpinned=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
   select string_agg(p.proname, ', ')
   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-  where n.nspname = 'shift'
+  where n.nspname in ('shift', 'public')
+    and p.prokind = 'f'
+    -- Ours only. The public schema also holds pgcrypto's functions, which
+    -- belong to the extension and are not a migration's to pin: including them
+    -- would mean either a permanently red check or an exclusion list to keep
+    -- in step with a dependency. (No backticks in this comment on purpose --
+    -- it lives inside a double-quoted shell string, where they run a command.)
+    and not exists (
+      select 1 from pg_depend d
+      where d.objid = p.oid and d.deptype = 'e')
     and not exists (
       select 1 from unnest(coalesce(p.proconfig, '{}')) as c
       where c like 'search_path=%')")
@@ -168,3 +228,80 @@ if [ -n "$unpinned" ]; then
   exit 1
 fi
 echo "every function pins its search_path"
+
+# The platform keys are the ones a leak would bill *every* member for, so the
+# rule is the tightest in the schema: a client may learn which providers are
+# included and nothing else — not the last four, not which key encrypted it,
+# and obviously not the ciphertext.
+exposed=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(format('%s:%s', grantee, column_name), ', ')
+  from information_schema.column_privileges
+  where table_schema = 'public' and table_name = 'platform_keys'
+    and grantee in ('anon', 'authenticated')
+    and column_name <> 'provider'")
+
+if [ -n "$exposed" ]; then
+  echo "FAIL: a client can read platform key columns it should not: $exposed" >&2
+  exit 1
+fi
+
+# And no write of any kind: adding or rotating one of SHIFT's keys goes
+# through the edge function, which checks admin server-side.
+writable=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(distinct privilege_type, ', ')
+  from information_schema.role_table_grants
+  where table_schema = 'public' and table_name = 'platform_keys'
+    and grantee in ('anon', 'authenticated')
+    and privilege_type <> 'SELECT'")
+
+if [ -n "$writable" ]; then
+  echo "FAIL: a client can write platform_keys: $writable" >&2
+  exit 1
+fi
+echo "platform_keys exposes provider names only, and is read-only to clients"
+
+# No SECURITY DEFINER views. One added to see through row security is a
+# standing invitation for the next column to leak with the creator rights.
+definer=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(c.relname, ', ')
+  from pg_class c join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public' and c.relkind = 'v'
+    and not coalesce((
+      select option_value = 'true' from pg_options_to_table(c.reloptions)
+      where option_name = 'security_invoker'), false)")
+
+if [ -n "$definer" ]; then
+  echo "FAIL: views that run as their definer: $definer" >&2
+  exit 1
+fi
+echo "no security-definer views"
+
+# A member may rename themselves and must not be able to promote themselves.
+promotable=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(column_name, ', ')
+  from information_schema.column_privileges
+  where table_schema = 'public' and table_name = 'profiles'
+    and grantee = 'authenticated' and privilege_type = 'UPDATE'
+    and column_name <> 'display_name'")
+
+if [ -n "$promotable" ]; then
+  echo "FAIL: a member can update profiles columns they should not: $promotable" >&2
+  exit 1
+fi
+
+# The same question for the insert that provisions the account. `0010` lets a
+# client create its own profile row, which is the only way one gets created —
+# so the row it creates must not be able to be an admin's, and must not be able
+# to be somebody else's.
+promotable_insert=$(psql -h "$HOST" -p "$PORT" -U "$USER" -d "$DB" -tAc "
+  select string_agg(column_name, ', ')
+  from information_schema.column_privileges
+  where table_schema = 'public' and table_name = 'profiles'
+    and grantee = 'authenticated' and privilege_type = 'INSERT'
+    and column_name not in ('id', 'email', 'display_name')")
+
+if [ -n "$promotable_insert" ]; then
+  echo "FAIL: a member can insert profiles columns they should not: $promotable_insert" >&2
+  exit 1
+fi
+echo "a member cannot promote themselves"

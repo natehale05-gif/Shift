@@ -1,17 +1,19 @@
-import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/design/metrics.dart';
+import '../../core/design/palette.dart';
 import '../../core/platform/open_url.dart';
-import '../../core/theme/app_spacing.dart';
-import '../../core/theme/app_theme.dart';
 import '../../core/update/update_check.dart';
 import '../../core/update/update_installer.dart' show InstallMode;
-import '../../data/stores/update_store.dart';
+import '../../data/update_store.dart';
 
-/// The mirror of `_GetTheAppCard`: that one points browser users at the
-/// downloads, this one keeps a downloaded copy current. Each hides itself on
-/// the other's platform.
+/// Which version is running, and whether it is the newest one published.
+///
+/// Renders nothing in a browser: this build registers no service worker, so a
+/// reload is already the latest deploy and there is nothing to report.
 class UpdateCard extends StatelessWidget {
   const UpdateCard({super.key});
 
@@ -20,96 +22,143 @@ class UpdateCard extends StatelessWidget {
     final store = context.watch<UpdateStore>();
     if (!store.enabled) return const SizedBox.shrink();
 
-    final colors = Theme.of(context).extension<AppSemanticColors>()!;
+    final c = context.colors;
     final text = Theme.of(context).textTheme;
     final busy = store.status == UpdateStatus.checking;
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      margin: const EdgeInsets.only(bottom: Space.lg),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppSpacing.radiusLg),
-        border: Border.all(color: colors.border),
+        color: c.surfaceRaised,
+        borderRadius: BorderRadius.circular(Radii.md),
+        border: Border.all(color: c.border),
       ),
+      padding: const EdgeInsets.all(Space.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Updates', style: text.titleMedium),
-          const SizedBox(height: AppSpacing.sm),
+          Text('Updates', style: text.titleMedium?.copyWith(color: c.text)),
+          const SizedBox(height: Space.xxs),
           Text(
             store.currentVersion.isEmpty
                 ? 'SHIFT AI'
                 : 'SHIFT AI ${store.currentVersion}',
-            style: text.bodySmall?.copyWith(color: colors.textSecondary),
+            style: text.bodySmall?.copyWith(color: c.textMuted),
           ),
-          const SizedBox(height: AppSpacing.sm),
-          Text(_statusLine(store), style: text.bodySmall),
+          const SizedBox(height: Space.sm),
+          Text(
+            _statusLine(store),
+            style: text.bodySmall?.copyWith(
+              color: store.status == UpdateStatus.failed ? c.danger : c.text,
+            ),
+          ),
+
           if (store.status == UpdateStatus.downloading) ...[
-            const SizedBox(height: AppSpacing.sm),
-            LinearProgressIndicator(
-              value: store.progress > 0 ? store.progress : null,
+            const SizedBox(height: Space.sm),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(Radii.xs),
+              child: LinearProgressIndicator(
+                value: store.progress > 0 ? store.progress : null,
+                backgroundColor: c.surfaceSunken,
+                color: c.accent,
+              ),
             ),
           ],
-          if (store.mode != InstallMode.unsupported)
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Install updates automatically'),
-              subtitle: Text(
-                store.mode == InstallMode.replaceAndRelaunch
-                    ? 'Downloads new versions in the background and applies '
-                        'them the next time you open the app.'
-                    : 'Downloads new versions in the background. '
-                        '$_platformNoun asks you to confirm the install.',
-                style: text.bodySmall,
-              ),
-              value: store.autoInstall,
-              onChanged: store.setAutoInstall,
+
+          // Offered only where it means something. On Android the app never
+          // installs anything itself, so a switch promising automatic installs
+          // would be a control that cannot do what it says.
+          if (store.mode == InstallMode.replaceAndRelaunch ||
+              store.mode == InstallMode.handOffToSystem) ...[
+            const SizedBox(height: Space.md),
+            // A row rather than a `SwitchListTile`: a ListTile paints its ink
+            // on the nearest Material, which this card's own decoration sits
+            // in front of, so the splash would be invisible — the framework
+            // asserts on exactly that, and it was right.
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Install updates automatically',
+                          style: text.bodyMedium?.copyWith(color: c.text)),
+                      const SizedBox(height: Space.xxs),
+                      Text(
+                        store.mode == InstallMode.replaceAndRelaunch
+                            ? 'Downloads new versions in the background and '
+                                'applies them the next time you open the app.'
+                            : 'Downloads new versions in the background. macOS '
+                                'asks you to confirm the install.',
+                        style: text.bodySmall?.copyWith(color: c.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: Space.sm),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: kMinTouchTarget,
+                    minHeight: kMinTouchTarget,
+                  ),
+                  child: Switch(
+                    value: store.autoInstall,
+                    activeThumbColor: c.accent,
+                    onChanged: store.setAutoInstall,
+                  ),
+                ),
+              ],
             ),
-          const SizedBox(height: AppSpacing.md),
+          ],
+
+          const SizedBox(height: Space.sm),
           Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
+            spacing: Space.sm,
+            runSpacing: Space.xs,
             children: [
-              OutlinedButton.icon(
-                onPressed: busy ? null : store.checkNow,
-                icon: busy
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text('Check now'),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+                child: TextButton(
+                  onPressed: busy ? null : store.checkNow,
+                  child: Text(busy ? 'Checking…' : 'Check now',
+                      style: text.labelLarge?.copyWith(color: c.accent)),
+                ),
               ),
               if (store.status == UpdateStatus.readyToRestart)
-                FilledButton.icon(
-                  onPressed: store.restartAndUpdate,
-                  icon: const Icon(Icons.restart_alt_rounded, size: 18),
-                  label: const Text('Restart to finish'),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+                  child: FilledButton(
+                    onPressed: store.restartAndUpdate,
+                    child: const Text('Restart to finish'),
+                  ),
                 ),
               if (store.status == UpdateStatus.available)
-                FilledButton.icon(
-                  onPressed: store.mode == InstallMode.unsupported
-                      ? () => openUrl(
-                          store.latest?.pageUrl ?? UpdateCheck.releasesPage)
-                      : store.install,
-                  icon: const Icon(Icons.download_rounded, size: 18),
-                  label: const Text('Download it'),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+                  child: FilledButton(
+                    onPressed: store.install,
+                    child: Text(store.mode == InstallMode.handOffToPage
+                        ? 'Open the download'
+                        : 'Download it'),
+                  ),
                 ),
               if (store.status == UpdateStatus.manualRequired)
-                FilledButton.icon(
-                  onPressed: () => openUrl(
-                      store.latest?.pageUrl ?? UpdateCheck.releasesPage),
-                  icon: const Icon(Icons.open_in_new_rounded, size: 18),
-                  label: const Text('Get it from GitHub'),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+                  child: FilledButton(
+                    onPressed: () => openUrl(_page(store)),
+                    child: const Text('Get it from GitHub'),
+                  ),
                 ),
-              if (store.status != UpdateStatus.available &&
-                  store.status != UpdateStatus.manualRequired)
-                TextButton(
-                  onPressed: () => openUrl(
-                      store.latest?.pageUrl ?? UpdateCheck.releasesPage),
-                  child: const Text('Release notes'),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: kMinTouchTarget),
+                child: TextButton(
+                  onPressed: () => openUrl(_page(store)),
+                  child: Text('Release notes',
+                      style: text.labelLarge?.copyWith(color: c.textMuted)),
                 ),
+              ),
             ],
           ),
         ],
@@ -117,8 +166,8 @@ class UpdateCard extends StatelessWidget {
     );
   }
 
-  static String get _platformNoun =>
-      defaultTargetPlatform == TargetPlatform.android ? 'Android' : 'macOS';
+  static String _page(UpdateStore store) =>
+      store.latest?.pageUrl ?? UpdateCheck.releasesPage;
 
   String _statusLine(UpdateStore store) => switch (store.status) {
         UpdateStatus.idle => 'Checked automatically once a day.',
@@ -134,6 +183,13 @@ class UpdateCard extends StatelessWidget {
         UpdateStatus.handedOff =>
           '${store.latest?.tag ?? 'The update'} has been downloaded and the '
               'installer is open. Finish there.',
+        // Android. Says what will happen next rather than implying the app is
+        // doing it: installing an APK from inside the app needs a permission
+        // Play prohibits, so the download and the install are $_installer's.
+        UpdateStatus.openedPage =>
+          '${store.latest?.tag ?? 'The update'} is on the release page, which '
+              'is now open. Download it and $_installer will ask you to '
+              'confirm.',
         // Says which of the two things is true — the update exists, and this
         // copy specifically cannot apply it — rather than a bare failure.
         UpdateStatus.manualRequired =>
@@ -145,4 +201,7 @@ class UpdateCard extends StatelessWidget {
           "Couldn't check right now. You may be offline, or there may be no "
               'published release yet.',
       };
+
+  static String get _installer =>
+      defaultTargetPlatform == TargetPlatform.android ? 'Android' : 'your OS';
 }

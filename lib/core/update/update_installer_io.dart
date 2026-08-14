@@ -2,9 +2,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
-import 'package:flutter/services.dart' show MethodChannel;
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 
 import '../platform/open_url.dart';
 import 'asset_for_platform.dart';
@@ -29,9 +27,6 @@ import 'update_installer.dart' show InstallOutcome;
 /// * the swap renames rather than deletes, and rolls the backup back if the
 ///   second rename fails. The old install is never removed before the new
 ///   one is in place.
-
-/// Set by the Android install-intent channel; see [_handOff].
-const _androidChannel = 'club.shiftai.app/installer';
 
 InstallMode installMode() => installModeFor(Platform.operatingSystem);
 
@@ -139,7 +134,7 @@ bool canReplaceInPlace() {
     final parent = _installDir.parent;
     if (!parent.existsSync()) return false;
     final probe = File('${parent.path}${Platform.pathSeparator}'
-        '.shift_ai_write_probe_${DateTime.now().microsecondsSinceEpoch}');
+        '.shift_write_probe_${DateTime.now().microsecondsSinceEpoch}');
     probe.writeAsStringSync('');
     probe.deleteSync();
     return true;
@@ -150,11 +145,22 @@ bool canReplaceInPlace() {
 
 Future<InstallOutcome> downloadAndInstall(
   ReleaseAsset asset, {
+  required String pageUrl,
   void Function(double progress)? onProgress,
   http.Client Function()? clientFactory,
 }) async {
   final mode = installMode();
   if (mode == InstallMode.unsupported) return InstallOutcome.failed;
+
+  // Android, and nothing is downloaded — checked before the request rather
+  // than after, because a 60 MB APK this app may not install is bandwidth
+  // spent to reach the same page. Handing an APK to the package installer
+  // needs `REQUEST_INSTALL_PACKAGES`, which Play prohibits and which is one
+  // of the reasons this app was rebuilt.
+  if (mode == InstallMode.handOffToPage) {
+    await openUrl(pageUrl);
+    return InstallOutcome.openedPage;
+  }
   // Checked before the download, not after: there is no point spending the
   // bandwidth on an update this copy cannot apply.
   if (!canReplaceInPlace()) return InstallOutcome.notPermitted;
@@ -187,7 +193,7 @@ Future<File?> _download(
     final response = await client.send(request);
     if (response.statusCode != 200) return null;
 
-    final dir = await getTemporaryDirectory();
+    final dir = Directory.systemTemp;
     final file = File('${dir.path}${Platform.pathSeparator}${asset.name}');
     sink = file.openWrite();
 
@@ -232,16 +238,23 @@ Future<InstallOutcome> _unpack(List<int> bytes, {required bool isZip}) async {
 
   final Archive archive;
   try {
-    archive = isZip
-        ? ZipDecoder().decodeBytes(bytes)
-        : TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes));
+    if (isZip) {
+      archive = ZipDecoder().decodeBytes(bytes);
+    } else {
+      final inflated = GZipDecoder().decodeBytes(bytes);
+      if (!_gzipIsWhole(bytes, inflated.length)) {
+        await staged.delete(recursive: true);
+        return InstallOutcome.failed;
+      }
+      archive = TarDecoder().decodeBytes(inflated);
+    }
   } catch (_) {
     await staged.delete(recursive: true);
     return InstallOutcome.failed;
   }
 
   for (final entry in archive) {
-    // `tar -C bundle .` writes entries as `./shift_ai`; strip that, and
+    // `tar -C bundle .` writes entries as `./shift`; strip that, and
     // refuse any path trying to climb out of the staging directory.
     final relative = entry.name.replaceFirst(RegExp(r'^\./'), '');
     if (relative.isEmpty || relative.contains('..')) continue;
@@ -276,20 +289,37 @@ Future<InstallOutcome> _unpack(List<int> bytes, {required bool isZip}) async {
   return InstallOutcome.staged;
 }
 
-/// macOS and Android: open the downloaded installer and let the OS ask.
+/// Whether a gzip stream arrived whole, read from its own trailer.
+///
+/// **This is a guard the port had to add, not one it inherited.** v1's test
+/// "a truncated archive is refused" passed because the `archive` package of
+/// the day threw on a half-read stream; the current one decodes what it can
+/// and returns it. So the same bytes that used to be refused now unpack — and
+/// if the executable happened to sit in the surviving half, the staging guard
+/// would pass a partial install through.
+///
+/// gzip ends with CRC32 then ISIZE, four little-endian bytes each, where ISIZE
+/// is the uncompressed length mod 2^32. Comparing it to what actually inflated
+/// is the format's own integrity check, and it costs eight bytes of reading.
+///
+/// The download's length check is still the first line of defence — this is
+/// the second, on the operation that overwrites a working install.
+bool _gzipIsWhole(List<int> bytes, int inflatedLength) {
+  if (bytes.length < 18) return false; // Smaller than a header plus a trailer.
+  final n = bytes.length;
+  final declared = bytes[n - 4] |
+      (bytes[n - 3] << 8) |
+      (bytes[n - 2] << 16) |
+      (bytes[n - 1] << 24);
+  return declared == inflatedLength % 0x100000000;
+}
+
+/// macOS: open the downloaded `.dmg` and let Finder ask.
+///
+/// An in-place replacement would still re-trigger Gatekeeper while unsigned,
+/// so it would trade one click for a more alarming one.
 Future<InstallOutcome> _handOff(File file) async {
-  if (Platform.isAndroid) {
-    // The system package installer is reached through an intent, which needs
-    // a FileProvider URI — so it goes through the runner rather than
-    // url_launcher. See MainActivity.kt.
-    const channel = MethodChannel(_androidChannel);
-    final ok = await channel.invokeMethod<bool>('installApk', file.path);
-    return ok == true ? InstallOutcome.handedOff : InstallOutcome.failed;
-  }
-  // macOS: Finder mounts the .dmg and the user drags it across once. An
-  // in-place replacement would still re-trigger Gatekeeper while unsigned,
-  // so it would trade one click for a more alarming one.
-  openUrl(file.uri.toString());
+  await openUrl(file.uri.toString());
   return InstallOutcome.handedOff;
 }
 
@@ -328,7 +358,7 @@ Future<void> _launchDetached(File script) async {
     await Process.start('sh', [script.path], mode: ProcessStartMode.detached);
     return;
   }
-  final launcher = File('${script.parent.path}\\shift_ai_update_launch.vbs');
+  final launcher = File('${script.parent.path}\\shift_update_launch.vbs');
   // `Run(cmd, 0, False)`: window style 0 is hidden, and False means do not
   // wait — the script has its own wait-for-exit loop.
   await launcher.writeAsString(
@@ -344,7 +374,7 @@ Future<void> _launchDetached(File script) async {
 /// The swap itself, as a detached script — the running process cannot
 /// replace the directory it is executing from.
 Future<File> _writeSwapScript() async {
-  final dir = await getTemporaryDirectory();
+  final dir = Directory.systemTemp;
   final install = _installDir.path;
   final staged = _stagedDir.path;
   final backup = '${install}_backup';
@@ -355,7 +385,7 @@ Future<File> _writeSwapScript() async {
   final marker = _attemptMarker.path;
 
   if (Platform.isWindows) {
-    final file = File('${dir.path}\\shift_ai_update.cmd');
+    final file = File('${dir.path}\\shift_update.cmd');
     await file.writeAsString('''
 @echo off
 :wait
@@ -390,7 +420,7 @@ del "%~f0"
     return file;
   }
 
-  final file = File('${dir.path}/shift_ai_update.sh');
+  final file = File('${dir.path}/shift_update.sh');
   await file.writeAsString('''
 #!/bin/sh
 # Wait for the app to exit; it cannot replace the directory it runs from.

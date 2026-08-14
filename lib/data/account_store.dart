@@ -1,0 +1,512 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
+import '../backend/shift_backend.dart';
+import '../backend/setup_probe.dart';
+import '../core/platform/browser_nav.dart';
+import '../providers/access.dart';
+import '../providers/probe.dart';
+import '../providers/registry.dart';
+import '../providers/proxy_routes.dart';
+import '../providers/proxyable.dart';
+
+/// What the sign-in form is doing right now.
+///
+/// [checking] exists so the UI can tell "we have not looked yet" from "you are
+/// signed out". Without it, every launch flashes a sign-in prompt at someone
+/// who is already signed in, for as long as the stored session takes to load.
+enum AccountPhase { checking, signedOut, working, signedIn }
+
+/// The app's view of the account: who is signed in, and what their membership
+/// allows.
+///
+/// Talks to [ShiftBackend] and nothing else, so which host is behind it is not
+/// a fact this store — or anything above it — can observe.
+class AccountStore extends ChangeNotifier {
+  final ShiftBackend backend;
+
+  AccountPhase _phase = AccountPhase.checking;
+  ShiftAccount? _account;
+  Membership _membership = Membership.none;
+  List<ProviderKeyInfo> _serverKeys = const [];
+  List<String> _includedProviders = const [];
+  bool _isAdmin = false;
+  String? _problem;
+  String? _notice;
+
+  StreamSubscription<ShiftSession?>? _sessions;
+
+  AccountStore({required this.backend}) {
+    _sessions = backend.sessionChanges.listen((session) {
+      _account = session?.account;
+      if (session == null && _phase == AccountPhase.signedIn) {
+        _phase = AccountPhase.signedOut;
+        _membership = Membership.none;
+        _serverKeys = const [];
+        notifyListeners();
+      }
+    });
+  }
+
+  /// False when this build has no server behind it — which is every build so
+  /// far, and the public demo permanently. The UI hides account surfaces
+  /// entirely rather than offering a sign-in that cannot work.
+  bool get isConfigured => backend.isConfigured;
+
+  AccountPhase get phase => _phase;
+  ShiftAccount? get account => _account;
+  Membership get membership => _membership;
+  List<ProviderKeyInfo> get serverKeys => List.unmodifiable(_serverKeys);
+
+  /// Providers a membership covers, by name. Empty when signed out or when
+  /// SHIFT has no keys of its own loaded yet.
+  ///
+  /// **Filtered to what the proxy will actually forward**, which is narrower
+  /// than what the vault will hold. A HeyGen or ElevenLabs key stores and
+  /// encrypts perfectly well and can never be spent through the server, whose
+  /// allowlist is the chat endpoints — so listing it here made the Settings
+  /// card claim coverage the product did not have, and made routing offer a
+  /// provider whose credential could not be attached.
+  ///
+  /// The raw list is still what the admin card shows under "Included with
+  /// membership", because a stored key is worth seeing even before anything
+  /// can spend it.
+  List<String> get includedProviders => List.unmodifiable(
+      _includedProviders.where(proxyableProviders.contains).toList());
+
+  /// Every provider SHIFT holds a key for, spendable or not — the admin's
+  /// view of the vault rather than the member's view of their plan.
+  List<String> get storedPlatformProviders =>
+      List.unmodifiable(_includedProviders);
+
+  /// Whether this account may manage SHIFT's own provider keys.
+  ///
+  /// Comes from the server on every refresh, never from the token. False until
+  /// it has been asked, which is the safe direction: the admin surface stays
+  /// hidden while the answer is unknown, and the endpoint behind it refuses a
+  /// non-admin anyway.
+  bool get isAdmin => _isAdmin;
+
+  /// The last failure, in words meant for a person. Cleared by the next
+  /// attempt, so a stale error never sits under a form that has since worked.
+  String? get problem => _problem;
+
+  /// Something that worked but is not finished — today, only "we sent you a
+  /// confirmation email". Separate from [problem] because showing it in red
+  /// under a form that just succeeded tells the user the opposite of what
+  /// happened.
+  String? get notice => _notice;
+
+  bool get isSignedIn => _phase == AccountPhase.signedIn;
+  bool get isBusy => _phase == AccountPhase.working;
+
+  /// Restores a stored session on launch.
+  ///
+  /// Never throws and never surfaces an error: not being signed in is the
+  /// ordinary state, and someone who has not opened the app in a month should
+  /// meet a sign-in screen rather than a failure.
+  Future<void> restore() async {
+    if (!isConfigured) {
+      _phase = AccountPhase.signedOut;
+      notifyListeners();
+      return;
+    }
+    try {
+      final session = await backend.restore();
+      _account = session?.account;
+      _phase = session == null ? AccountPhase.signedOut : AccountPhase.signedIn;
+    } catch (_) {
+      _phase = AccountPhase.signedOut;
+    }
+    notifyListeners();
+    if (isSignedIn) unawaited(refresh());
+  }
+
+  Future<bool> signIn({required String email, required String password}) =>
+      _attempt(() => backend.signIn(email: email, password: password));
+
+  Future<bool> signUp({required String email, required String password}) =>
+      _attempt(() => backend.signUp(email: email, password: password));
+
+  /// Providers that are worth offering: the host has them configured, and this
+  /// platform can complete a redirect.
+  ///
+  /// Two independent reasons a button should not be there, and both have been
+  /// seen. Off-web there is no URL for a provider to return to yet. And a
+  /// provider the host has not enabled answers *"Unsupported provider: provider
+  /// is not enabled"* — as raw JSON, on the host's own domain, with Back as the
+  /// only way out. The app knew where it was sending someone; it just never
+  /// checked whether anything was there.
+  Set<OAuthProvider> get signInProviders =>
+      isConfigured && canReturnHere() ? _enabledProviders : const {};
+
+  Set<OAuthProvider> _enabledProviders = const {};
+
+  /// Whether this platform can leave and be returned to.
+  ///
+  /// Injectable for the same reason [returnUrl] is: [canRedirect] is a
+  /// compile-time constant chosen by the conditional import, so a test running
+  /// on the VM could only ever observe the off-web answer — and the arm that
+  /// matters for these buttons is the web one.
+  static bool Function() canReturnHere = () => canRedirect;
+
+  /// Sends the page to [provider]'s sign-in.
+  ///
+  /// Nothing after this runs on success: the page navigates away, and the app
+  /// starts again at [adoptCallback] when the provider sends it back. So there
+  /// is no session to return and no spinner to clear — the only thing that can
+  /// happen here is failing to leave.
+  void signInWith(OAuthProvider provider) {
+    final url = backend.oauthUrl(provider, redirectTo: returnUrl());
+    if (url == null) {
+      _problem = 'This build has no server behind it.';
+      notifyListeners();
+      return;
+    }
+    redirectTo(url);
+  }
+
+  /// Where the provider sends the browser back to.
+  ///
+  /// The app's own address with nothing after it — no query, no fragment. A
+  /// return URL carrying the last sign-in's leftovers would be a different
+  /// string each time, and the host matches these **exactly** against its
+  /// allow-list, so one that varies is one that is sometimes rejected.
+  ///
+  /// Injectable so the callback tests do not depend on where they are run.
+  static Uri Function() returnUrl = () => Uri.base.removeFragment().replace(
+        queryParameters: const {},
+      );
+
+  /// Everything the store does on boot, in the order it has to happen.
+  ///
+  /// A method rather than two calls at the composition root, because the order
+  /// is load-bearing and a cascade does not enforce it: `..adoptCallback()
+  /// ..restore()` starts both at once, and whichever finishes last wins. A
+  /// session handed back by a provider is newer than a stored one by
+  /// definition, so losing that race would silently discard the sign-in that
+  /// had just happened.
+  Future<void> start(Uri openedAt) async {
+    await adoptCallback(openedAt);
+    await restore();
+
+    // Last, and not awaited by anything above it: which providers are
+    // configured decides what the *signed-out* card offers, so it must not sit
+    // in front of restoring a session that would hide that card anyway.
+    //
+    // The catch is the same rule the interface states, restated at the
+    // boundary because this runs on every launch from a `create:` that nobody
+    // awaits — an implementation that threw here would take out the whole boot
+    // with an unhandled error, and take sign-in with it.
+    if (isConfigured) {
+      try {
+        _enabledProviders = await backend.enabledProviders();
+      } catch (_) {
+        _enabledProviders = OAuthProvider.values.toSet();
+      }
+      notifyListeners();
+    }
+  }
+
+  /// Takes a session out of the URL the app was opened at, if there is one.
+  ///
+  /// Called once on boot, before [restore], because a callback is newer than
+  /// anything on disk. Silent on an ordinary load, which is nearly every load.
+  Future<void> adoptCallback(Uri url) async {
+    if (!isConfigured) return;
+    try {
+      final session = await backend.adoptCallback(url);
+      if (session == null) return;
+      _account = session.account;
+      _phase = AccountPhase.signedIn;
+      notifyListeners();
+      await refresh();
+    } on BackendException catch (e) {
+      // Cancelling is the common one, and it has to be visible: the button
+      // navigated away and came back, and saying nothing would read as the
+      // app having lost the attempt.
+      _problem = e.message;
+      _phase = AccountPhase.signedOut;
+      notifyListeners();
+    } finally {
+      // Whatever happened — session, cancellation, or nothing at all — the
+      // tokens do not stay in the address bar. In the `finally` because the
+      // one case that must not skip it is the one that succeeded.
+      clearCallbackFragment();
+    }
+  }
+
+  /// Runs one credential attempt, and reports it as a bool rather than by
+  /// throwing — a form needs to know whether to close, not to catch.
+  Future<bool> _attempt(Future<ShiftSession> Function() call) async {
+    if (!isConfigured) {
+      _problem = 'This build has no server behind it.';
+      notifyListeners();
+      return false;
+    }
+    _phase = AccountPhase.working;
+    _problem = null;
+    _notice = null;
+    notifyListeners();
+
+    try {
+      final session = await call();
+      _account = session.account;
+      _phase = AccountPhase.signedIn;
+      notifyListeners();
+      unawaited(refresh());
+      return true;
+    } on BackendException catch (e) {
+      // Sign-up on a project that confirms email addresses ends here, and it
+      // is the one failure that is not one: the account exists.
+      if (e.problem == BackendProblem.confirmationRequired) {
+        _notice = e.message;
+      } else {
+        _problem = e.message;
+      }
+      _phase = AccountPhase.signedOut;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      // Anything the backend did not classify still has to reach the user as
+      // a sentence rather than as a stuck spinner.
+      _problem = 'Could not reach the server. Try again.';
+      _phase = AccountPhase.signedOut;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> signOut() async {
+    try {
+      await backend.signOut();
+    } catch (_) {
+      // Signing out locally must succeed even when telling the server fails,
+      // or a network blip strands someone signed in on a device they wanted
+      // to leave.
+    }
+    _account = null;
+    _membership = Membership.none;
+    _serverKeys = const [];
+    _includedProviders = const [];
+    _isAdmin = false;
+    // The next account gets asked afresh. Left true, a signed-out store would
+    // report a confident "no plan" built from the previous person's answer.
+    _planRead = false;
+    _problem = null;
+    _notice = null;
+    _phase = AccountPhase.signedOut;
+    notifyListeners();
+  }
+
+  /// Re-reads membership and stored keys.
+  ///
+  /// Failures here are deliberately quiet: this runs in the background after
+  /// sign-in, and an error banner for a refresh nobody asked for is noise. The
+  /// values simply stay as they were.
+  Future<void> refresh() async {
+    if (!isSignedIn) return;
+    try {
+      final results = await Future.wait([
+        backend.membership(),
+        backend.listProviderKeys(),
+        backend.includedProviders(),
+        backend.isAdmin(),
+      ]);
+      _membership = results[0] as Membership;
+      _serverKeys = results[1] as List<ProviderKeyInfo>;
+      _includedProviders = results[2] as List<String>;
+      _isAdmin = results[3] as bool;
+      _planRead = true;
+      notifyListeners();
+    } catch (_) {
+      // Quiet, but not invisible: `_planRead` stays false, so `entitlement`
+      // reports unknown rather than none and nothing tells a paying member
+      // they have no plan because one request failed.
+    }
+  }
+
+  /// Stores a provider key on the server. Returns the error to show, or null
+  /// on success.
+  Future<String?> putProviderKey({
+    required String provider,
+    required String secret,
+  }) async {
+    try {
+      await backend.putProviderKey(provider: provider, secret: secret);
+      await refresh();
+      return null;
+    } on BackendException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Could not reach the server. Try again.';
+    }
+  }
+
+  /// Stores one of SHIFT's own keys. Returns the error to show, or null.
+  ///
+  /// Whether the caller is allowed is decided by the server; this only
+  /// reports what it said.
+  Future<String?> putPlatformKey({
+    required String provider,
+    required String secret,
+  }) async {
+    try {
+      await backend.putPlatformKey(provider: provider, secret: secret);
+      await refresh();
+      return null;
+    } on BackendException catch (e) {
+      return e.message;
+    } catch (_) {
+      return defaultMessageFor(BackendProblem.unavailable);
+    }
+  }
+
+  /// What this account may spend from SHIFT's keys.
+  ///
+  /// The facts, not the decision: [resolveAccess] owns the rule, and this
+  /// store's job is to say what is true rather than to re-derive it. Two copies
+  /// of "active, under the ceiling, and covered" is exactly the duplication
+  /// that let one of them go unwired without anything noticing.
+  Entitlement get entitlement {
+    if (!isSignedIn) return Entitlement.none;
+    if (!_planRead) return Entitlement.unknown;
+    return Entitlement(
+      canSpendManaged: _membership.canSpendManaged,
+      includedProviders: includedProviders.toSet(),
+      overCeiling: _membership.isActive && !_membership.canSpendManaged,
+    );
+  }
+
+  /// Whether [refresh] has ever succeeded for this session.
+  ///
+  /// It swallows its own failures on purpose, so without this a plan that could
+  /// not be *read* is indistinguishable from no plan — and the app tells a
+  /// paying member to start a plan.
+  bool _planRead = false;
+
+  /// Where a call for [provider] goes when the membership pays for it, or null
+  /// when it does not.
+  ///
+  /// Checked here so a turn does not make a request it already knows will be
+  /// refused. The server checks all of it again — this is a shortcut, not the
+  /// gate.
+  Future<({Uri base, Map<String, String> headers})?> managedProviderCall(
+    String provider,
+  ) async {
+    if (!entitlement.canSpendManaged) return null;
+    if (!entitlement.includedProviders.contains(provider)) return null;
+    try {
+      return await backend.managedProviderCall(provider);
+    } catch (_) {
+      // A token that could not be refreshed is not a reason to fail the turn:
+      // the caller falls back to the user's own key if they have one.
+      return null;
+    }
+  }
+
+  /// The covered providers, as the set routing needs synchronously.
+  ///
+  /// Empty unless the plan can actually pay right now, so a lapsed or spent
+  /// membership stops steering the router the moment the meter says so.
+  Set<String> get spendableProviders => entitlement.canSpendManaged
+      ? entitlement.includedProviders
+      : const {};
+
+  /// Grants a membership. Returns the error to show, or null on success.
+  ///
+  /// Whether the caller may is decided by the server; this reports what it
+  /// said. The refresh afterwards is what makes the change visible in the same
+  /// screen that made it — granting yourself a plan and still seeing "no
+  /// membership" would read as a failure.
+  Future<String?> grantMembership({
+    String? email,
+    String status = 'active',
+    String plan = 'granted',
+    required int ceilingMicros,
+  }) async {
+    try {
+      await backend.grantMembership(
+        email: email,
+        status: status,
+        plan: plan,
+        ceilingMicros: ceilingMicros,
+      );
+      await refresh();
+      return null;
+    } on BackendException catch (e) {
+      return e.message;
+    } catch (_) {
+      return defaultMessageFor(BackendProblem.unavailable);
+    }
+  }
+
+  /// Host settings that have to be changed somewhere this app cannot reach.
+  /// The list, and every URL in it, comes from the backend — naming a vendor
+  /// is its job, not the UI's.
+  List<SetupLink> get setupLinks => backend.setupLinks();
+
+  /// Sends one call through the proxy and says what happened.
+  ///
+  /// The point of this existing at all: from inside a chat, "not deployed",
+  /// "not entitled" and "the key is wrong" all look the same — a reply that
+  /// did not arrive. Here they are three different sentences.
+  Future<ProxyProbeResult> testProxy({String provider = 'anthropic'}) async {
+    if (!isConfigured || !isSignedIn) return proxyNotSignedIn;
+
+    // The path, body and headers a real turn to *this* provider sends, so the
+    // browser runs the same preflight and the proxy's allowlist sees the same
+    // path. All three used to be Claude's regardless of who was named, which
+    // made the card answer 403 for five of the six.
+    final descriptor = providerById(provider);
+    final call = descriptor == null ? null : managedProbeCall(descriptor);
+    if (call == null) return proxyNotSignedIn;
+
+    final answer = await backend.probeProxy(
+      provider,
+      path: call.path,
+      body: call.body,
+      extraHeaders: call.headers,
+    );
+    if (answer == null) return proxyUnreachable;
+
+    final result = readProxyResponse(answer.status, answer.body);
+    // A working call spends a token or two, so the meter moved.
+    if (result.isWorking) await refresh();
+    return result;
+  }
+
+  /// What the *running* proxy says it will forward, against what this app
+  /// sends.
+  ///
+  /// The one check that can see a stale deploy. Everything else in this file
+  /// asks the server about the account; this asks it about itself, because for
+  /// a week the account was fine and the server was five commits behind.
+  Future<RoutesReport> checkProxyRoutes() async {
+    if (!isConfigured || !isSignedIn) {
+      return const RoutesReport(
+          RoutesOutcome.unknown, 'Sign in first — this runs as your account.');
+    }
+    return readProxyRoutes(await backend.proxyRoutes(),
+        required: requiredProxyRoutes);
+  }
+
+  Future<String?> deleteProviderKey(String id) async {
+    try {
+      await backend.deleteProviderKey(id);
+      await refresh();
+      return null;
+    } on BackendException catch (e) {
+      return e.message;
+    } catch (_) {
+      return 'Could not reach the server. Try again.';
+    }
+  }
+
+  @override
+  void dispose() {
+    _sessions?.cancel();
+    super.dispose();
+  }
+}
