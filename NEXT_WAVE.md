@@ -79,11 +79,13 @@ the routes above.
 forwards everything, and the version it reports should be
 
 ```
-cc552813
+642ffea4
 ```
 
 which is `routesVersion()` computed locally from `_shared/upstream.js`. A
-different value means the deployed allowlist is not the repository's. Then send
+different value means the deployed allowlist is not the repository's. (It was
+`cc552813` until the multipart wave added `POST /v1/images/edits`; a copy of
+this note quoting the old value is out of date, not a failed deploy.) Then send
 an image request — that is the failure this task existed to clear.
 
 **Still drifted: `provider-key`, at version 4 from 30 July.** It predates the
@@ -102,7 +104,15 @@ rows with a copy button). Until they are set, every deploy is a hand deploy, and
 this drift comes back. **The job has never executed, so expect first-contact
 failures** — watch the run and fix, don't declare it done on dispatch.
 
-**Do not touch `revenuecat-webhook`** — see Task 3.
+**Do not touch `revenuecat-webhook`** — it belongs to a different product
+sharing this project. See Task 3.
+
+**Multipart is now carried (14 Sep, version 3).** `provider-proxy` forwards a
+`multipart/form-data` body with its boundary intact and its bytes unmangled, so
+a photo can reach Sora as `input_reference`. Two independent bugs had to go:
+`upstreamHeaders` overwrote the content type (destroying the boundary) and
+`requestBody` read the body with `text()` (replacing every invalid UTF-8 byte
+with U+FFFD). `POST /v1/images/edits` is allowed and priced as an image.
 
 ---
 
@@ -125,19 +135,31 @@ implying it was verified.
 
 ## Task 3 — Reconcile the payments story before building N8
 
-**`revenuecat-webhook` is deployed and ACTIVE on the Supabase project, and does
-not exist anywhere in this repository.** Two consequences:
+**Correction — this was wrong, and the mistake is worth keeping.** An earlier
+version of this file read `revenuecat-webhook` as an unexplained SHIFT payments
+decision, and told you to ask which billing shape SHIFT had settled on. It is
+not SHIFT's at all.
 
-1. A `supabase functions deploy` sweep from CI (Task 1) needs to know it is
-   there, or it becomes an orphan nobody can find in source.
-2. It implies a decision taken outside the repo — RevenueCat unifying StoreKit,
-   Play Billing and Stripe into one entitlement — which is a **different shape**
-   from the plan of record, which assumes three separate rails each writing the
-   same `subscriptions` row. `supabase/functions/stripe-webhook/` exists and has
-   never had keys.
+**The Supabase project is shared with a second product.** Asking the live
+database settles it: the 11th migration on the project is `songs_entitlements`
+— *"Songs of the Church Plus"* — and its own comment says it is named `songs_*`
+because *"this project already carries an unrelated public.subscriptions table
+for another product"*. That migration is not in this repository, and neither is
+the `revenuecat-webhook` function that writes to its table.
 
-Ask the owner which it is before writing payment code. Entitlement is currently
-a manual admin grant; nothing can actually be bought on any platform.
+So: **leave both alone.** They are another app's, and the only thing SHIFT has
+to do about them is not break them. Two consequences that do still stand:
+
+1. A `supabase functions deploy` sweep from CI (Task 1) must not delete or
+   overwrite `revenuecat-webhook`, which this repository has no source for.
+2. Anything touching `public.subscriptions`, RLS, or grants is landing on a
+   database another live product shares. Check `list_migrations` before
+   assuming a migration ledger entry is SHIFT's.
+
+**SHIFT's own payments are still unbuilt.** `supabase/functions/stripe-webhook/`
+exists and has never had keys; entitlement is a manual admin grant; nothing can
+be bought on any platform. Which rails SHIFT uses is still an open question for
+N8 — it is just not answered by that webhook.
 
 ---
 

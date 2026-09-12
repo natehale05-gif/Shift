@@ -233,6 +233,17 @@ async function platformKey(ctx, provider) {
  * all of them — accurate metering is better than a flat guess.
  */
 async function requestBody(req, provider) {
+  const type = req.headers.get('content-type') ?? '';
+
+  // Bytes, not text, for anything this proxy does not parse anyway.
+  //
+  // `text()` decodes as UTF-8, and a binary part is not UTF-8: every invalid
+  // sequence becomes U+FFFD, so a photo forwarded through here arrives
+  // *corrupt* rather than arriving wrong in a way anyone would notice. Nothing
+  // below this line applies to a non-JSON body — the usage flag it injects is
+  // a JSON field — so returning early loses no behaviour.
+  if (!type.includes('application/json')) return await req.arrayBuffer();
+
   const raw = await req.text();
   if (!OPENAI_SHAPED.has(provider)) return raw;
 

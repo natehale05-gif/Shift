@@ -26,6 +26,17 @@ const Map<String, List<String>> requiredProxyRoutes = {
   'openai': [
     'POST /v1/chat/completions',
     'POST /v1/images/generations',
+    // Claimed ahead of any client that builds it: editing a photo sends a
+    // multipart body, and the app doing that is being built separately against
+    // this same proxy. The scan does not force this entry — it checks
+    // client -> here, and here -> the allowlist in this repo, never the
+    // reverse — so it is here to make Settings > Check report a server that
+    // lacks the route as behind, which is the only way that drift is visible.
+    //
+    // Apostrophes are deliberately absent from this comment: the scan reads
+    // the list with a regex over quoted strings, so one would be parsed as a
+    // route and fail the build.
+    'POST /v1/images/edits',
   ],
   'gemini': ['POST /v1beta/models/'],
   'groq': ['POST /v1/chat/completions'],

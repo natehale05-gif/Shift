@@ -49,6 +49,8 @@ const UPSTREAMS = {
       'POST /v1/chat/completions',
       'POST /v1/responses',
       'POST /v1/images/generations',
+      // Multipart: the picture itself goes up, not a description of it.
+      'POST /v1/images/edits',
       // Sora: submit, poll, then fetch the rendered file.
       'POST /v1/videos',
       'GET /v1/videos/',
@@ -243,7 +245,24 @@ export function upstreamHeaders(provider, incoming, key) {
     if (STRIPPED.has(name.toLowerCase())) continue;
     headers.set(name, value);
   }
-  headers.set('Content-Type', 'application/json');
+  // The caller's own content type survives when — and only when — it carries a
+  // boundary.
+  //
+  // Forcing JSON here was right while every route took JSON, and is exactly
+  // wrong for the first route that does not. A multipart boundary is *part of
+  // the content type*, so replacing the header throws away the only thing that
+  // says where each part begins: the provider then reads a body that is not
+  // JSON as JSON and answers 400. Sora's `input_reference` — a photo rather
+  // than a description of one — is the first such body this proxy carries.
+  //
+  // The test is deliberately narrow. Anything else, including a bare
+  // `multipart/form-data` with no boundary, still gets JSON, so no existing
+  // route changes behaviour and a malformed header cannot smuggle one past.
+  const sent = incoming.get('content-type') ?? '';
+  headers.set(
+    'Content-Type',
+    /^multipart\/form-data\s*;\s*boundary=/i.test(sent) ? sent : 'application/json',
+  );
   UPSTREAMS[provider].authorize(headers, key);
   return headers;
 }
@@ -284,7 +303,11 @@ const STRIPPED = new Set([
  * asked.
  */
 export function isImageCall(provider, path) {
-  if (provider === 'openai') return path.startsWith('/v1/images/generations');
+  // The whole `/v1/images/` family, not generation alone. An edit is the same
+  // call with a photo attached and costs the same; matching only the longer
+  // prefix would bill it as an unreported call — about a tenth of the price —
+  // which is the argument the comment above already makes.
+  if (provider === 'openai') return path.startsWith('/v1/images/');
   if (provider === 'gemini') return path.includes('image');
   return false;
 }

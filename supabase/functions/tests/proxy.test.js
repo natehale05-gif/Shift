@@ -692,3 +692,113 @@ test('the version follows the table, because nobody maintains it', () => {
     routesVersion(routes),
   );
 });
+
+// ------------------------------------------------- multipart: the photo path
+
+/**
+ * A real `multipart/form-data` body, built by hand so the bytes are exact.
+ *
+ * The image part opens with PNG's magic number, whose first byte `0x89` is not
+ * valid UTF-8 on its own. That is the point: decoding this body as text
+ * replaces it with U+FFFD (`EF BF BD`), which is how a photo can arrive
+ * corrupt through a proxy that looks like it is working.
+ */
+const BOUNDARY = '----ShiftTestBoundary';
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+function multipartBody() {
+  return Buffer.concat([
+    Buffer.from(`--${BOUNDARY}\r\n`),
+    Buffer.from('Content-Disposition: form-data; name="model"\r\n\r\n'),
+    Buffer.from('sora-2\r\n'),
+    Buffer.from(`--${BOUNDARY}\r\n`),
+    Buffer.from('Content-Disposition: form-data; name="input_reference"; '
+        + 'filename="reference.png"\r\nContent-Type: image/png\r\n\r\n'),
+    PNG_MAGIC,
+    Buffer.from(`\r\n--${BOUNDARY}--\r\n`),
+  ]);
+}
+
+function multipartRequest(path, contentType = `multipart/form-data; boundary=${BOUNDARY}`) {
+  return new Request(`https://x.test/functions/v1/provider-proxy${path}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token(USER)}`,
+      'Content-Type': contentType,
+    },
+    body: multipartBody(),
+  });
+}
+
+/** The call the fake world forwarded to the provider, not to PostgREST. */
+function providerCall(world) {
+  return world.calls.find((c) => c.url.includes('api.openai.com'));
+}
+
+test('a multipart boundary survives the proxy', async () => {
+  // Without this the header is replaced with `application/json`, and the
+  // boundary is the only thing that says where each part begins — so the
+  // provider parses a body that is not JSON as JSON and answers 400.
+  const world = await fakeWorld();
+  await proxy(multipartRequest('/openai/v1/videos'),
+      { env: ENV, fetch: world.fetch });
+
+  const sent = providerCall(world);
+  assert.ok(sent, 'the provider was never called');
+  assert.equal(sent.headers.get('content-type'),
+      `multipart/form-data; boundary=${BOUNDARY}`);
+});
+
+test('a photo is forwarded as bytes, not as mangled text', async () => {
+  // The half that fails silently. Headers can be perfect and the image still
+  // arrive destroyed, because `text()` rewrites every byte that is not valid
+  // UTF-8 and nothing downstream can tell that it happened.
+  const world = await fakeWorld();
+  await proxy(multipartRequest('/openai/v1/videos'),
+      { env: ENV, fetch: world.fetch });
+
+  const body = Buffer.from(providerCall(world).init.body);
+
+  assert.ok(body.includes(PNG_MAGIC),
+      'the PNG magic number did not survive the proxy');
+  assert.equal(body.includes(Buffer.from([0xef, 0xbf, 0xbd])), false,
+      'a byte was replaced with U+FFFD — the body was decoded as text');
+});
+
+test('a JSON call is untouched by the multipart path', async () => {
+  // The regression this must not cause: the early return sits above the code
+  // that asks OpenAI-shaped providers to report usage, and losing that would
+  // bill every streamed call at the flat unreported rate.
+  const world = await fakeWorld();
+  await proxy(proxyRequest('/openai/v1/chat/completions',
+      '{"model":"gpt-4o","stream":true}'), { env: ENV, fetch: world.fetch });
+
+  const sent = providerCall(world);
+  assert.equal(sent.headers.get('content-type'), 'application/json');
+  assert.deepEqual(JSON.parse(sent.init.body).stream_options,
+      { include_usage: true });
+});
+
+test('only a content type carrying a boundary is preserved', () => {
+  // Narrow on purpose. Anything else still gets JSON, so no existing route
+  // changes and a malformed header cannot smuggle one past.
+  for (const sent of ['text/plain', '', 'multipart/form-data', 'application/json']) {
+    const headers = upstreamHeaders('openai',
+        new Headers(sent ? { 'content-type': sent } : {}), 'sk-test');
+    assert.equal(headers.get('content-type'), 'application/json', sent || '(absent)');
+  }
+
+  const kept = upstreamHeaders('openai',
+      new Headers({ 'content-type': 'MULTIPART/FORM-DATA; BOUNDARY=xyz' }), 'sk-test');
+  assert.equal(kept.get('content-type'), 'MULTIPART/FORM-DATA; BOUNDARY=xyz',
+      'the match is case-insensitive, as the header itself is');
+});
+
+test('editing a photo is priced as an image, not as an unreported call', () => {
+  // `callKind` feeds `record`, so a miss here bills roughly a tenth of what
+  // the call costs — and a ceiling that under-counts by 10x is not a ceiling.
+  assert.equal(isImageCall('openai', '/v1/images/edits'), true);
+  assert.equal(isImageCall('openai', '/v1/images/generations'), true);
+  assert.equal(isImageCall('openai', '/v1/chat/completions'), false);
+  assert.equal(callKind('openai', '/v1/images/edits'), 'image');
+});
